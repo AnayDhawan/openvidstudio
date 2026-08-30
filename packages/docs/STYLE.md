@@ -79,11 +79,10 @@ a rule here, it fails QC.
 ## Deferred (do not attempt in pure Remotion)
 
 - Live-action beats (desk/keyboard shots, ambient texture): text-free, so
-  these are the Higgsfield/AI-footage slot; see `HIGGSFIELD.md` (not
-  written yet, reserved filename, a later task builds it). Still skip by
-  default: design scenes so they aren't needed unless a brief specifically
-  calls for a live-action beat, and never let an AI-generated clip carry
-  on-screen product text or real UI.
+  these are the Higgsfield/AI-footage slot; see `HIGGSFIELD.md`. Still skip
+  by default: design scenes so they aren't needed unless a brief
+  specifically calls for a live-action beat, and never let an AI-generated
+  clip carry on-screen product text or real UI.
 - Music beds (added with VO in post, or looped under a baked-in VO mix,
   see `SCRIPT.md`). Chromatic aberration + real bloom passes (perf;
   revisit).

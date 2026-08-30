@@ -12,9 +12,9 @@ export const SERVER_VERSION = "0.1.0";
  *
  * Unlike pepiros, there is no auth/token layer -- this is a local process a dev's
  * coding agent spawns directly (like Playwright MCP or context7's MCP), operating on
- * the local filesystem and local processes (remotion CLI, ffmpeg). `config` is
- * accepted for Task 5 to extend later; nothing in this task's 7 tools needs it at
- * server-startup time.
+ * the local filesystem and local processes (remotion CLI, ffmpeg). `config` (loaded by
+ * stdio.ts from process.cwd() at startup) is threaded through to registerTools, whose
+ * only use of it is gating import_higgsfield_clip's registration on hasHiggsfield.
  */
 export function createMcpServer(config?: OpenvidstudioConfig): McpServer {
   const server = new McpServer(

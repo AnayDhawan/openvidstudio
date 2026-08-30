@@ -89,8 +89,7 @@ followed mechanically, not judged holistically.
    avoid screenshotting that page.
    - If step 3 routed here because Higgsfield access is "yes" and the
      beat genuinely isn't product UI (atmosphere/b-roll), use
-     `captureMethod: "higgsfield"` instead; see `HIGGSFIELD.md` (not
-     written yet).
+     `captureMethod: "higgsfield"` instead; see `HIGGSFIELD.md`.
 
 ## 4. The captureMethod field spec
 

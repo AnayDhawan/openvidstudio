@@ -9,12 +9,17 @@ import { registerRenderVideo } from "./renderVideo";
 import { registerQcExtractFrames } from "./qcExtractFrames";
 import { registerCaptureScreenshot } from "./captureScreenshot";
 import { registerCaptureScreenRecording } from "./captureScreenRecording";
+import { registerImportHiggsfieldClip } from "./importHiggsfieldClip";
 
 /**
- * Registers all 9 of this task's tools. `config` is accepted for shape-compatibility
- * with Task 5 (call_higgsfield's registration will gate on config.hasHiggsfield) but
- * unused here: none of these 9 tools need a server-startup config, each one resolves a
- * project's own openvidstudio.config.json itself, per call, off projectRoot.
+ * Registers all of this package's tools. The first 9 need no server-startup config: each
+ * resolves a project's own openvidstudio.config.json itself, per call, off projectRoot.
+ * import_higgsfield_clip is the one exception -- its registration itself is gated on
+ * config.hasHiggsfield, decided once at server-startup time (stdio.ts reads
+ * openvidstudio.config.json from process.cwd() before calling createMcpServer). Config is
+ * a static file read at startup here, not a live-toggleable runtime setting, so simply not
+ * calling registerImportHiggsfieldClip when the gate fails is sufficient: the tool is
+ * absent from the tool list entirely, not present-but-erroring.
  */
 export function registerTools(server: McpServer, config?: OpenvidstudioConfig): void {
   registerInitProject(server);
@@ -26,4 +31,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerQcExtractFrames(server);
   registerCaptureScreenshot(server);
   registerCaptureScreenRecording(server);
+  if (config?.hasHiggsfield === true) {
+    registerImportHiggsfieldClip(server);
+  }
 }

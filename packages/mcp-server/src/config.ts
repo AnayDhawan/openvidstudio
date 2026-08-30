@@ -3,9 +3,10 @@ import * as path from "node:path";
 
 /**
  * openvidstudio.config.json's shape, written by init_project into a *user's* project
- * root (not this monorepo). hasHiggsfield is what Task 5's call_higgsfield tool
- * registration will gate on; targetDurationSeconds/videoConfig are read by
- * stitch_composition and render_video for defaults not stated by beats.json itself.
+ * root (not this monorepo). hasHiggsfield is what import_higgsfield_clip's tool
+ * registration gates on (read once at server-startup by stdio.ts, see registerTools);
+ * targetDurationSeconds/videoConfig are read by stitch_composition and render_video for
+ * defaults not stated by beats.json itself.
  */
 export interface VideoConfig {
   fps: number;

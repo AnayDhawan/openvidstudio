@@ -26,9 +26,10 @@ Where the real UI genuinely can't produce a shot (an atmosphere beat, a
 desk/hands shot, some establishing texture that isn't product UI at all),
 openvidstudio has an optional Higgsfield AI b-roll tier for exactly that
 gap, and only that gap: an AI-generated clip never carries on-screen
-product text or real UI, full stop. See `HIGGSFIELD.md` (not written yet;
-this is its stable, reserved filename) for that tier's protocol once it
-exists.
+product text or real UI, full stop. See `HIGGSFIELD.md` for that tier's
+protocol: the calling agent generates the clip itself over its own
+Higgsfield MCP connection, and openvidstudio's `import_higgsfield_clip`
+tool only ingests the result into this pipeline's asset convention.
 
 ## Why not a hosted AI-storyboard tool?
 
@@ -71,7 +72,7 @@ the goal is a video that shows what a real product actually looks like.
 | `CAPTURE.md` | The real-capture protocol for screenshots and screen recordings: the Playwright zoom-desync bug and its fix |
 | `PLANNING.md` | The guided intake to beats.json protocol, including the capture-method decision tree |
 | `SCRIPT.md` | VO pacing, duration math, and the claim-obligates-visual writing rule |
-| `HIGGSFIELD.md` | AI b-roll tier protocol (not written yet; reserved filename, a later task) |
+| `HIGGSFIELD.md` | AI b-roll tier protocol: prerequisites, the `hasHiggsfield` config gate, provenance scope, prompt-writing guidance, and how `import_higgsfield_clip` ingests a clip the calling agent already generated |
 
 ## Two rules that changed on the way to being a public tool
 

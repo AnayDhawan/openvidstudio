@@ -7,11 +7,13 @@ import { registerScaffoldScene } from "./scaffoldScene";
 import { registerStitchComposition } from "./stitchComposition";
 import { registerRenderVideo } from "./renderVideo";
 import { registerQcExtractFrames } from "./qcExtractFrames";
+import { registerCaptureScreenshot } from "./captureScreenshot";
+import { registerCaptureScreenRecording } from "./captureScreenRecording";
 
 /**
- * Registers all 7 of this task's tools. `config` is accepted for shape-compatibility
+ * Registers all 9 of this task's tools. `config` is accepted for shape-compatibility
  * with Task 5 (call_higgsfield's registration will gate on config.hasHiggsfield) but
- * unused here: none of these 7 tools need a server-startup config, each one resolves a
+ * unused here: none of these 9 tools need a server-startup config, each one resolves a
  * project's own openvidstudio.config.json itself, per call, off projectRoot.
  */
 export function registerTools(server: McpServer, config?: OpenvidstudioConfig): void {
@@ -22,4 +24,6 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerStitchComposition(server);
   registerRenderVideo(server);
   registerQcExtractFrames(server);
+  registerCaptureScreenshot(server);
+  registerCaptureScreenRecording(server);
 }

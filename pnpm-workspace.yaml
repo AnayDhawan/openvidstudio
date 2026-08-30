@@ -4,3 +4,4 @@ packages:
   - "templates/*"
 allowBuilds:
   esbuild: true
+  sharp: true

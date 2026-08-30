@@ -109,6 +109,9 @@ Method-specific fields:
 | `dom-demo` | none | the beat's visual is authored directly in its scene file, no capture step |
 | `higgsfield` | `higgsfieldPrompt` | the AI-generation prompt for the b-roll clip; must not request on-screen product text or real UI |
 
+See section 6 below for a concrete `beats.json` fragment with one full,
+working example of each of these four shapes.
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is

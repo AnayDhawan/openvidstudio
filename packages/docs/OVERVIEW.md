@@ -30,6 +30,20 @@ product text or real UI, full stop. See `HIGGSFIELD.md` (not written yet;
 this is its stable, reserved filename) for that tier's protocol once it
 exists.
 
+## Why not a hosted AI-storyboard tool?
+
+There are hosted, MCP-callable pipelines that go storyboard to AI-generated
+visuals plus VO plus music plus captions in one pass (Motion.so is one real
+example). Those are genuinely fast for a rough pacing/storyboard draft to
+react to, and openvidstudio doesn't try to replace that use case.
+
+But that whole model, AI-generated visuals standing in for the product,
+is the opposite of why openvidstudio exists: no traditional editor, no
+AI-generated footage of the product itself, pixel-perfect real UI on
+screen. openvidstudio deliberately doesn't work that way. A tool like that
+isn't a component of this pipeline and isn't the model to reach for when
+the goal is a video that shows what a real product actually looks like.
+
 ## The intended flow
 
 1. **Intake.** The calling agent asks the guided question set in
@@ -54,7 +68,7 @@ exists.
 |---|---|
 | `PIPELINE.md` | Step-by-step: beats.json, scenes, composition, QC loop, render |
 | `STYLE.md` | Binding art-direction rules: camera, depth of field, lighting, cursor, motion, palette, type |
-| `CAPTURE.md` | The real-screenshot protocol: the Playwright zoom-desync bug and its fix |
+| `CAPTURE.md` | The real-capture protocol for screenshots and screen recordings: the Playwright zoom-desync bug and its fix |
 | `PLANNING.md` | The guided intake to beats.json protocol, including the capture-method decision tree |
 | `SCRIPT.md` | VO pacing, duration math, and the claim-obligates-visual writing rule |
 | `HIGGSFIELD.md` | AI b-roll tier protocol (not written yet; reserved filename, a later task) |

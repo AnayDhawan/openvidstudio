@@ -1,0 +1,29 @@
+{
+  "name": "@openvidstudio/mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server exposing openvidstudio's mechanical pipeline tools: project scaffolding, beats validation, scene stubs, composition stitching, render, and QC frame extraction.",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "bin": {
+    "openvidstudio-mcp": "./dist/stdio.js"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "node scripts/copy-template.mjs && tsc",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit"
+  }
+}

@@ -13,6 +13,10 @@ importers:
       '@remotion/google-fonts':
         specifier: ^4.0.490
         version: 4.0.518(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+    devDependencies:
+      '@types/react':
+        specifier: 19.2.7
+        version: 19.2.7
       react:
         specifier: 19.2.3
         version: 19.2.3
@@ -22,10 +26,6 @@ importers:
       remotion:
         specifier: 4.0.490
         version: 4.0.490(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-    devDependencies:
-      '@types/react':
-        specifier: 19.2.7
-        version: 19.2.7
       typescript:
         specifier: 5.9.3
         version: 5.9.3

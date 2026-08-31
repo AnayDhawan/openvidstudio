@@ -7,26 +7,21 @@ step 0, before you touch `beats.json` or write a single scene.
 
 ## Docs
 
-These ship in the `@openvidstudio/docs` package and resolve at
-`node_modules/@openvidstudio/docs/` once that package is a dependency of
-this project (same shape as `@openvidstudio/core`, which already is one).
-If that path doesn't resolve in your setup, ask the dev where the docs
-package is installed rather than guessing.
+`init_project` copies these into this project's own `docs/` directory
+when it scaffolds the project shell (it never overwrites a file you've
+already edited, so a second `init_project` call for a second video won't
+clobber local edits here). If a doc listed below is missing, re-run
+`init_project` rather than guessing where it lives.
 
-- `node_modules/@openvidstudio/docs/PLANNING.md`: start here. Guided
-  intake to beats.json protocol, capture-method decision tree, the
-  mandatory approval gate.
-- `node_modules/@openvidstudio/docs/PIPELINE.md`: beats.json, scenes,
-  composition, QC loop.
-- `node_modules/@openvidstudio/docs/STYLE.md`: binding art-direction
-  rules.
-- `node_modules/@openvidstudio/docs/CAPTURE.md`: real-screenshot protocol.
-- `node_modules/@openvidstudio/docs/SCRIPT.md`: VO pacing and writing
-  rules.
-- `node_modules/@openvidstudio/docs/OVERVIEW.md`: conceptual overview;
-  read this if you're unsure why any of the rules below exist.
-- `node_modules/@openvidstudio/docs/HIGGSFIELD.md`: AI b-roll tier
-  protocol (not written yet).
+- `./docs/PLANNING.md`: start here. Guided intake to beats.json protocol,
+  capture-method decision tree, the mandatory approval gate.
+- `./docs/PIPELINE.md`: beats.json, scenes, composition, QC loop.
+- `./docs/STYLE.md`: binding art-direction rules.
+- `./docs/CAPTURE.md`: real-screenshot protocol.
+- `./docs/SCRIPT.md`: VO pacing and writing rules.
+- `./docs/OVERVIEW.md`: conceptual overview; read this if you're unsure
+  why any of the rules below exist.
+- `./docs/HIGGSFIELD.md`: AI b-roll tier protocol.
 
 ## Rules a scene-writing agent must never violate
 

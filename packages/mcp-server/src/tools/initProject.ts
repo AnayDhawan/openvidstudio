@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { TEMPLATE_DIR } from "../paths";
+import { TEMPLATE_DIR, DOCS_DIR } from "../paths";
 import { writeConfig, type OpenvidstudioConfig, type VideoConfig } from "../config";
 import { resolveProjectRoot, sanitizeSegment, copyTemplateTree } from "../util";
 import { runTool } from "./mcp";
@@ -20,20 +20,23 @@ export interface InitProjectResult {
   videoDir: string;
   configPath: string;
   templateShellCopied: boolean;
+  docsDir: string;
   config: OpenvidstudioConfig;
 }
 
 /**
  * Scaffolds `src/videos/<name>/` in `projectRoot`, copying the bundled project shell
- * (package.json, tsconfig, remotion.config.ts, Root.tsx, public/sfx/ -- everything in
- * TEMPLATE_DIR) into the project root on first use, then writing/merging
- * openvidstudio.config.json.
+ * (package.json, tsconfig, remotion.config.ts, Root.tsx, public/sfx/, the vendored
+ * openvidstudio-core/ -- everything in TEMPLATE_DIR) into the project root on first
+ * use, copying the bundled pipeline docs (PLANNING.md, PIPELINE.md, STYLE.md,
+ * CAPTURE.md, SCRIPT.md, OVERVIEW.md, HIGGSFIELD.md -- everything in DOCS_DIR) into
+ * `<projectRoot>/docs/`, then writing/merging openvidstudio.config.json.
  *
- * `TEMPLATE_DIR` (src/paths.ts) resolves relative to this package's own compiled
- * dist/ output, i.e. the copy bundled into packages/mcp-server/templates/default at
- * build time -- never a monorepo-relative path, which would not exist once this
- * package is installed standalone in someone else's project (see task-3-report.md
- * for how that's verified).
+ * `TEMPLATE_DIR`/`DOCS_DIR` (src/paths.ts) resolve relative to this package's own
+ * compiled dist/ output, i.e. the copies bundled into packages/mcp-server/templates/
+ * and packages/mcp-server/docs/ at build time -- never a monorepo-relative path,
+ * which would not exist once this package is installed standalone in someone else's
+ * project (see task-3-report.md for how that's verified).
  */
 export function runInitProject(input: InitProjectInput): InitProjectResult {
   const name = sanitizeSegment(input.name, "name");
@@ -44,6 +47,9 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
   // call again for a second video in an already-scaffolded project.
   const alreadyScaffolded = fs.existsSync(path.join(projectRoot, "package.json"));
   copyTemplateTree(TEMPLATE_DIR, projectRoot);
+
+  const docsDir = path.join(projectRoot, "docs");
+  copyTemplateTree(DOCS_DIR, docsDir);
 
   const videoDir = path.join(projectRoot, "src", "videos", name);
   fs.mkdirSync(path.join(videoDir, "scenes"), { recursive: true });
@@ -59,6 +65,7 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
     videoDir,
     configPath: path.join(projectRoot, "openvidstudio.config.json"),
     templateShellCopied: !alreadyScaffolded,
+    docsDir,
     config,
   };
 }
@@ -72,9 +79,12 @@ export function registerInitProject(server: McpServer): void {
         "Scaffolds a video's src/videos/<name>/ directory in the calling agent's current project " +
         "(process.cwd() unless projectRoot is given). On first use also copies the bundled openvidstudio " +
         "project shell (package.json, tsconfig.json, remotion.config.ts, src/Root.tsx, src/index.ts, " +
-        "public/sfx/) into the project root, and writes/merges openvidstudio.config.json there (merges " +
-        "field-by-field, never clobbers a value the patch doesn't mention). Never overwrites a file that " +
-        "already exists, so calling this again for a second video in the same project is safe.",
+        "public/sfx/, a vendored openvidstudio-core/ that the shell's package.json depends on via a " +
+        "relative file: reference) into the project root, copies the bundled pipeline docs (PLANNING.md, " +
+        "PIPELINE.md, STYLE.md, CAPTURE.md, SCRIPT.md, OVERVIEW.md, HIGGSFIELD.md) into <projectRoot>/docs/, " +
+        "and writes/merges openvidstudio.config.json there (merges field-by-field, never clobbers a value " +
+        "the patch doesn't mention). Never overwrites a file that already exists, so calling this again for " +
+        "a second video in the same project is safe.",
       inputSchema: {
         name: z
           .string()

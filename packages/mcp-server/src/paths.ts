@@ -12,3 +12,12 @@ import * as path from "node:path";
  * src/tools/) so this one-line relative-path computation stays easy to audit.
  */
 export const TEMPLATE_DIR = path.join(__dirname, "..", "templates", "default");
+
+/**
+ * Bundled copy of packages/docs/*.md, produced by scripts/copy-docs.mjs at build time
+ * and shipped inside the published npm package (see package.json's "files"). Same
+ * __dirname-relative reasoning as TEMPLATE_DIR above: resolves to
+ * <package root>/docs, never the monorepo's own packages/docs/. init_project copies
+ * these into a scaffolded project's own docs/ folder (see tools/initProject.ts).
+ */
+export const DOCS_DIR = path.join(__dirname, "..", "docs");

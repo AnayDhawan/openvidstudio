@@ -11,13 +11,18 @@
     "scripts"
   ],
   "dependencies": {
-    "@remotion/google-fonts": "^4.0.490",
+    "@remotion/google-fonts": "^4.0.490"
+  },
+  "peerDependencies": {
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.490"
   },
   "devDependencies": {
     "@types/react": "19.2.7",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.490",
     "typescript": "5.9.3"
   },
   "scripts": {

@@ -28,8 +28,9 @@ export function createMcpServer(config?: OpenvidstudioConfig): McpServer {
           "questions, beat wording, scene JSX content, and the mandatory human-approval gate before " +
           "write_beats_file) stays with you, the calling agent.",
         "",
-        "Read packages/docs/PLANNING.md and PIPELINE.md in the openvidstudio repo (or the equivalent docs " +
-          "shipped alongside this package) before drafting a beats.json.",
+        "Read PLANNING.md and PIPELINE.md before drafting a beats.json: in this monorepo that's " +
+          "packages/docs/; in a scaffolded project it's the project's own docs/ directory, which " +
+          "init_project copies in from this package's bundled docs.",
       ].join("\n"),
     },
   );

@@ -22,6 +22,11 @@ out/
 *.mov
 *.webm
 
+# Committed brand/demo assets are real product content (Task 4's gallery sample video),
+# not renderer output -- the *.mp4 rule above is scoped to out/ render output, this
+# carves out the one directory that ships real binary assets on purpose.
+!apps/site/public/brand/*.mp4
+
 # OS
 .DS_Store
 Thumbs.db

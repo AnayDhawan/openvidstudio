@@ -21,18 +21,30 @@ const title = 'openvidstudio';
 const description =
   'Free, open-source video-generation add-on for any software project, driven entirely through MCP tools.';
 
+// Placeholder domain: there is no real deploy domain yet. Update this once
+// the site has a real domain (metadataBase is required for Next to resolve
+// the relative OG/Twitter image path below into an absolute URL).
+const siteUrl = new URL('https://openvidstudio.dev');
+
+// Reuses the gallery's existing real demo poster as a stand-in OG/Twitter
+// card image rather than shipping a bespoke one; see apps/site/src/lib/gallery.ts.
+const ogImage = '/brand/openvidstudio-sample-demo-poster.jpg';
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl,
   title,
   description,
   openGraph: {
     title,
     description,
     type: 'website',
+    images: [ogImage],
   },
   twitter: {
     card: 'summary_large_image',
     title,
     description,
+    images: [ogImage],
   },
 };
 

@@ -41,19 +41,17 @@ export function Quickstart() {
 
         <ol className="mt-12 flex flex-col gap-10">
           {steps.map((step, i) => (
-            <Reveal key={step.number} delayMs={i * 100}>
-              <li className="grid grid-cols-[auto_1fr] gap-5">
-                <span className="font-mono text-sm text-muted-foreground">{step.number}</span>
-                <div className="flex flex-col gap-3">
-                  <h3 className="font-heading text-lg font-semibold">{step.title}</h3>
-                  <p className="max-w-xl text-pretty text-sm text-muted-foreground">{step.body}</p>
-                  {step.code && (
-                    <pre className="mt-1 max-w-xl overflow-x-auto rounded-xl border border-border bg-card p-4 font-mono text-xs leading-relaxed text-foreground/90">
-                      <code>{step.code}</code>
-                    </pre>
-                  )}
-                </div>
-              </li>
+            <Reveal key={step.number} as="li" delayMs={i * 100} className="grid grid-cols-[auto_1fr] gap-5">
+              <span className="font-mono text-sm text-muted-foreground">{step.number}</span>
+              <div className="flex flex-col gap-3">
+                <h3 className="font-heading text-lg font-semibold">{step.title}</h3>
+                <p className="max-w-xl text-pretty text-sm text-muted-foreground">{step.body}</p>
+                {step.code && (
+                  <pre className="mt-1 max-w-xl overflow-x-auto rounded-xl border border-border bg-card p-4 font-mono text-xs leading-relaxed text-foreground/90">
+                    <code>{step.code}</code>
+                  </pre>
+                )}
+              </div>
             </Reveal>
           ))}
         </ol>

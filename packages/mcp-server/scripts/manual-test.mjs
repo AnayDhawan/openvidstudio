@@ -31,6 +31,7 @@ const monorepoRoot = path.resolve(packageRoot, "..", "..");
 const monorepoTemplateDir = path.join(monorepoRoot, "templates", "default");
 
 let failures = 0;
+let skipped = 0;
 function check(label, cond) {
   if (cond) {
     console.log(`  ok   ${label}`);
@@ -38,6 +39,14 @@ function check(label, cond) {
     console.log(`  FAIL ${label}`);
     failures++;
   }
+}
+// A skip is a distinct, explicitly-counted outcome, never silent: a block that
+// doesn't run because a local dependency (Chromium, ffmpeg, ffprobe, a symlinked
+// node_modules) is unavailable must still show up in the final summary, so
+// "ALL CHECKS PASSED" can't quietly mean "some of this didn't execute at all".
+function skip(label, reason) {
+  console.log(`  SKIP ${label}${reason ? ` (${reason})` : ''}`);
+  skipped++;
 }
 
 function listFilesRecursive(dir, base = dir) {
@@ -333,6 +342,8 @@ if (fs.existsSync(tempNodeModules)) {
   const normalStream = ffprobeHasVideoStream(normalResult.outPath);
   if (normalStream !== null) {
     check("render_video's normal-path output is a real mp4 with a video stream (ffprobe)", normalStream === true);
+  } else {
+    skip("render_video's normal-path output is a real mp4 with a video stream (ffprobe)", "ffprobe unavailable locally");
   }
 
   const spacedOutRel = path.join("out", "render test with space.mp4");
@@ -345,10 +356,13 @@ if (fs.existsSync(tempNodeModules)) {
   const spacedStream = ffprobeHasVideoStream(spacedResult.outPath);
   if (spacedStream !== null) {
     check("render_video's space-path output is a real mp4 with a video stream (ffprobe)", spacedStream === true);
+  } else {
+    skip("render_video's space-path output is a real mp4 with a video stream (ffprobe)", "ffprobe unavailable locally");
   }
 } else {
-  console.log(
-    `  (skipped: ${tempNodeModules} not present -- Part 4's node_modules symlink didn't succeed, run pnpm install at the monorepo root first)`,
+  skip(
+    "Part 4b: render_video real invocation regression pin (entire section)",
+    `${tempNodeModules} not present -- Part 4's node_modules symlink didn't succeed, run pnpm install at the monorepo root first`,
   );
 }
 
@@ -747,6 +761,6 @@ if (jsonFenceMatch) {
   );
 }
 
-console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
+console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

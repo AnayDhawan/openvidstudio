@@ -52,6 +52,15 @@ const DISPLAY_ORDER = [
 ];
 
 function listDocFilenames(): string[] {
+  if (!fs.existsSync(DOCS_DIR)) {
+    throw new Error(
+      `packages/docs not found at ${DOCS_DIR}. apps/site reads that directory directly at ` +
+        `build time (see the module comment above). On Vercel this means the project's Root ` +
+        `Directory must be set to "apps/site" AND the "Include source files outside of the ` +
+        'Root Directory" option must be enabled, or packages/docs is simply absent from the ' +
+        'build. Fix the Vercel project settings and redeploy.'
+    );
+  }
   const filenames = fs.readdirSync(DOCS_DIR).filter((name) => name.endsWith('.md'));
   return filenames.sort((a, b) => {
     const ia = DISPLAY_ORDER.indexOf(a);

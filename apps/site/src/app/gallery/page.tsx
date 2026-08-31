@@ -32,10 +32,10 @@ export default function GalleryPage() {
                   className="absolute inset-0 h-full w-full object-cover"
                   src={entry.mp4}
                   poster={entry.poster}
-                  autoPlay
                   muted
                   loop
                   playsInline
+                  controls
                   preload="none"
                 />
               </div>

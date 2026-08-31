@@ -22,7 +22,7 @@ export function DocsSidebar({ docs }: DocsSidebarProps) {
   return (
     <nav
       aria-label="Docs"
-      className="mb-8 flex gap-2 overflow-x-auto border-b border-border pb-4 md:sticky md:top-24 md:mb-0 md:h-fit md:w-56 md:shrink-0 md:flex-col md:gap-1 md:overflow-visible md:border-b-0 md:pb-0"
+      className="mb-8 flex gap-2 overflow-x-auto border-b border-border pb-4 md:sticky md:top-16 md:mb-0 md:h-fit md:w-56 md:shrink-0 md:flex-col md:gap-1 md:overflow-visible md:border-b-0 md:pb-0"
     >
       <p className="hidden font-mono text-xs tracking-wide text-muted-foreground md:mb-2 md:block">
         DOCS

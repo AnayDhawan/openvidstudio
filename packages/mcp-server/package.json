@@ -27,6 +27,7 @@
   "scripts": {
     "build": "node scripts/copy-template.mjs && node scripts/copy-docs.mjs && tsc",
     "prepublishOnly": "npm run build",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/manual-test.mjs"
   }
 }

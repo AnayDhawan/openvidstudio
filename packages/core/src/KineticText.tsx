@@ -104,7 +104,7 @@ export const Caption: React.FC<{
           fontWeight: 500,
           fontSize,
           color: color.textPrimary,
-          // glassmorphism caption bar — opaque enough to read over white browser-chrome
+          // glassmorphism caption bar, opaque enough to read over white browser-chrome
           // recordings (was 0.45, washed out against BrowserFrame's white body)
           background: "rgba(12,15,22,0.82)",
           backdropFilter: "blur(18px) saturate(1.3)",

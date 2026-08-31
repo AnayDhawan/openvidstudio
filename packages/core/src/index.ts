@@ -1,4 +1,4 @@
-// @openvidstudio/core — public API. Everything a video project needs to build
+// @openvidstudio/core: public API. Everything a video project needs to build
 // scenes in the openvidstudio house style: camera rig, motion helpers, SFX,
 // look pass, design tokens, and the shared scene/UI components.
 

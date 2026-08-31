@@ -1,4 +1,4 @@
-// Design tokens — single source for every scene. Per-video themes may override via themes/.
+// Design tokens: single source for every scene. Per-video themes may override via themes/.
 
 export const color = {
   // dark stage

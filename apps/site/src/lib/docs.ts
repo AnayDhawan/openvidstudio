@@ -33,12 +33,15 @@ export type DocMeta = {
   description: string;
 };
 
-// Fixed filename list + display/nav order. This is navigation *structure*
-// only (which files exist, what order they're listed in) — every word of
-// actual title/description/body text below is parsed from the real files,
-// never hand-typed. Order matches OVERVIEW.md's own "## Doc map" table
-// (OVERVIEW itself first, as the index/landing entry).
-const DOC_FILENAMES = [
+// Preferred display/nav order for the docs that currently exist, matching
+// OVERVIEW.md's own "## Doc map" table (OVERVIEW itself first, as the
+// index/landing entry). This is an *order preference* only, not the
+// source of the doc set: listDocFilenames() below always derives the
+// actual set of files from a real fs.readdirSync(DOCS_DIR), so /docs
+// can't silently go stale if packages/docs/ gains, loses, or renames a
+// file. A doc not listed here (e.g. a newly added one) just sorts after
+// the ones that are, alphabetically, rather than being dropped.
+const DISPLAY_ORDER = [
   'OVERVIEW.md',
   'PIPELINE.md',
   'STYLE.md',
@@ -46,7 +49,19 @@ const DOC_FILENAMES = [
   'PLANNING.md',
   'SCRIPT.md',
   'HIGGSFIELD.md',
-] as const;
+];
+
+function listDocFilenames(): string[] {
+  const filenames = fs.readdirSync(DOCS_DIR).filter((name) => name.endsWith('.md'));
+  return filenames.sort((a, b) => {
+    const ia = DISPLAY_ORDER.indexOf(a);
+    const ib = DISPLAY_ORDER.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
 
 function slugFor(filename: string): string {
   return filename.replace(/\.md$/, '').toLowerCase();
@@ -115,7 +130,7 @@ export function getAllDocsMeta(): DocMeta[] {
   const overviewContent = readDoc('OVERVIEW.md');
   const docMap = parseDocMap(overviewContent);
 
-  cache = DOC_FILENAMES.map((filename) => {
+  cache = listDocFilenames().map((filename) => {
     const content = filename === 'OVERVIEW.md' ? overviewContent : readDoc(filename);
     const description =
       filename === 'OVERVIEW.md'

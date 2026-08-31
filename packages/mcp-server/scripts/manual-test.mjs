@@ -192,7 +192,7 @@ const rootTsx = fs.readFileSync(path.join(tmpRoot, "src", "Root.tsx"), "utf8");
 check("Root.tsx registers the DemoDemo composition", rootTsx.includes('id="DemoDemo"') && rootTsx.includes("DemoDemo"));
 
 console.log("\n== Part 3: pure argv builders (no process spawned) ==");
-const { buildRenderCommand } = require(path.join(distDir, "tools", "renderVideo.js"));
+const { buildRenderCommand, runRenderVideo } = require(path.join(distDir, "tools", "renderVideo.js"));
 const renderCmd = buildRenderCommand("DemoDemo", path.join("out", "demo.mp4"));
 check(
   "buildRenderCommand returns an argv array (npx/npx.cmd render <id> <outPath>)",
@@ -256,6 +256,101 @@ if (fs.existsSync(templateNodeModules)) {
   console.log(`  (skipped: ${templateNodeModules} not present locally -- run pnpm install at the monorepo root first)`);
 }
 check("tsc --noEmit passed against the scaffolded temp project", tscOk);
+
+console.log("\n== Part 4b: render_video real invocation (Task 4 Windows spawn regression pin) ==");
+// Regression pin for the Task 4 EINVAL bug fixed in util.ts's spawnCapture (see Part 3's
+// comment above): before that fix, EVERY real render_video call on this repo's actual
+// Windows/Node runtime failed immediately with a synchronous EINVAL spawning npx.cmd, and
+// nothing in this suite actually exercised it -- Part 3's check only confirms the source
+// text has the right shape. This block calls runRenderVideo for real, against a tiny
+// scaffolded dom-demo-only composition (no captured assets needed, keeps the render itself
+// fast: a single 90-frame beat), reusing the same tempNodeModules symlink Part 4 already set
+// up. A second invocation with a space in outPath exercises the defensive arg-quoting
+// util.ts added alongside the shell:true fix (Node's shell:true + args-array does NOT
+// escape/quote args on its own -- DEP0190 -- so an unquoted space would silently word-split
+// across argv once shell:true is in effect); without that quoting this second call would
+// fail or write to the wrong path instead of producing a real mp4 at the exact requested
+// (spaced) path.
+if (fs.existsSync(tempNodeModules)) {
+  const { validateBeatsLogic: validateRenderTestBeats } = require(path.join(distDir, "tools", "validateBeats.js"));
+
+  const renderTestBeatsJson = {
+    fps: 30,
+    title: "Render Test",
+    beats: [
+      {
+        id: "only",
+        start: 0,
+        duration: 90,
+        vo: "This beat only proves render_video spawns for real.",
+        visual: { captureMethod: "dom-demo" },
+      },
+    ],
+  };
+  const renderTestValidation = validateRenderTestBeats(renderTestBeatsJson);
+  check(
+    "render_video regression pin: its own tiny beats.json passes validate_beats",
+    renderTestValidation.valid === true,
+  );
+
+  const renderTestWrite = runWriteBeatsFile({ projectRoot: tmpRoot, videoName: "rendertest", beatsJson: renderTestBeatsJson });
+  const renderTestScaffold = runScaffoldScene({ projectRoot: tmpRoot, videoName: "rendertest", beatId: "only", kind: "dom-demo" });
+  const renderTestStitch = runStitchComposition({ projectRoot: tmpRoot, videoName: "rendertest" });
+  check(
+    "render_video regression pin: rendertest project scaffolded (write_beats_file -> scaffold_scene -> stitch_composition)",
+    renderTestWrite.written === true && renderTestScaffold.written === true && renderTestStitch.written === true,
+  );
+
+  function ffprobeHasVideoStream(filePath) {
+    try {
+      const out = execFileSync(
+        "ffprobe",
+        ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", filePath],
+        { encoding: "utf8" },
+      );
+      // A Remotion render (unlike capture_screen_recording's video-only transcode) always
+      // muxes an audio track too, and this ffprobe/ffmpeg build's csv=p=0 writer appends a
+      // trailing comma in that case ("video,\r\n" rather than a bare "video\n") -- confirmed
+      // for real against both render outputs below (full `ffprobe -show_entries stream=...`
+      // shows a genuine single h264 video stream at index 0 plus an aac audio stream at
+      // index 1, not a malformed or duplicated stream). Strip trailing punctuation/whitespace
+      // rather than exact-match so this pins the real invariant (a video stream exists)
+      // instead of one ffprobe build's CSV formatting.
+      return out.trim().replace(/[,\s]+$/, "") === "video";
+    } catch (err) {
+      console.log(`  (ffprobe check skipped: ${err.message})`);
+      return null; // ffprobe unavailable locally -- not a failure of render_video itself
+    }
+  }
+
+  const normalOutRel = path.join("out", "render-test-normal.mp4");
+  const normalResult = await runRenderVideo({ projectRoot: tmpRoot, videoName: "rendertest", outPath: normalOutRel });
+  check(
+    "render_video real invocation succeeds for a normal (no-space) outPath, on this platform " +
+      `(${process.platform})`,
+    normalResult.success === true && fs.existsSync(normalResult.outPath),
+  );
+  const normalStream = ffprobeHasVideoStream(normalResult.outPath);
+  if (normalStream !== null) {
+    check("render_video's normal-path output is a real mp4 with a video stream (ffprobe)", normalStream === true);
+  }
+
+  const spacedOutRel = path.join("out", "render test with space.mp4");
+  const spacedResult = await runRenderVideo({ projectRoot: tmpRoot, videoName: "rendertest", outPath: spacedOutRel });
+  check(
+    "render_video real invocation succeeds for a SPACE-containing outPath " +
+      "(win32 shell:true arg-quoting regression pin)",
+    spacedResult.success === true && fs.existsSync(spacedResult.outPath),
+  );
+  const spacedStream = ffprobeHasVideoStream(spacedResult.outPath);
+  if (spacedStream !== null) {
+    check("render_video's space-path output is a real mp4 with a video stream (ffprobe)", spacedStream === true);
+  }
+} else {
+  console.log(
+    `  (skipped: ${tempNodeModules} not present -- Part 4's node_modules symlink didn't succeed, run pnpm install at the monorepo root first)`,
+  );
+}
 
 console.log("\n== Part 5: capture_screenshot / capture_screen_recording -- pure functions (no browser) ==");
 

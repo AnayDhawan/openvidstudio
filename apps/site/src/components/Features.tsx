@@ -1,5 +1,6 @@
 import { Check } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
+import { cn } from '@/lib/utils';
 
 type Tier = {
   eyebrow: string;
@@ -62,12 +63,12 @@ export function Features() {
               <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-6">
                 <div className="flex items-center justify-between">
                   <span
-                    className={
-                      'rounded-full border px-3 py-1 font-mono text-xs tracking-wide ' +
-                      (tier.accent === 'primary'
+                    className={cn(
+                      'rounded-full border px-3 py-1 font-mono text-xs tracking-wide',
+                      tier.accent === 'primary'
                         ? 'border-primary/30 text-primary'
-                        : 'border-accent/30 text-accent')
-                    }
+                        : 'border-accent/30 text-accent'
+                    )}
                   >
                     {tier.eyebrow}
                   </span>
@@ -80,10 +81,10 @@ export function Features() {
                   {tier.points.map((point) => (
                     <li key={point} className="flex items-start gap-3 text-sm text-foreground/90">
                       <Check
-                        className={
-                          'mt-0.5 size-4 shrink-0 ' +
-                          (tier.accent === 'primary' ? 'text-primary' : 'text-accent')
-                        }
+                        className={cn(
+                          'mt-0.5 size-4 shrink-0',
+                          tier.accent === 'primary' ? 'text-primary' : 'text-accent'
+                        )}
                       />
                       <span className="text-pretty">{point}</span>
                     </li>

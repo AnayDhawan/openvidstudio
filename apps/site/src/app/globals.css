@@ -23,7 +23,6 @@
  */
 @theme inline {
   --color-background: var(--background);
-  --color-background-2: var(--background-2);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-heading: var(--font-heading);
@@ -55,9 +54,11 @@
 }
 
 :root {
-  /* Stage bg, per STYLE.md's radial #0B0E14 -> #11151F */
+  /* Stage bg, per STYLE.md's palette (the doc describes a radial from this
+     value to a slightly lighter #11151F; the site uses the flat value only,
+     see the hero comment in Hero.tsx for why the radial isn't reproduced
+     here). */
   --background: #0b0e14;
-  --background-2: #11151f;
   --foreground: #e6eaf2;
   --card: #151a24;
   --card-foreground: #e6eaf2;

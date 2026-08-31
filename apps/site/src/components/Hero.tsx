@@ -7,14 +7,14 @@ const stackChips = ['MCP', 'Remotion', 'Playwright'];
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden border-b border-border">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            'radial-gradient(ellipse 80% 60% at 50% -10%, var(--background-2), var(--background))',
-        }}
-      />
+    // Flat bg-background behind the Spotlight, no second ambient gradient
+    // layered under it. A fix-round review flagged an earlier radial-mesh
+    // div here as an undisclosed second B4 ("never use gradients in
+    // backgrounds") deviation on top of the Spotlight glow itself; removed
+    // rather than kept and re-justified, since the Spotlight alone reads
+    // fine against a flat ground and a second wash wasn't earning its
+    // place. See task-2-report.md's fix-round entry.
+    <section className="relative overflow-hidden border-b border-border bg-background">
       <Spotlight
         className="left-1/2 top-0 -translate-x-1/2"
         fill="var(--warm)"

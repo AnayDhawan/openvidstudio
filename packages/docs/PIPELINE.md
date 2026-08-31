@@ -142,6 +142,28 @@ components. Register in the project's `Root.tsx` with duration from beats.
 - Write `<video>/script.md`: VO table (timestamps from markers), delivery
   notes, description draft. See `SCRIPT.md` for VO pacing/duration rules.
 
+## Asset conventions
+
+Every tool in this pipeline that reads or writes a beat's media agrees on
+these paths (relative to the scaffolded project root). Get an asset onto
+disk at the wrong path and the tool that's supposed to consume it either
+errors (scenes reference a `staticFile` that 404s at render time) or, for
+VO specifically, silently omits the layer with no warning:
+
+| Asset | Path | Written by | Read by |
+|---|---|---|---|
+| Screenshot | `public/images/<beatId>.png` | `capture_screenshot` | the `real-screenshot` scene `scaffold_scene` generates |
+| Recording / Higgsfield clip | `public/video/<beatId>.mp4` | `capture_screen_recording` / `import_higgsfield_clip` | the `real-recording` / `higgsfield-clip` scene `scaffold_scene` generates |
+| VO narration | `public/audio/vo/<beatId>.mp3` | (dev-provided, e.g. an edge-tts run) | `stitch_composition`, only if the file exists at this exact path when it runs |
+| Music bed | `public/audio/music-bed.mp3` | (dev-provided) | `stitch_composition`, only if the file exists at this exact path when it runs |
+
+**VO omission is silent.** `stitch_composition` checks
+`public/audio/vo/<beatId>.mp3` for every beat and just skips the Audio
+layer for any beat where the file isn't there, no error, no warning. A
+video with a beat missing its VO file renders fine and plays with no
+narration for that beat; the QC checklist below is the actual backstop,
+not a tool error.
+
 ## Known flakes
 - Webpack "wasm-hash / Cannot read properties of undefined" on render:
   `rm -rf node_modules/.cache` and retry.

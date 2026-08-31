@@ -4,9 +4,9 @@ Binding for every scene with `captureMethod: "screenshot"` or
 `"recording"` (see `PLANNING.md`). This protocol exists because
 uncorrected captures reliably come out small, soft, or bleed in content
 from a neighboring page section; here's why, and the fix. This is also
-what the `capture_screenshot` MCP tool (not built yet, a later task) does
-internally and why: if a capture from that tool ever comes out wrong, this
-is the mechanism to debug against.
+what the `capture_screenshot` MCP tool does internally and why: if a
+capture from that tool ever comes out wrong, this is the mechanism to
+debug against.
 
 ## The zoom-desync bug
 
@@ -50,6 +50,16 @@ coordinates.
 7. `Read` the output PNG before using it in a scene. Confirm by eye: no
    cut-off text, no chrome from an unrelated section, correct state
    selected.
+
+**Caveat when skipping `cropSelector`:** `capture_screenshot`'s output, with
+no `cropSelector` given, is exactly the compensated viewport's own pixel
+size (steps 1-2 above), not necessarily the size you originally requested.
+On a machine with a real zoom desync (zoom != 1), that means the saved
+image comes out smaller, and reads softer once a scene scales it back up,
+than the size you asked for. Passing `cropSelector` sidesteps this because
+the crop-and-upscale step (6 below) always lands back on the DOM rect's
+own true size regardless of the measured zoom; without it, check the
+tool's reported `zoom` before trusting the raw image at face value.
 
 **Why not `page.locator(selector).screenshot()`** (element-scoped): it
 re-measures and can auto-scroll the element into view at shot time,

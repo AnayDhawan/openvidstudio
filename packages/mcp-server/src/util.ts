@@ -39,9 +39,9 @@ export function pascalCase(id: string): string {
 
 // Blocks shell metacharacters relevant on POSIX (;&|`$<>) and on Windows cmd.exe
 // specifically (%^"), which matters here because render_video spawns npx.cmd --
-// Windows can only execute a .cmd/.bat file via cmd.exe, and Node's spawn() handles
-// that by shelling out internally even with shell:false, so cmd.exe's own
-// metacharacters are back in scope for any argument reaching that spawn call.
+// Windows can only execute a .cmd/.bat file via cmd.exe, and spawnCapture (below)
+// explicitly routes that one case through shell:true, so cmd.exe's own
+// metacharacters are in scope for any argument reaching that spawn call.
 const DANGEROUS_CHARS = /[;&|`$<>\n\r%^"]/;
 
 /**
@@ -93,17 +93,38 @@ export interface SpawnResult {
   stderr: string;
 }
 
+// On Windows, spawning a `.cmd`/`.bat` shim (npx.cmd, the only such command any caller of
+// spawnCapture ever passes -- ffmpeg/ffprobe are real .exe) with shell:false throws a
+// synchronous EINVAL: CreateProcess cannot launch a batch file directly, and (verified
+// against this repo's actual Node runtime, Task 4's real end-to-end pipeline run) Node's
+// spawn() does not transparently shell out for it the way an older assumption in this file
+// believed. shell:true routes exactly that one case through cmd.exe, which is also why
+// sanitizeRelativeOutPath/sanitizeSegment already block shell metacharacters including `%^"`
+// (cmd.exe's own specials) everywhere a value can reach this function -- that defense was
+// already written for a cmd.exe hop, this just makes the hop actually happen for the case
+// that needs it, without changing behavior for the real-.exe (ffmpeg/ffprobe) callers.
+const WINDOWS_SHIM_RE = /\.(cmd|bat)$/i;
+
 /**
  * Runs a child process to completion and captures its stdout/stderr in memory.
- * Always `spawn` with an argv array (`shell: false`), never `exec`/`execSync`
- * with an interpolated shell string -- render_video and qc_extract_frames both
- * go through this. Capturing the child's output here has nothing to do with
- * *this* process's own stdout (the MCP transport); it's returned as normal
- * tool-result content by the caller.
+ * `spawn` with an argv array, never `exec`/`execSync` with an interpolated shell string --
+ * render_video and qc_extract_frames both go through this. Capturing the child's output
+ * here has nothing to do with *this* process's own stdout (the MCP transport); it's
+ * returned as normal tool-result content by the caller.
  */
 export function spawnCapture(command: string, args: string[], cwd: string): Promise<SpawnResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, shell: false });
+    const shell = process.platform === "win32" && WINDOWS_SHIM_RE.test(command);
+    // Node's own shell:true + args-array combination does NOT escape/quote args for the
+    // caller (it just concatenates them into one command line before handing it to
+    // cmd.exe -- Node emits DEP0190 warning about exactly this), so an argument containing
+    // a space (a legal, unsanitized character in e.g. outPathRel) would silently word-split
+    // into two argv entries once shell:true is in effect. Every arg that reaches this
+    // function is already filtered through DANGEROUS_CHARS/SAFE_SEGMENT, which blocks `"`
+    // itself, so wrapping each in double quotes here is always safe and closes that gap
+    // without touching the non-shell (ffmpeg/ffprobe) call path at all.
+    const finalArgs = shell ? args.map((a) => `"${a}"`) : args;
+    const child = spawn(command, finalArgs, { cwd, shell });
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk: Buffer) => {

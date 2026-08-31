@@ -221,7 +221,19 @@ const qcSrc = fs.readFileSync(path.join(packageRoot, "src", "tools", "qcExtractF
 const utilSrc = fs.readFileSync(path.join(packageRoot, "src", "util.ts"), "utf8");
 check("renderVideo.ts never calls exec/execSync", !/\bexec(Sync)?\(/.test(renderSrc));
 check("qcExtractFrames.ts never calls exec/execSync", !/\bexec(Sync)?\(/.test(qcSrc));
-check("util.ts's spawnCapture uses spawn(...) with shell:false", /spawn\(command, args, \{ cwd, shell: false \}\)/.test(utilSrc));
+// Task 4 (real end-to-end pipeline run) found spawnCapture's old blanket shell:false threw a
+// synchronous EINVAL for npx.cmd on this repo's actual Windows/Node runtime -- Node does not
+// transparently shell out for a .cmd/.bat target the way the old comment here assumed. Fixed
+// by routing exactly that one Windows-shim case through shell:true (util.ts's WINDOWS_SHIM_RE),
+// still always via an argv array, never an interpolated shell string, and still behind the same
+// DANGEROUS_CHARS sanitization every path/id reaching this function already passes through. This
+// check now pins the narrower, actually-correct invariant instead of the always-false claim.
+check(
+  "util.ts's spawnCapture always uses an argv array (never exec/execSync), and only sets shell:true for the win32 .cmd/.bat shim case",
+  /const child = spawn\(command, finalArgs, \{ cwd, shell \}\)/.test(utilSrc) &&
+    /WINDOWS_SHIM_RE\.test\(command\)/.test(utilSrc) &&
+    !/\bexec(Sync)?\(/.test(utilSrc),
+);
 
 console.log("\n== Part 4: tsc --noEmit against the scaffolded project ==");
 const tempNodeModules = path.join(tmpRoot, "node_modules");

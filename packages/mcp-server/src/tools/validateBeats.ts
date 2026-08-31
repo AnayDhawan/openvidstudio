@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { interactionSchema } from "../capture";
 import { runTool } from "./mcp";
 
 export interface ValidateBeatsResult {
@@ -134,6 +135,19 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
         errors.push(
           `${label}: visual.interactions (array, may be empty) is required for captureMethod "${captureMethod}"`,
         );
+      } else {
+        // Validate each interaction against the exact zod schema capture_screenshot /
+        // capture_screen_recording enforce at replay time (interactionSchema, from
+        // capture.ts), so a schema violation (e.g. a "navigate" or "type" step, which
+        // this pipeline does not support) surfaces here at draft time, not at capture
+        // time.
+        v.interactions.forEach((interaction, idx) => {
+          const parsed = interactionSchema.safeParse(interaction);
+          if (!parsed.success) {
+            const issues = parsed.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`);
+            errors.push(`${label}: visual.interactions[${idx}] is invalid: ${issues.join("; ")}`);
+          }
+        });
       }
     } else if (captureMethod === "higgsfield") {
       if (typeof v.higgsfieldPrompt !== "string" || v.higgsfieldPrompt.length === 0) {
@@ -159,7 +173,10 @@ export function registerValidateBeats(server: McpServer): void {
         "word-count vs the 2.3-2.9 words/sec budget checked in both directions (too many words for the " +
         "duration and suspiciously few), every beat has a captureMethod, and method-specific required " +
         "fields (url + interactions for screenshot/recording, higgsfieldPrompt for higgsfield, nothing extra " +
-        "for dom-demo). Returns { valid, errors } with every failure found, never just the first -- this is " +
+        "for dom-demo). For screenshot/recording beats, every interactions[] entry is also validated against " +
+        "the exact schema capture_screenshot/capture_screen_recording enforce at replay time (click, fill, " +
+        "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +
+        "time. Returns { valid, errors } with every failure found, never just the first -- this is " +
         "the tool's normal answer for an invalid draft, not an exceptional case, so it never throws for a " +
         "validation failure.",
       inputSchema: {

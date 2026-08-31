@@ -103,7 +103,7 @@ Method-specific fields:
 
 | Method | Extra fields | Notes |
 |---|---|---|
-| `screenshot` | `url`, `interactions` | `interactions` is an ordered array of steps (navigate/click/type/scroll/wait) to reach the exact state the beat needs |
+| `screenshot` | `url`, `interactions` | `interactions` is an ordered array of steps (click/fill/select/hover/scroll/wait, the exact set `capture_screenshot`/`capture_screen_recording` replay) to reach the exact state the beat needs |
 | `recording` | `url`, `interactions` | same shape as `screenshot`; the interactions happen while recording, not before |
 | `dom-demo` | none | the beat's visual is authored directly in its scene file, no capture step |
 | `higgsfield` | `higgsfieldPrompt` | the AI-generation prompt for the b-roll clip; must not request on-screen product text or real UI |
@@ -118,8 +118,8 @@ drafted: show the dev the full file, not a summary, and get explicit
 approval before persisting it. This applies even to a small, obviously
 fine-looking draft.
 
-The `write_beats_file` MCP tool (not built yet) will refuse to write
-anything `validate_beats` hasn't passed, but that's schema/structural
+The `write_beats_file` MCP tool will refuse to write anything
+`validate_beats` hasn't passed, but that's schema/structural
 validation, not dev approval. The human-approval step itself is a protocol
 rule for the calling agent, not something any tool enforces. Skipping it
 because the tool would technically allow the write is a protocol
@@ -149,7 +149,7 @@ of each `captureMethod` so the shapes above are all represented):
     {
       "id": "hook",
       "start": 0,
-      "duration": 240,
+      "duration": 180,
       "vo": "Loomcard turns your notes into spaced-repetition flashcards, and schedules review so you actually remember them.",
       "visual": {
         "captureMethod": "higgsfield",
@@ -158,8 +158,8 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "demo-review",
-      "start": 240,
-      "duration": 360,
+      "start": 180,
+      "duration": 120,
       "vo": "Flip a card, and Loomcard scores your confidence on the spot.",
       "visual": {
         "captureMethod": "screenshot",
@@ -172,8 +172,8 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "demo-schedule",
-      "start": 600,
-      "duration": 300,
+      "start": 300,
+      "duration": 240,
       "vo": "That confidence score adjusts your next review date live, so easy cards fade back and hard ones come around sooner.",
       "visual": {
         "captureMethod": "recording",
@@ -186,8 +186,8 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "cta",
-      "start": 900,
-      "duration": 270,
+      "start": 540,
+      "duration": 180,
       "vo": "Loomcard is free and open source. Star it, try it, or send a pull request.",
       "visual": {
         "captureMethod": "dom-demo"

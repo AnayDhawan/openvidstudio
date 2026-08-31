@@ -27,7 +27,8 @@ const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const packageRoot = path.join(__dirname, "..");
 const distDir = path.join(packageRoot, "dist");
-const monorepoTemplateDir = path.resolve(packageRoot, "..", "..", "templates", "default");
+const monorepoRoot = path.resolve(packageRoot, "..", "..");
+const monorepoTemplateDir = path.join(monorepoRoot, "templates", "default");
 
 let failures = 0;
 function check(label, cond) {
@@ -621,6 +622,23 @@ check(
   "importHiggsfieldClip.ts never imports/requires a Higgsfield SDK or client package (only fetch + node:fs)",
   !/(from\s*["'][^"']*higgsfield[^"']*["']|require\(\s*["'][^"']*higgsfield[^"']*["']\s*\))/i.test(importHiggsfieldClipSrc),
 );
+
+console.log("\n== Part 8: PLANNING.md's own worked example passes validate_beats (I4 regression pin) ==");
+
+const planningMdPath = path.join(monorepoRoot, "packages", "docs", "PLANNING.md");
+const planningMd = fs.readFileSync(planningMdPath, "utf8");
+const jsonFenceMatch = planningMd.match(/```json\n([\s\S]*?)\n```/);
+check("PLANNING.md has a fenced ```json worked example", jsonFenceMatch !== null);
+
+if (jsonFenceMatch) {
+  const workedExampleBeats = JSON.parse(jsonFenceMatch[1]);
+  const { validateBeatsLogic } = require(path.join(distDir, "tools", "validateBeats.js"));
+  const workedExampleResult = validateBeatsLogic(workedExampleBeats);
+  check(
+    `PLANNING.md's worked example passes validate_beats (errors: ${JSON.stringify(workedExampleResult.errors)})`,
+    workedExampleResult.valid === true,
+  );
+}
 
 console.log(`\n${failures === 0 ? "ALL CHECKS PASSED" : `${failures} CHECK(S) FAILED`}`);
 console.log(`temp project left at: ${tmpRoot}`);

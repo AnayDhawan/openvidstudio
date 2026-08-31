@@ -1,17 +1,159 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #0a0a0a;
-  --foreground: #ffffff;
-}
-
+/*
+ * Design tokens for openvidstudio.
+ *
+ * Single dark theme, no light/`.dark` toggle: the product this site sells
+ * is a cinematic, dark-stage video pipeline, and its own art-direction
+ * bible (packages/docs/STYLE.md "Palette + type") already fixes a
+ * production palette for every video it renders. These tokens are that
+ * same palette, reused for the site itself, so the marketing page and the
+ * videos it links to read as the same product rather than two different
+ * ones glued together.
+ *
+ * Style direction: `web-design-skills`' "linear" recipe (Modern Tool /
+ * Builder SaaS: warm dark ground, hairline borders, restrained accent,
+ * mono chips, a single controlled glow in the hero, never a saturated
+ * multi-color gradient) supplies the STRUCTURE. STYLE.md supplies the
+ * actual COLOR VALUES instead of Linear's own purple/gray, since this
+ * product already has a real brand palette and reusing it beats importing
+ * someone else's.
+ */
 @theme inline {
   --color-background: var(--background);
+  --color-background-2: var(--background-2);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-sans);
+  --font-heading: var(--font-heading);
+  --font-mono: var(--font-mono);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-warm: var(--warm);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --animate-spotlight: spotlight 2s ease 0.75s 1 forwards;
+  --animate-reveal: reveal 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
+:root {
+  /* Stage bg, per STYLE.md's radial #0B0E14 -> #11151F */
+  --background: #0b0e14;
+  --background-2: #11151f;
+  --foreground: #e6eaf2;
+  --card: #151a24;
+  --card-foreground: #e6eaf2;
+  --popover: #151a24;
+  --popover-foreground: #e6eaf2;
+  /* Cool accent blue, per STYLE.md */
+  --primary: #4e9eff;
+  --primary-foreground: #f7faff;
+  --secondary: #151a24;
+  --secondary-foreground: #e6eaf2;
+  --muted: #151a24;
+  --muted-foreground: #8a94a6;
+  /* Violet, per STYLE.md, reserved for the optional Higgsfield tier */
+  --accent: #9d6bff;
+  --accent-foreground: #f8f5ff;
+  --destructive: #e5484d;
+  --border: rgba(230, 234, 242, 0.08);
+  --input: rgba(230, 234, 242, 0.08);
+  --ring: #4e9eff;
+  /* Warm amber, per STYLE.md's warn token, reused here as the hero's key
+     light: STYLE.md's own rule 6 ("warm accent lighting against cool UI")
+     applied to the site itself instead of a cool-on-cool glow. */
+  --warm: #f5a623;
+  --radius: 0.625rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@keyframes spotlight {
+  0% {
+    opacity: 0;
+    transform: translate(-72%, -62%) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -40%) scale(1);
+  }
+}
+
+@keyframes reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.reveal-init {
+  opacity: 0;
+  transform: translateY(16px);
+  filter: blur(6px);
+}
+
+.reveal-in {
+  animation: var(--animate-reveal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spotlight {
+    animation: none;
+    opacity: 1;
+    transform: translate(-50%, -40%) scale(1);
+  }
+
+  .reveal-init,
+  .reveal-in {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+
+  /* Catch-all: also covers the tagline-reveal word-by-word transition
+     (TaglineReveal.tsx), which animates via inline transition-delay
+     rather than the .reveal-* classes above. */
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,9 +1,21 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Inter_Tight, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { Nav } from '@/components/Nav';
 
-const inter = Inter({ variable: '--font-inter', subsets: ['latin'] });
+// Body/UI text. Matches packages/docs/STYLE.md's own "Fonts: Inter (UI)"
+// rule, so the site's text and every video this pipeline renders share a
+// typeface rather than the site inventing its own.
+const inter = Inter({ variable: '--font-sans', subsets: ['latin'] });
+
+// Display type for headings only: same family as the body font but with
+// the tighter tracking a landing-page H1 needs, so headings don't read as
+// plain default-weight Inter (the exact AI-slop look the web-design-skills
+// plugin's Linear recipe warns against).
+const interTight = Inter_Tight({ variable: '--font-heading', subsets: ['latin'], weight: ['600', '700'] });
+
+// Code/terminal text: matches STYLE.md's "JetBrains Mono (terminal/code)".
+const jetbrainsMono = JetBrains_Mono({ variable: '--font-mono', subsets: ['latin'], weight: ['400', '500'] });
 
 const title = 'openvidstudio';
 const description =
@@ -26,8 +38,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${inter.variable} font-sans antialiased bg-[var(--background)] text-[var(--foreground)]`}>
+    <html lang="en" className={`${inter.variable} ${interTight.variable} ${jetbrainsMono.variable}`}>
+      <body className="font-sans antialiased bg-background text-foreground">
         <Nav />
         {children}
       </body>

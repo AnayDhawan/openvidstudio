@@ -1,3 +1,5 @@
+import Link from 'next/link';
+import { ArrowRight } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
 
 const mcpConfigSnippet = `{
@@ -55,6 +57,20 @@ export function Quickstart() {
             </Reveal>
           ))}
         </ol>
+
+        {/* Gap 4 (task-1, run 3): the quickstart's own three steps only
+            summarize the intake-to-render protocol; the full seven docs
+            that back it live at /docs and were previously unreachable from
+            the homepage. */}
+        <Reveal delayMs={steps.length * 100} className="mt-10 border-t border-border pt-8">
+          <Link
+            href="/docs"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:text-foreground"
+          >
+            Read the full docs
+            <ArrowRight className="size-3.5" />
+          </Link>
+        </Reveal>
       </div>
     </section>
   );

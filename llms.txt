@@ -1,0 +1,36 @@
+# openvidstudio
+
+> Free, open-source video-generation add-on for any software project, driven entirely through MCP tools
+
+openvidstudio is an open-source node project maintained at
+[github.com/AnayDhawan/openvidstudio](https://github.com/AnayDhawan/openvidstudio) under the
+Apache-2.0 license.
+
+This file follows the [llms.txt](https://llmstxt.org/) convention: a short, stable,
+plain-language map of the project for language models and the people using them. Keep it
+current when the links below move, and keep it short: it is an index, not documentation.
+
+## Docs
+
+- [README](https://github.com/AnayDhawan/openvidstudio/blob/main/README.md): what this is, why
+  it exists, and how to install and run it.
+- [CHANGELOG](https://github.com/AnayDhawan/openvidstudio/blob/main/CHANGELOG.md): what changed
+  in each release, newest first.
+
+## Contributing
+
+- [CONTRIBUTING](https://github.com/AnayDhawan/openvidstudio/blob/main/CONTRIBUTING.md): setup,
+  the verification commands (`pnpm --filter <package> build`/`test`), and what a good pull
+  request looks like.
+- [Code of Conduct](https://github.com/AnayDhawan/openvidstudio/blob/main/CODE_OF_CONDUCT.md)
+- Good first issues: Check the issues tab for the current list.
+
+## Security
+
+- [Security policy](https://github.com/AnayDhawan/openvidstudio/blob/main/SECURITY.md): report
+  vulnerabilities privately to dhawansanay@gmail.com, not as a public issue.
+
+## Optional
+
+- [Issues](https://github.com/AnayDhawan/openvidstudio/issues): current bugs and roadmap.
+- [Releases](https://github.com/AnayDhawan/openvidstudio/releases): tagged versions and notes.

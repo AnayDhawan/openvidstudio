@@ -1,0 +1,23 @@
+name: labeler
+# Applies the path rules in .github/labeler.yml to every PR.
+#
+# pull_request_target, not pull_request, because labeling needs write permission and a
+# pull_request run from a fork has a read-only token. This is the documented pattern for
+# actions/labeler. It is safe here ONLY because this workflow never checks out or
+# executes the PR's code -- it reads the labeler config from the base branch. Do not add
+# a checkout of the head ref to this file.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/labeler@v7
+        with:
+          sync-labels: true

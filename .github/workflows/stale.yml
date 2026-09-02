@@ -1,0 +1,54 @@
+name: stale
+# Deliberately conservative windows. This scaffold is aimed at solo and small-team
+# maintainers, where a quiet issue usually means "the maintainer has been busy", not
+# "the reporter lost interest". Auto-closing on a 60-day timer in that situation drives
+# away exactly the contributors you were trying to attract.
+#
+# So: 90 days to a warning, another 30 to a close, and pull requests are marked but
+# NEVER auto-closed (days-before-pr-close: -1) -- someone's unmerged work is the last
+# thing a bot should discard.
+#
+# Anything labelled pinned, security, or help wanted is exempt. Widen the windows
+# further, or delete this file, if your project's rhythm is slower still.
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v11
+        with:
+          days-before-stale: 90
+          days-before-close: 30
+          days-before-pr-close: -1
+
+          stale-issue-label: stale
+          stale-pr-label: stale
+          exempt-issue-labels: "pinned,security,help wanted,good first issue"
+          exempt-pr-labels: "pinned,security,help wanted"
+          exempt-all-milestones: true
+
+          stale-issue-message: >
+            This issue has had no activity for 90 days, so it is being marked stale to
+            keep the backlog honest. It is not being dismissed. Comment if it is still
+            relevant and the label comes off; otherwise it will close in 30 days and can
+            be reopened at any time.
+          stale-pr-message: >
+            This pull request has had no activity for 90 days and is being marked stale.
+            It will NOT be closed automatically. If it is waiting on a review, say so and
+            it gets one.
+          close-issue-message: >
+            Closing after 120 days with no activity. This is backlog hygiene, not a
+            judgement on the report. Reopen or comment if it is still relevant.
+
+          # Be gentle with API budget on large backlogs.
+          operations-per-run: 60
+          ascending: true

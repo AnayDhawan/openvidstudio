@@ -1,0 +1,52 @@
+# Path-based auto-labeling, consumed by .github/workflows/labeler.yml
+# (actions/labeler v5+ syntax: each label maps to a list of match rules).
+#
+# These are deliberately generic starting rules. Prune the ones that do not match this
+# repo's layout rather than leaving dead entries: a label that never fires is noise in
+# the config, and a label that fires on everything is noise on every PR.
+#
+# Every label used here is created by scripts/setup-labels.sh, except "tests" and "ci",
+# which GitHub will create on first use with a default colour.
+
+documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/*.md"
+          - "docs/**"
+          - "!CHANGELOG.md"
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "test/**"
+          - "tests/**"
+          - "spec/**"
+          - "**/*.test.*"
+          - "**/*.spec.*"
+          - "**/test_*.py"
+          - "**/*_test.go"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/actions/**"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "package.json"
+          - "package-lock.json"
+          - "pnpm-lock.yaml"
+          - "yarn.lock"
+          - "requirements*.txt"
+          - "pyproject.toml"
+          - "poetry.lock"
+          - "Cargo.toml"
+          - "Cargo.lock"
+          - "go.mod"
+          - "go.sum"
+          - "Gemfile"
+          - "Gemfile.lock"
+          - "composer.json"
+          - "composer.lock"

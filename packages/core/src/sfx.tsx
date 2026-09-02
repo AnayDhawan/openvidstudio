@@ -68,3 +68,39 @@ export const SuccessChime: React.FC<{ at: number; volume?: number }> = ({
     <Audio src={staticFile("sfx/success.wav")} volume={volume} />
   </Sequence>
 );
+
+/** Struck bell, for a completion moment that wants more weight than a chime. */
+export const Bell: React.FC<{ at: number; volume?: number }> = ({
+  at,
+  volume = 0.3,
+}) => (
+  <Sequence from={at} durationInFrames={48}>
+    <Audio src={staticFile("sfx/bell.wav")} volume={volume} />
+  </Sequence>
+);
+
+/** Enter key. Deeper and heavier than a letter key, for the end of a typed command. */
+export const EnterKey: React.FC<{ at: number; volume?: number }> = ({
+  at,
+  volume = 0.2,
+}) => (
+  <Sequence from={at} durationInFrames={8}>
+    <Audio src={staticFile("sfx/key_enter.wav")} volume={volume} />
+  </Sequence>
+);
+
+/**
+ * Ambient bed under the whole composition.
+ *
+ * Synthesized by scripts/gen-sfx.sh rather than licensed, so a rendered video
+ * carries no third-party audio rights. The source is 60s; `durationInFrames` loops
+ * it to cover the composition.
+ */
+export const MusicBed: React.FC<{ durationInFrames: number; volume?: number }> = ({
+  durationInFrames,
+  volume = 0.16,
+}) => (
+  <Sequence from={0} durationInFrames={durationInFrames}>
+    <Audio src={staticFile("sfx/music-bed.wav")} volume={volume} loop />
+  </Sequence>
+);

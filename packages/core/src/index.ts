@@ -10,7 +10,17 @@ export type { CamKeyframe } from "./camera";
 export { E, SPRING, tween, pop, jitter, staggerDelay } from "./motion";
 
 // SFX
-export { KeySound, TypingSfx, Click, Whoosh, Blip, SuccessChime } from "./sfx";
+export {
+  KeySound,
+  TypingSfx,
+  Click,
+  Whoosh,
+  Blip,
+  SuccessChime,
+  Bell,
+  EnterKey,
+  MusicBed,
+} from "./sfx";
 
 // Look pass
 export { FilmGrain, Vignette, ColorGrade, LookPass } from "./look";

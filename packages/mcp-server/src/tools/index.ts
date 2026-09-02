@@ -10,9 +10,10 @@ import { registerQcExtractFrames } from "./qcExtractFrames";
 import { registerCaptureScreenshot } from "./captureScreenshot";
 import { registerCaptureScreenRecording } from "./captureScreenRecording";
 import { registerImportHiggsfieldClip } from "./importHiggsfieldClip";
+import { registerGenerateNarration } from "./generateNarration";
 
 /**
- * Registers all of this package's tools. The first 9 need no server-startup config: each
+ * Registers all of this package's tools. The first 10 need no server-startup config: each
  * resolves a project's own openvidstudio.config.json itself, per call, off projectRoot.
  * import_higgsfield_clip is the one exception -- its registration itself is gated on
  * config.hasHiggsfield, decided once at server-startup time (stdio.ts reads
@@ -31,6 +32,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerQcExtractFrames(server);
   registerCaptureScreenshot(server);
   registerCaptureScreenRecording(server);
+  registerGenerateNarration(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

@@ -22,6 +22,26 @@ export function Hero() {
     // the actual centerpiece next to the copy rather than a background
     // wash. Column ratio is deliberately uneven (6/5), not a 50/50 split.
     <section className="relative overflow-hidden border-b border-border bg-background">
+      {/* Brand hero art: corners-only bokeh, center left clear by design
+          (see apps/site/public/brand/ generation notes) so the live copy
+          below sits on genuinely empty ground, not text laid over a busy
+          image. Desktop/mobile are two separate renders, not one image
+          scaled, swapped by breakpoint rather than cropped. Sits behind
+          the Spotlight glow and the content grid, aria-hidden since it's
+          pure decoration with no information the copy doesn't already say. */}
+      <img
+        src="/brand/hero-desktop.png"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 hidden h-full w-full object-cover object-top opacity-90 md:block"
+      />
+      <img
+        src="/brand/hero-mobile.png"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 h-full w-full object-cover object-top opacity-90 md:hidden"
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/60 to-background" />
       <Spotlight
         className="left-1/2 top-0 -translate-x-1/2"
         fill="var(--warm)"

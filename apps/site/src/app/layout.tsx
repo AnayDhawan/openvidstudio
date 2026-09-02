@@ -26,9 +26,11 @@ const description =
 // the relative OG/Twitter image path below into an absolute URL).
 const siteUrl = new URL('https://openvidstudio.dev');
 
-// Reuses the gallery's existing real demo poster as a stand-in OG/Twitter
-// card image rather than shipping a bespoke one; see apps/site/src/lib/gallery.ts.
-const ogImage = '/brand/openvidstudio-sample-demo-poster.jpg';
+// Fallback OG/Twitter image for any route that doesn't set its own. Every
+// real route now carries a dedicated opengraph-image.png (see each route's
+// own file under src/app/), which Next's metadata resolution overrides this
+// with automatically; this is what a not-yet-built route would fall back to.
+const ogImage = '/brand/og/home.png';
 
 export const metadata: Metadata = {
   metadataBase: siteUrl,

@@ -1,6 +1,40 @@
 import { Check } from 'lucide-react';
 import { Reveal } from '@/components/Reveal';
 
+type Capability = {
+  icon: string;
+  label: string;
+  body: string;
+};
+
+// The four things this pipeline is actually built on, one icon each (task 3's
+// "capability grid"). Not a marketing feature list: MCP is the interface,
+// Remotion and Playwright are the two real dependencies that do the actual
+// compositing and capturing, Higgsfield is the one optional add-on, matching
+// the "two tiers" split below exactly rather than inventing a fifth thing.
+const capabilities: Capability[] = [
+  {
+    icon: 'icon-mcp',
+    label: 'MCP',
+    body: 'Every tool call goes through the Model Context Protocol. Any agent that speaks MCP can drive this pipeline.',
+  },
+  {
+    icon: 'icon-remotion',
+    label: 'Remotion',
+    body: 'The camera, the compositing, the render: all React, all programmatic, no timeline editor.',
+  },
+  {
+    icon: 'icon-playwright',
+    label: 'Playwright',
+    body: 'Real screenshots and screen recordings of your running app, captured from an actual browser.',
+  },
+  {
+    icon: 'icon-higgsfield',
+    label: 'Higgsfield',
+    body: "Optional b-roll for the one gap real capture can't fill. Your subscription, your MCP connection.",
+  },
+];
+
 type Tier = {
   eyebrow: string;
   title: string;
@@ -63,6 +97,27 @@ export function Features() {
             product UI in it at all. That one gap is what the optional tier
             is for, and only for.
           </p>
+        </Reveal>
+
+        {/* Capability grid (task 3): the four things this pipeline is
+            actually built on, one icon each, before the pricing-style
+            tier split below rather than folded into it. */}
+        <Reveal delayMs={60} className="mt-12 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {capabilities.map((capability) => (
+            <div
+              key={capability.label}
+              className="flex flex-col gap-3 rounded-2xl border border-border bg-card/60 p-5"
+            >
+              <img
+                src={`/brand/${capability.icon}.png`}
+                alt=""
+                aria-hidden="true"
+                className="size-9"
+              />
+              <h3 className="font-heading text-sm font-semibold">{capability.label}</h3>
+              <p className="text-pretty text-xs text-muted-foreground">{capability.body}</p>
+            </div>
+          ))}
         </Reveal>
 
         {/* Asymmetric 3/2 split, not the old 50/50 grid: the free tier is

@@ -10,12 +10,15 @@ openvidstudio is an open-source video-generation add-on, built on Remotion and
 Playwright, that an AI coding agent drives through MCP tools to produce
 launch and demo videos for a project directly from its repo and running app,
 with an optional Higgsfield AI b-roll tier for shots that can't be captured
-from a live screen. `packages/`, `templates/`, and `apps/` each get their own
-README as they're built out.
+from a live screen. `packages/` and `templates/` each get their own README as
+they're built out. The public site lives in a separate repo:
+[vidstudio-site](https://github.com/AnayDhawan/vidstudio-site).
 
-![A frame from a real sample video, built end to end through openvidstudio's own MCP tools](apps/site/public/brand/openvidstudio-sample-demo-poster.jpg)
+![A frame from a real sample video, built end to end through openvidstudio's own MCP tools](docs/media/demo-poster.jpg)
 
-*A frame from a real end-to-end sample video, not a mockup ([full clip](apps/site/public/brand/openvidstudio-sample-demo.mp4)). See it live on the [example gallery](apps/site/src/lib/gallery.ts) once the site is deployed.*
+*A frame from a real end-to-end sample video, not a mockup - built via
+[vidstudio-site](https://github.com/AnayDhawan/vidstudio-site)'s example gallery, itself produced
+end to end through openvidstudio's own MCP tools.*
 
 ## Quick Start
 

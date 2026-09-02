@@ -1,6 +1,5 @@
 packages:
   - "packages/*"
-  - "apps/*"
   - "templates/*"
 allowBuilds:
   esbuild: true

@@ -14,8 +14,11 @@ Run `preflight`. It checks node, ffmpeg, Playwright's Chromium, whether the app 
 actually responding, and whether a narration engine exists. Each failure names the
 fix. Skipping this means a missing dependency surfaces after a long render.
 
-If the tools are not registered, the server is not installed. Point the user at
-`npx -y @openvidstudio/mcp-server` in their MCP config, then a client restart.
+If the tools are not registered, the server is not installed. Point the user at this in their MCP config, then a client restart:
+
+```json
+{ "mcpServers": { "openvidstudio": { "command": "npx", "args": ["-y", "@openvidstudio/mcp-server"] } } }
+```
 
 ## The order
 

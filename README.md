@@ -20,41 +20,33 @@ running app by this pipeline's own capture tools.*
 
 ## Quick Start
 
-Not published to npm yet, so the server is built from a clone:
-
-```bash
-git clone https://github.com/AnayDhawan/openvidstudio.git
-cd openvidstudio
-pnpm install
-pnpm --filter @openvidstudio/mcp-server build
-```
-
-Check it starts before wiring it into an agent. A server that fails here shows up
-as a silently missing tool list rather than an error:
-
-```bash
-node packages/mcp-server/dist/stdio.js
-# openvidstudio-mcp: connected over stdio
-```
-
-Then point your coding agent's MCP config at the built server, using the absolute
-path to the file you just built, and restart the client so it picks the server up:
-
 ```json
 {
   "mcpServers": {
     "openvidstudio": {
-      "command": "node",
-      "args": ["/absolute/path/to/openvidstudio/packages/mcp-server/dist/stdio.js"]
+      "command": "npx",
+      "args": ["-y", "@openvidstudio/mcp-server"]
     }
   }
 }
 ```
 
-Nine tools should appear. Start your app, then ask your agent for a video in plain
-English, for example "build a 60 second demo video of the app running on
-localhost:3000". It runs a guided intake, drafts a `beats.json`, and shows you the
-whole draft before writing anything to disk.
+Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
+restart the client. Fourteen tools should appear.
+
+Then start the app you want to film and ask your agent for a video in plain English,
+for example "build a 60 second demo video of the app running on localhost:3000". It
+checks the machine with `preflight`, runs a guided intake, drafts a `beats.json`, and
+shows you the whole draft before writing anything to disk.
+
+Working from a clone instead:
+
+```bash
+git clone https://github.com/AnayDhawan/openvidstudio.git
+cd openvidstudio && pnpm install
+pnpm --filter @openvidstudio/mcp-server build
+# then point the config at packages/mcp-server/dist/stdio.js with "command": "node"
+```
 
 ## Prerequisites
 
@@ -82,10 +74,28 @@ Read `packages/docs/PLANNING.md` first for the guided intake flow, then
 `STYLE.md`, `CAPTURE.md` and `SCRIPT.md` cover the individual steps and the rules
 that are enforced rather than suggested.
 
+## What the tools do
+
+| Tool | |
+|---|---|
+| `preflight` | Checks node, ffmpeg, Playwright, Chromium, and whether your app is responding. Every failure names its fix |
+| `plan_beats` | A beat skeleton with a narration word budget per beat |
+| `validate_beats` | Schema and pacing, before anything is written |
+| `write_beats_file` | Commits the approved beats |
+| `capture_screenshot` | Zoom compensated capture of the real running app |
+| `capture_screen_recording` | Full viewport recording |
+| `scaffold_scene` | A scene that renders, from one of ten templates, using that beat's own copy |
+| `validate_scenes` | Catches what renders successfully and is wrong, chiefly content cropped outside the camera |
+| `generate_narration` | One clip per beat, paced to fit without sounding stretched |
+| `stitch_composition` | Sequences scenes and audio |
+| `contact_sheet` | Every beat in one image, in a fraction of a render |
+| `render_video` | Draft or full quality |
+| `qc_extract_frames` | Frames back out for review |
+| `import_higgsfield_clip` | Optional AI b roll, gated on config |
+
 ## Status
 
-The mechanical pipeline works end to end: scaffold, validate, capture, stitch,
-render, QC. Scene authoring is still the manual part. `scaffold_scene` currently
-emits a stub for the calling agent to fill in, so building a video today means the
-agent writes real Remotion scene code. Making that step generate working scenes is
-the main thing tracked in the issues.
+The pipeline runs end to end and `scaffold_scene` emits scenes that render, so an
+agent can go from a brief to a narrated mp4 without hand writing Remotion. The
+templates are structurally correct but plain: a first render looks right rather than
+good, and making it look good is still your job.

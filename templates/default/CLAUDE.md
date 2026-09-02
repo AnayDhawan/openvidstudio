@@ -22,6 +22,10 @@ clobber local edits here). If a doc listed below is missing, re-run
 - `./docs/OVERVIEW.md`: conceptual overview; read this if you're unsure
   why any of the rules below exist.
 - `./docs/HIGGSFIELD.md`: AI b-roll tier protocol.
+- `./docs/API.md`: every prop of every `@openvidstudio/core` component. Read
+  this instead of opening the library source.
+- `./docs/NARRATION.md`: voice, music and sound effects, and why generated
+  voiceover usually sounds synthetic.
 
 ## Rules a scene-writing agent must never violate
 
@@ -37,6 +41,17 @@ silently broken while writing a scene:
 - **Motion never stops.** Every shot needs at least a subtle push-in. A
   frozen frame is a QC fail.
 - **No em dashes**, on screen or in VO, anywhere.
+
+## Before you hand-write a scene
+
+`scaffold_scene` emits a scene that renders, using that beat's own copy and
+duration. Start from it and edit the content rather than composing a scene
+from primitives: it already has correct camera keyframes, a safe content
+width, and the right shape for the beat's capture method.
+
+Then run `validate_scenes`. The commonest mistake in this pipeline is
+invisible: content laid out at full stage width gets cropped once the camera
+pushes in, and the render does not warn.
 
 ## Components
 

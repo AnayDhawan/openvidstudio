@@ -13,6 +13,8 @@ export interface InitProjectInput {
   targetDurationSeconds?: number;
   hasHiggsfield?: boolean;
   videoConfig?: Partial<VideoConfig>;
+  appUrl?: string;
+  demo?: boolean;
 }
 
 export interface InitProjectResult {
@@ -22,6 +24,8 @@ export interface InitProjectResult {
   templateShellCopied: boolean;
   docsDir: string;
   config: OpenvidstudioConfig;
+  demo: boolean;
+  nextSteps: string[];
 }
 
 /**
@@ -58,7 +62,53 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
     hasHiggsfield: input.hasHiggsfield,
     targetDurationSeconds: input.targetDurationSeconds,
     videoConfig: input.videoConfig,
+    capture: input.appUrl ? { appUrl: input.appUrl } : undefined,
   });
+
+  // A demo project ships a ready beats.json so the very next call can be
+  // scaffold_scene. Without it a new user has nothing to run and no worked example
+  // to copy, and any failure in ffmpeg or capture surfaces several steps later.
+  const nextSteps: string[] = [];
+  if (input.demo) {
+    const fps = config.videoConfig.fps;
+    const url = config.capture.appUrl;
+    const demoBeats = {
+      fps,
+      title: `${name} demo`,
+      beats: [
+        {
+          id: "hook",
+          start: 0,
+          duration: fps * 6,
+          visual: {
+            captureMethod: "screenshot",
+            url,
+            interactions: [{ type: "wait", ms: config.capture.settleMs }],
+            description: "The app's own first screen, camera pushing in.",
+          },
+          vo: "This is the app, captured from the real thing rather than described to a model.",
+        },
+        {
+          id: "cta",
+          start: fps * 6,
+          duration: fps * 5,
+          visual: { captureMethod: "dom-demo", description: "Repo call to action." },
+          vo: "Built with openvidstudio, which turns a running app into a demo video.",
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(videoDir, "beats.json"),
+      JSON.stringify(demoBeats, null, 2) + "\n",
+      "utf8",
+    );
+    nextSteps.push(
+      `A two beat, 11 second beats.json is ready at src/videos/${name}/beats.json.`,
+      `Next: capture_screenshot for the "hook" beat against ${url},`,
+      `then scaffold_scene for both beats, then stitch_composition, then render_video with draft: true.`,
+      `That whole path should take about two minutes and proves the install works end to end.`,
+    );
+  }
 
   return {
     projectRoot,
@@ -67,6 +117,8 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
     templateShellCopied: !alreadyScaffolded,
     docsDir,
     config,
+    demo: Boolean(input.demo),
+    nextSteps,
   };
 }
 
@@ -84,7 +136,10 @@ export function registerInitProject(server: McpServer): void {
         "PIPELINE.md, STYLE.md, CAPTURE.md, SCRIPT.md, OVERVIEW.md, HIGGSFIELD.md) into <projectRoot>/docs/, " +
         "and writes/merges openvidstudio.config.json there (merges field-by-field, never clobbers a value " +
         "the patch doesn't mention). Never overwrites a file that already exists, so calling this again for " +
-        "a second video in the same project is safe.",
+        "a second video in the same project is safe. Pass demo: true to also write a ready two beat " +
+        "beats.json, so the next call can be capture_screenshot and a new user reaches a rendered video in " +
+        "about two minutes instead of authoring a beats file first. Only `name` is required; duration, fps, " +
+        "dimensions, capture viewport and the settle delay before a screenshot all have defaults that work.",
       inputSchema: {
         name: z
           .string()
@@ -96,6 +151,14 @@ export function registerInitProject(server: McpServer): void {
           .describe("Absolute path to the target project root. Defaults to process.cwd()."),
         targetDurationSeconds: z.number().positive().optional(),
         hasHiggsfield: z.boolean().optional(),
+        appUrl: z
+          .string()
+          .optional()
+          .describe("The running app to film. Stored as capture.appUrl and used as the default for captures."),
+        demo: z
+          .boolean()
+          .optional()
+          .describe("Also write a ready two beat beats.json, as a two minute end to end smoke test."),
         videoConfig: z
           .object({
             fps: z.number().positive().optional(),

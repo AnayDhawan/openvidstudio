@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "commonjs",
   "bin": {
-    "openvidstudio-mcp": "./dist/stdio.js"
+    "openvidstudio-mcp": "dist/stdio.js"
   },
   "main": "./dist/server.js",
   "types": "./dist/server.d.ts",

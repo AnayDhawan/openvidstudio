@@ -10,11 +10,25 @@ export interface RenderVideoInput {
   videoName: string;
   compositionId?: string;
   outPath?: string;
+  /**
+   * Draft renders at half resolution with a cheaper encode. A five minute video is
+   * 9000 frames and tens of minutes at full quality, which is far too slow a loop
+   * for checking whether the video is right.
+   */
+  draft?: boolean;
+  /**
+   * Parallel render workers. Left unset, Remotion takes as much of the machine as it
+   * can: one render here spawned 25 Chrome workers and starved everything else on the
+   * box, including a second pipeline step running at the same time.
+   */
+  concurrency?: number;
 }
 
 export interface RenderVideoResult {
   success: boolean;
   outPath: string;
+  draft: boolean;
+  elapsedSeconds: number;
   stdout: string;
   stderr: string;
 }
@@ -32,10 +46,27 @@ const COMPOSITION_ID_RE = /^[A-Za-z0-9_-]+$/;
  * with shell:false, which is why compositionId/outPath both get sanitized against
  * cmd.exe metacharacters before ever reaching this function (see util.ts).
  */
-export function buildRenderCommand(compositionId: string, outPath: string): RenderCommand {
+export function buildRenderCommand(
+  compositionId: string,
+  outPath: string,
+  opts: { draft?: boolean; concurrency?: number } = {},
+): RenderCommand {
+  const args = ["remotion", "render", compositionId, outPath];
+  if (opts.draft) {
+    // Half resolution and a fast x264 preset. Enough to judge framing, motion and
+    // timing; not enough to judge final text crispness.
+    args.push("--scale=0.5", "--crf=32", "--x264-preset=veryfast");
+  }
+  if (opts.concurrency && opts.concurrency > 0) {
+    args.push(`--concurrency=${Math.floor(opts.concurrency)}`);
+  }
+  // Remotion suppresses its progress bar when stdout is not a TTY, which is always
+  // the case here, so a piped render writes an empty log for its whole run and an
+  // agent watching it cannot tell progress from a hang.
+  args.push("--log=verbose");
   return {
     command: process.platform === "win32" ? "npx.cmd" : "npx",
-    args: ["remotion", "render", compositionId, outPath],
+    args,
   };
 }
 
@@ -51,12 +82,19 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
 
   fs.mkdirSync(path.dirname(path.join(projectRoot, outPathRel)), { recursive: true });
 
-  const { command, args } = buildRenderCommand(compositionId, outPathRel);
+  const started = Date.now();
+  const { command, args } = buildRenderCommand(compositionId, outPathRel, {
+    draft: input.draft,
+    concurrency: input.concurrency,
+  });
   const result = await spawnCapture(command, args, projectRoot);
+  const elapsedSeconds = Math.round((Date.now() - started) / 1000);
 
   return {
     success: result.code === 0,
     outPath: path.join(projectRoot, outPathRel),
+    draft: Boolean(input.draft),
+    elapsedSeconds,
     stdout: result.stdout,
     stderr: result.stderr,
   };
@@ -72,13 +110,21 @@ export function registerRenderVideo(server: McpServer): void {
         "child_process.spawn with an argv array (never exec/execSync with a shell string), so a " +
         "user-controlled videoName/outPath can't inject shell syntax. Default compositionId is the video's " +
         "PascalCase name + \"Demo\" (matching stitch_composition's naming), default outPath is " +
-        "out/<videoName>.mp4. Returns the render's captured stdout/stderr as normal tool-result content -- " +
-        "unrelated to this MCP server process's own stdout, which never carries anything but protocol frames.",
+        "out/<videoName>.mp4. Pass draft for a half resolution, fast encode pass: a five minute video is " +
+        "9000 frames and tens of minutes at full quality, which is far too slow a loop for checking whether " +
+        "the video is right, and draft is usually enough to judge framing, motion and timing. Pass " +
+        "concurrency to cap the worker count; left unset Remotion takes as much of the machine as it can, " +
+        "and one render here spawned 25 Chrome workers and starved a second pipeline step running " +
+        "alongside it. Renders with verbose logging, because Remotion hides its progress bar when stdout " +
+        "is not a TTY and a piped render otherwise writes an empty log for its entire run, leaving no way " +
+        "to tell progress from a hang. Returns the render's captured stdout/stderr and how long it took.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
         compositionId: z.string().optional(),
         outPath: z.string().optional(),
+        draft: z.boolean().optional(),
+        concurrency: z.number().positive().optional(),
       },
     },
     async (input) => runTool("render_video", () => runRenderVideo(input)),

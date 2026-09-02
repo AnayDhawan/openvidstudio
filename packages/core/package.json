@@ -8,7 +8,8 @@
   "types": "src/index.ts",
   "files": [
     "src",
-    "scripts"
+    "scripts",
+    "public"
   ],
   "dependencies": {
     "@remotion/google-fonts": "^4.0.490"
@@ -27,5 +28,24 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnayDhawan/openvidstudio.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/AnayDhawan/openvidstudio#readme",
+  "bugs": {
+    "url": "https://github.com/AnayDhawan/openvidstudio/issues"
+  },
+  "keywords": [
+    "remotion",
+    "video",
+    "demo-video",
+    "screencast",
+    "mcp"
+  ]
 }

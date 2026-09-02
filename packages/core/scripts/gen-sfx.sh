@@ -69,6 +69,6 @@ ffmpeg -v error -y \
     [3]lowpass=f=900,volume=0.5[air];\
     [p1][p2][p3][air]amix=inputs=4:normalize=0,\
     lowpass=f=2600,afade=t=in:d=3,afade=t=out:st=56:d=4,volume=0.5" \
-  public/sfx/music-bed.wav
+  -c:a libmp3lame -q:a 5 public/sfx/music-bed.mp3
 
 echo "generated: $(ls public/sfx | wc -l) files in public/sfx/"

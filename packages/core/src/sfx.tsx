@@ -101,6 +101,6 @@ export const MusicBed: React.FC<{ durationInFrames: number; volume?: number }> =
   volume = 0.16,
 }) => (
   <Sequence from={0} durationInFrames={durationInFrames}>
-    <Audio src={staticFile("sfx/music-bed.wav")} volume={volume} loop />
+    <Audio src={staticFile("sfx/music-bed.mp3")} volume={volume} loop />
   </Sequence>
 );

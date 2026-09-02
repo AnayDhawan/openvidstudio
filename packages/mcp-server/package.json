@@ -29,5 +29,26 @@
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/manual-test.mjs"
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnayDhawan/openvidstudio.git",
+    "directory": "packages/mcp-server"
+  },
+  "homepage": "https://github.com/AnayDhawan/openvidstudio#readme",
+  "bugs": {
+    "url": "https://github.com/AnayDhawan/openvidstudio/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "remotion",
+    "playwright",
+    "video",
+    "demo-video",
+    "claude"
+  ]
 }

@@ -5,7 +5,7 @@
   "private": true,
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
-    "@remotion/cli": "4.0.490",
+    "@remotion/cli": "4.0.518",
     "@remotion/google-fonts": "^4.0.490",
     "@remotion/shapes": "^4.0.490",
     "@remotion/tailwind-v4": "4.0.490",

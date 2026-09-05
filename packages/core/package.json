@@ -1,6 +1,6 @@
 {
   "name": "@openvidstudio/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Camera rig, motion, SFX, look pass, and scene components shared by every openvidstudio video project.",
   "license": "Apache-2.0",
   "type": "commonjs",

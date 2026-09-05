@@ -25,7 +25,8 @@ If the tools are not registered, the server is not installed. Point the user at 
 ```
 preflight -> plan_beats -> [write VO] -> validate_beats -> APPROVAL GATE
   -> write_beats_file -> capture_screenshot -> scaffold_scene -> validate_scenes
-  -> generate_narration -> stitch_composition -> contact_sheet -> render_video -> qc_extract_frames
+  -> [plan_sound_effects] -> generate_narration -> stitch_composition -> contact_sheet
+  -> render_video -> qc_extract_frames
 ```
 
 ## 1. Intake
@@ -82,6 +83,25 @@ Read `docs/API.md` for props. Do not read the library source.
 and clamps time-stretching to a range that stays natural rather than fitting clips to
 beats at any cost. When it says a beat does not fit, fix the script or the beat
 duration; do not stretch further.
+
+## 6b. Sound, only if the built-ins do not cover it
+
+The synthesized pack already ships clicks, keystrokes, a bell, a blip, a success tone,
+a whoosh and a music bed, and it carries no third-party rights because ffmpeg generates
+it. Prefer it.
+
+If the video genuinely needs something else, **ask the user what sounds they want**, then
+`plan_sound_effects` with one entry per sound. It tells you which requests the built-ins
+already cover and returns a Pixabay search link plus an exact save path for the rest.
+
+It does not download from Pixabay, and neither should you. Pixabay's terms prohibit
+automated collection and say the API is for real human requests, and they publish no
+sound-effects endpoint. The user downloads; you verify. Call the tool again with
+`verify: true` afterwards to confirm each file is real audio and normalize the formats.
+
+`provider: "freesound"` fetches automatically instead, but only with the user's own API
+token, and every clip it takes is recorded in `ATTRIBUTION.md`. Anything in that file has
+to reach the video description or the licence is breached.
 
 ## 7. Assemble and check
 

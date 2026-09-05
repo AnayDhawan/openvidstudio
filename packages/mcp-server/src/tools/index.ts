@@ -15,6 +15,7 @@ import { registerPreflight } from "./preflight";
 import { registerPlanBeats } from "./planBeats";
 import { registerValidateScenes } from "./validateScenes";
 import { registerContactSheet } from "./contactSheet";
+import { registerSoundEffects } from "./soundEffects";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -41,6 +42,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerPlanBeats(server);
   registerValidateScenes(server);
   registerContactSheet(server);
+  registerSoundEffects(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

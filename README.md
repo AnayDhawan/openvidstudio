@@ -32,7 +32,7 @@ running app by this pipeline's own capture tools.*
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Fourteen tools should appear.
+restart the client. Fifteen tools should appear.
 
 Then start the app you want to film and ask your agent for a video in plain English,
 for example "build a 60 second demo video of the app running on localhost:3000". It
@@ -50,22 +50,38 @@ pnpm --filter @openvidstudio/mcp-server build
 
 ## Prerequisites
 
-Node is assumed. Beyond that: pnpm, ffmpeg for sound effects and QC frame
-extraction, and the Chromium build Playwright drives during capture.
+| What | Minimum | Needed for | Blocking |
+|---|---|---|---|
+| Node.js | 18 | Runs the server. `npx` ships with it, and `npx` is the install | yes |
+| ffmpeg | 4.0 | Sound effects and pulling QC frames back out of a render | yes |
+| Playwright | 1.48 | Resolvable inside the project the video is built in | yes |
+| Chromium | whatever `playwright install` pulls | The browser capture actually drives | yes |
+| Your app | running, reachable | Capture points at a real URL. Nothing serving means nothing to film | yes |
+| edge-tts | any current, Python 3.8+ | Narration | no |
+
+`preflight` checks every row and names the fix for your platform. Only the Node
+version is enforced numerically; the rest are presence checks.
 
 ```bash
-# Windows
+# Windows. Reopen the terminal after installing ffmpeg, winget only puts it on
+# PATH for new shells.
 winget install --id Gyan.FFmpeg -e
-npm install -g pnpm
-npx playwright install chromium
+npm install playwright && npx playwright install chromium
+pip install edge-tts
 
 # macOS
-brew install ffmpeg && npm install -g pnpm && npx playwright install chromium
+brew install ffmpeg
+npm install playwright && npx playwright install chromium
+pip install edge-tts
 
 # Debian or Ubuntu
 sudo apt update && sudo apt install -y ffmpeg
-npm install -g pnpm && npx playwright install chromium
+npm install playwright && npx playwright install chromium
+pip install edge-tts
 ```
+
+pnpm is not needed to use openvidstudio. It is only for building this repo from a
+clone, which is covered under Quick Start.
 
 ## Docs
 
@@ -91,6 +107,7 @@ that are enforced rather than suggested.
 | `contact_sheet` | Every beat in one image, in a fraction of a render |
 | `render_video` | Draft or full quality |
 | `qc_extract_frames` | Frames back out for review |
+| `plan_sound_effects` | Works out which sounds the synthesized pack already covers, and where to get the rest |
 | `import_higgsfield_clip` | Optional AI b roll, gated on config |
 
 ## Status

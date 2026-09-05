@@ -5,9 +5,34 @@ All notable changes to openvidstudio are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Nothing has been tagged yet. Everything below is the real commit history to
-date, grouped into one initial release rather than split into invented
-prior versions.
+## [Unreleased]
+
+### Added
+
+- `templates/default` now ships the official Remotion agent-skills bundle
+  (`remotion-best-practices`, `remotion-markup`, `remotion-captions`,
+  `remotion-render`, `remotion-saas`, `remotion-multimedia`,
+  `remotion-interactivity`, `remotion-maps`, `remotion-studio`,
+  `remotion-upgrade`, `remotion-create`, `remotion-docs`) for Claude Code,
+  Cursor, Windsurf, OpenCode, and GitHub Copilot, so a coding agent writing
+  scenes in a scaffolded project has the same Remotion knowledge base an
+  agent working directly in a hand-built Remotion project would.
+- `public/imported_audios/`: a scaffolded project's own folder for sound
+  effects or music dropped in by hand or fetched via `plan_sound_effects`,
+  kept separate from the synthesized, rights-free pack in `public/sfx/` so
+  it's always clear which sounds carry licence terms. Documented in
+  `NARRATION.md` and `PIPELINE.md`.
+
+### Changed
+
+- `render_video`, `contact_sheet`, and `qc_extract_frames` now write to
+  `output/` by default instead of `out/`, a more discoverable name for the
+  folder a finished render, contact sheet, or QC stills get picked up or
+  uploaded from. `output/` ships with its own README and stays gitignored
+  (renders are build output, not source).
+- `plan_sound_effects` now saves and checks imported sounds in
+  `public/imported_audios/` instead of alongside the built-in pack in
+  `public/sfx/`; its `sfxDir` result field is renamed `importedAudiosDir`.
 
 ## [1.0.0] - 2026-09-02
 

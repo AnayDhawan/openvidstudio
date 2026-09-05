@@ -16,14 +16,20 @@ packages/mcp-server/templates/
 # hand-edited.
 packages/mcp-server/docs/
 
-# Remotion render output
-out/
+# Remotion render output. Named "output/" rather than Remotion's default "out/" so
+# it's the discoverable place to pick up or upload a finished render from. Re-included
+# below so templates/default/output/'s own README.md and .gitignore (which keep that
+# folder present, empty of renders, in a freshly scaffolded project) can still be
+# tracked -- a directory excluded here can't have its contents re-included by a nested
+# .gitignore otherwise.
+output/
+!templates/default/output/
 *.mp4
 *.mov
 *.webm
 
 # Committed brand/demo assets are real product content (Task 4's gallery sample video),
-# not renderer output -- the *.mp4 rule above is scoped to out/ render output, this
+# not renderer output -- the *.mp4 rule above is scoped to output/ render output, this
 # carves out the one directory that ships real binary assets on purpose.
 !apps/site/public/brand/*.mp4
 

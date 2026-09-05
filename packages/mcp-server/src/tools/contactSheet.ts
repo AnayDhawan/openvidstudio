@@ -56,7 +56,7 @@ export function runContactSheet(input: ContactSheetInput): ContactSheetResult {
   const doc = JSON.parse(fs.readFileSync(beatsFile, "utf8")) as { beats: BeatLike[] };
   const beats = input.beatIds ? doc.beats.filter((b) => input.beatIds!.includes(b.id)) : doc.beats;
 
-  const outDir = path.join(projectRoot, "out", "contact");
+  const outDir = path.join(projectRoot, "output", "contact");
   fs.mkdirSync(outDir, { recursive: true });
 
   const npx = process.platform === "win32" ? "npx.cmd" : "npx";
@@ -91,7 +91,7 @@ export function runContactSheet(input: ContactSheetInput): ContactSheetResult {
   }
 
   const columns = Math.min(4, Math.ceil(Math.sqrt(frames.length)));
-  const sheetPath = path.join(projectRoot, input.outPath ?? path.join("out", "contact-sheet.jpg"));
+  const sheetPath = path.join(projectRoot, input.outPath ?? path.join("output", "contact-sheet.jpg"));
   fs.mkdirSync(path.dirname(sheetPath), { recursive: true });
 
   const args: string[] = ["-v", "error"];

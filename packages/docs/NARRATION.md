@@ -94,6 +94,19 @@ Regenerate any of them by editing `scripts/gen-sfx.sh` and running it. The
 `sfx.tsx` API does not change, so you can swap in a recorded pack later without
 touching a scene.
 
+### Bringing in a sound the built-in pack doesn't cover
+
+Drop the file into `public/imported_audios/`, kept separate from `public/sfx/` so
+it's always obvious which sounds carry licence terms and which don't. Reference it
+from a scene with `staticFile("imported_audios/<filename>")`.
+
+`plan_sound_effects` automates the search-and-checklist part of this: tell it what
+the video needs, and it checks the built-in pack first, then returns a Pixabay
+search link and the exact filename to save for anything genuinely missing (or
+fetches it automatically via Freesound, given your own API token). Either way, the
+file lands in `public/imported_audios/`, and anything carrying a licence gets
+written to `ATTRIBUTION.md` there, which belongs in the video description.
+
 ### Using the music bed
 
 ```tsx

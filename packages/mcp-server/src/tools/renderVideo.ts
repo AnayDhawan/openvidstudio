@@ -77,7 +77,7 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
   if (!COMPOSITION_ID_RE.test(compositionId)) {
     throw new Error(`compositionId "${compositionId}" is not safe (letters, numbers, "-", "_" only).`);
   }
-  const outPathRel = input.outPath ?? path.join("out", `${videoName}.mp4`);
+  const outPathRel = input.outPath ?? path.join("output", `${videoName}.mp4`);
   sanitizeRelativeOutPath(projectRoot, outPathRel, "outPath");
 
   fs.mkdirSync(path.dirname(path.join(projectRoot, outPathRel)), { recursive: true });
@@ -110,7 +110,8 @@ export function registerRenderVideo(server: McpServer): void {
         "child_process.spawn with an argv array (never exec/execSync with a shell string), so a " +
         "user-controlled videoName/outPath can't inject shell syntax. Default compositionId is the video's " +
         "PascalCase name + \"Demo\" (matching stitch_composition's naming), default outPath is " +
-        "out/<videoName>.mp4. Pass draft for a half resolution, fast encode pass: a five minute video is " +
+        "output/<videoName>.mp4 -- the folder a finished render is meant to be picked up or uploaded from. " +
+        "Pass draft for a half resolution, fast encode pass: a five minute video is " +
         "9000 frames and tens of minutes at full quality, which is far too slow a loop for checking whether " +
         "the video is right, and draft is usually enough to judge framing, motion and timing. Pass " +
         "concurrency to cap the worker count; left unset Remotion takes as much of the machine as it can, " +

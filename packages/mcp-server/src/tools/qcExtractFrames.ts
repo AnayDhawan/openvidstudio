@@ -66,14 +66,14 @@ export async function runQcExtractFrames(input: QcExtractFramesInput): Promise<Q
   }
   const fps = beatsData.fps ?? 30;
 
-  const videoPathRel = input.videoPath ?? path.join("out", `${videoName}.mp4`);
+  const videoPathRel = input.videoPath ?? path.join("output", `${videoName}.mp4`);
   sanitizeRelativeOutPath(projectRoot, videoPathRel, "videoPath");
   const videoPathAbs = path.join(projectRoot, videoPathRel);
   if (!fs.existsSync(videoPathAbs)) {
     throw new Error(`${videoPathAbs} does not exist. Call render_video first (or pass an explicit videoPath).`);
   }
 
-  const outDirRel = path.join("out", "qc", videoName);
+  const outDirRel = path.join("output", "qc", videoName);
   sanitizeRelativeOutPath(projectRoot, outDirRel, "outDir");
   const outDirAbs = path.join(projectRoot, outDirRel);
   fs.mkdirSync(outDirAbs, { recursive: true });
@@ -124,8 +124,8 @@ export function registerQcExtractFrames(server: McpServer): void {
         "midpoint frame AND its end frame (PIPELINE.md's QC checklist specifically calls out checking the " +
         "end of every real-screenshot/recording beat, not just the midpoint), converts frame numbers to " +
         "timestamps using the beats file's fps, and shells out to ffmpeg per beat via child_process.spawn " +
-        "with an argv array (never a shell string). Default videoPath is out/<videoName>.mp4, default " +
-        "output dir is out/qc/<videoName>/. Returns { frames: [{ beatId, midPath, endPath }] } so the " +
+        "with an argv array (never a shell string). Default videoPath is output/<videoName>.mp4, default " +
+        "output dir is output/qc/<videoName>/. Returns { frames: [{ beatId, midPath, endPath }] } so the " +
         "calling agent knows exactly which paths to Read as images for its own visual QC pass.",
       inputSchema: {
         projectRoot: z.string().optional(),

@@ -8,7 +8,9 @@ intake process: read that first, before hand-writing a `beats.json`.
 - Install dependencies for the scaffolded project (`@openvidstudio/core`
   plus Remotion/React, see the project's own `package.json`).
 - An SFX pack exists at `public/sfx/` (regen: `bash scripts/gen-sfx.sh`,
-  needs ffmpeg).
+  needs ffmpeg). Anything you import from outside the pack goes in
+  `public/imported_audios/` instead, kept separate so it is always clear
+  which sounds carry licence terms. See `NARRATION.md`.
 
 ## 1. Beats file (the single source of truth)
 Create `<video>/beats.json`:
@@ -112,7 +114,7 @@ components. Register in the project's `Root.tsx` with duration from beats.
 ## 4. Preview + QC loop
 - `npm run dev` for live preview while writing scenes.
 - Render, then extract frames at each beat midpoint:
-  `ffmpeg -nostdin -ss <t> -i out/<video>.mp4 -frames:v 1 -q:v 3 out/qc/<t>.jpg -y`
+  `ffmpeg -nostdin -ss <t> -i output/<video>.mp4 -frames:v 1 -q:v 3 output/qc/<t>.jpg -y`
 - QC checklist (all must pass):
   - [ ] Text crisp on a 1080p pause-frame at every zoom level
   - [ ] Zero linear easing; every scene has camera motion
@@ -136,9 +138,12 @@ components. Register in the project's `Root.tsx` with duration from beats.
         claim
 
 ## 5. Render + exports
-- `npx remotion render <composition-id> out/<video>.mp4`
-- `node scripts/markers.mjs <video>` writes `out/<video>-markers.json` and
-  `out/<video>-vo.srt`
+- `npx remotion render <composition-id> output/<video>.mp4`
+- `node scripts/markers.mjs <video>` writes `output/<video>-markers.json` and
+  `output/<video>-vo.srt`
+- The finished video, the contact sheet, and every QC still all land under
+  `output/`. That folder is gitignored (renders are build output, not
+  source) and is where an upload step should pick the finished mp4 up from.
 - Write `<video>/script.md`: VO table (timestamps from markers), delivery
   notes, description draft. See `SCRIPT.md` for VO pacing/duration rules.
 
@@ -156,6 +161,9 @@ VO specifically, silently omits the layer with no warning:
 | Recording / Higgsfield clip | `public/video/<beatId>.mp4` | `capture_screen_recording` / `import_higgsfield_clip` | the `real-recording` / `higgsfield-clip` scene `scaffold_scene` generates |
 | VO narration | `public/audio/vo/<beatId>.mp3` | (dev-provided, e.g. an edge-tts run) | `stitch_composition`, only if the file exists at this exact path when it runs |
 | Music bed | `public/audio/music-bed.mp3` | (dev-provided) | `stitch_composition`, only if the file exists at this exact path when it runs |
+| Built-in SFX | `public/sfx/<name>.{wav,mp3}` | `scripts/gen-sfx.sh`, ships with the template | `@openvidstudio/core`'s `sfx.tsx` helpers |
+| Imported SFX / music | `public/imported_audios/<id>.<ext>` | dropped in by hand, or `plan_sound_effects` (Freesound provider) | scenes, via `staticFile("imported_audios/<id>.<ext>")` |
+| Rendered video, contact sheet, QC stills | `output/<video>.mp4`, `output/contact-sheet.jpg`, `output/qc/<video>/` | `render_video`, `contact_sheet`, `qc_extract_frames` | pick up / upload from here |
 
 **VO omission is silent.** `stitch_composition` checks
 `public/audio/vo/<beatId>.mp3` for every beat and just skips the Audio

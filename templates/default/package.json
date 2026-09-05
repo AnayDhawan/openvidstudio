@@ -8,7 +8,7 @@
     "@remotion/cli": "4.0.490",
     "@remotion/google-fonts": "^4.0.490",
     "@remotion/shapes": "^4.0.490",
-    "@remotion/tailwind-v4": "4.0.490",
+    "@remotion/tailwind-v4": "4.0.518",
     "@remotion/transitions": "^4.0.490",
     "react": "19.2.3",
     "react-dom": "19.2.3",

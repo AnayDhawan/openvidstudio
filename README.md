@@ -32,12 +32,37 @@ running app by this pipeline's own capture tools.*
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Fifteen tools should appear.
+restart the client. Sixteen tools should appear.
 
-Then start the app you want to film and ask your agent for a video in plain English,
-for example "build a 60 second demo video of the app running on localhost:3000". It
-checks the machine with `preflight`, runs a guided intake, drafts a `beats.json`, and
-shows you the whole draft before writing anything to disk.
+Then start the app you want to film and paste this to your agent. You do not need to
+read the rest of this README first; the prompt tells the agent what order to work in.
+
+```
+build a demo video of my app with openvidstudio.
+
+my app runs at http://localhost:3000. change that if the port is different.
+
+work in this order:
+1. run preflight and fix anything it reports before going further
+2. run extract_brand against this repo so the video uses my own colours,
+   fonts and logo instead of openvidstudio's defaults
+3. ask me what the video should cover and how long it should be
+4. use plan_beats so the narration is written to fit the beats
+5. show me the full beats file and wait for my yes before writing anything
+6. capture, scaffold the scenes, then run validate_scenes
+7. generate narration, stitch, and show me a contact_sheet before rendering
+8. render a draft first, then full quality once I approve it
+
+for sound, use the synthesized pack that ships with the project. only bring in
+outside audio if I ask, and tell me if anything would need attribution.
+
+write the narration like a developer talking to another developer. short
+sentences, contractions, plain words, no marketing copy.
+```
+
+The agent checks the machine with `preflight`, reads your brand with `extract_brand`,
+runs a guided intake, drafts a `beats.json`, and shows you the whole draft before
+writing anything to disk.
 
 Working from a clone instead:
 
@@ -108,6 +133,7 @@ that are enforced rather than suggested.
 | `render_video` | Draft or full quality |
 | `qc_extract_frames` | Frames back out for review |
 | `plan_sound_effects` | Works out which sounds the synthesized pack already covers, and where to get the rest |
+| `extract_brand` | Reads your repo's palette, fonts and logo so the video looks like your product |
 | `import_higgsfield_clip` | Optional AI b roll, gated on config |
 
 ## Status

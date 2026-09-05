@@ -26,7 +26,11 @@ export {
 export { FilmGrain, Vignette, ColorGrade, LookPass } from "./look";
 
 // Design tokens
-export { color, font, glow, panelShadow, radius } from "./tokens";
+export {
+  color, font, glow, panelShadow, radius,
+  applyBrand, brandAssets, monoStack, uiStack,
+} from "./tokens";
+export type { Brand } from "./tokens";
 
 // Scene wrapper
 export { CinematicScene } from "./CinematicScene";

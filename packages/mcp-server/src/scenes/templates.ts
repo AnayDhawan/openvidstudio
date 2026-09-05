@@ -240,10 +240,8 @@ function splitPanel(ctx: SceneContext): string {
   return `${HEADER(ctx.beatId, "split-panel", ctx.description)}
 
 import React from "react";
-import { CinematicScene, Layer, color, font, radius, panelShadow, E } from "@openvidstudio/core";
+import { CinematicScene, Layer, color, radius, panelShadow, monoStack, uiStack, E } from "@openvidstudio/core";
 
-const MONO = \`"\${font.mono}", ui-monospace, monospace\`;
-const UI = \`"\${font.ui}", system-ui, sans-serif\`;
 
 export const ${ctx.componentName}: React.FC = () => {
   return (
@@ -252,13 +250,13 @@ ${GENTLE_CAMERA(ctx.durationFrames)}
     >
 ${SAFE_WRAP(`          <div style={{ display: "flex", alignItems: "center", gap: 72, width: "100%" }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 20, flex: "0 0 560px" }}>
-              <span style={{ fontFamily: MONO, fontSize: 20, letterSpacing: 4, textTransform: "uppercase", color: color.accent }}>
+              <span style={{ fontFamily: monoStack(), fontSize: 20, letterSpacing: 4, textTransform: "uppercase", color: color.accent }}>
                 ${esc(ctx.beatId.replace(/[-_]/g, " "))}
               </span>
-              <h2 style={{ margin: 0, fontFamily: MONO, fontSize: 60, fontWeight: 700, lineHeight: 1.1, color: color.textPrimary }}>
+              <h2 style={{ margin: 0, fontFamily: monoStack(), fontSize: 60, fontWeight: 700, lineHeight: 1.1, color: color.textPrimary }}>
                 ${headline(ctx)}
               </h2>
-              <p style={{ margin: 0, fontFamily: UI, fontSize: 26, lineHeight: 1.5, color: color.textSecondary }}>
+              <p style={{ margin: 0, fontFamily: uiStack(), fontSize: 26, lineHeight: 1.5, color: color.textSecondary }}>
                 ${leadLine(ctx, 150)}
               </p>
             </div>
@@ -271,7 +269,7 @@ ${SAFE_WRAP(`          <div style={{ display: "flex", alignItems: "center", gap:
                 border: \`1px solid \${color.panelBorder}\`,
                 boxShadow: panelShadow(true),
                 padding: 30,
-                fontFamily: UI,
+                fontFamily: uiStack(),
                 fontSize: 24,
                 color: color.textSecondary,
               }}
@@ -318,9 +316,8 @@ function stat(ctx: SceneContext): string {
   return `${HEADER(ctx.beatId, "stat", ctx.description)}
 
 import React from "react";
-import { CinematicScene, Layer, color, font, glow, E } from "@openvidstudio/core";
+import { CinematicScene, Layer, color, glow, monoStack, E } from "@openvidstudio/core";
 
-const MONO = \`"\${font.mono}", ui-monospace, monospace\`;
 
 export const ${ctx.componentName}: React.FC = () => {
   return (
@@ -328,10 +325,10 @@ export const ${ctx.componentName}: React.FC = () => {
 ${GENTLE_CAMERA(ctx.durationFrames, 1.06, 1.18)}
     >
 ${SAFE_WRAP(`          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 24 }}>
-            <span style={{ fontFamily: MONO, fontSize: 190, fontWeight: 700, lineHeight: 1, color: color.accent, ...glow(color.accent, 0.8) }}>
+            <span style={{ fontFamily: monoStack(), fontSize: 190, fontWeight: 700, lineHeight: 1, color: color.accent, ...glow(color.accent, 0.8) }}>
               0
             </span>
-            <span style={{ fontFamily: MONO, fontSize: 34, color: color.textSecondary, textAlign: "center", maxWidth: 900 }}>
+            <span style={{ fontFamily: monoStack(), fontSize: 34, color: color.textSecondary, textAlign: "center", maxWidth: 900 }}>
               ${headline(ctx)}
             </span>
           </div>`)}
@@ -374,10 +371,8 @@ function comparison(ctx: SceneContext): string {
   return `${HEADER(ctx.beatId, "comparison", ctx.description)}
 
 import React from "react";
-import { CinematicScene, Layer, color, font, radius, panelShadow, E } from "@openvidstudio/core";
+import { CinematicScene, Layer, color, radius, panelShadow, monoStack, uiStack, E } from "@openvidstudio/core";
 
-const MONO = \`"\${font.mono}", ui-monospace, monospace\`;
-const UI = \`"\${font.ui}", system-ui, sans-serif\`;
 
 const Side: React.FC<{ tag: string; title: string; accent: string; body: string }> = ({
   tag, title, accent, body,
@@ -395,9 +390,9 @@ const Side: React.FC<{ tag: string; title: string; accent: string; body: string 
       gap: 16,
     }}
   >
-    <span style={{ fontFamily: MONO, fontSize: 20, color: accent }}>{tag}</span>
-    <span style={{ fontFamily: MONO, fontSize: 34, color: color.textPrimary }}>{title}</span>
-    <span style={{ fontFamily: UI, fontSize: 24, lineHeight: 1.45, color: color.textSecondary }}>{body}</span>
+    <span style={{ fontFamily: monoStack(), fontSize: 20, color: accent }}>{tag}</span>
+    <span style={{ fontFamily: monoStack(), fontSize: 34, color: color.textPrimary }}>{title}</span>
+    <span style={{ fontFamily: uiStack(), fontSize: 24, lineHeight: 1.45, color: color.textSecondary }}>{body}</span>
   </div>
 );
 
@@ -443,10 +438,8 @@ function title(ctx: SceneContext): string {
   return `${HEADER(ctx.beatId, "title", ctx.description)}
 
 import React from "react";
-import { CinematicScene, Layer, color, font, E } from "@openvidstudio/core";
+import { CinematicScene, Layer, color, monoStack, uiStack, E } from "@openvidstudio/core";
 
-const MONO = \`"\${font.mono}", ui-monospace, monospace\`;
-const UI = \`"\${font.ui}", system-ui, sans-serif\`;
 
 export const ${ctx.componentName}: React.FC = () => {
   return (
@@ -454,10 +447,10 @@ export const ${ctx.componentName}: React.FC = () => {
 ${GENTLE_CAMERA(ctx.durationFrames, 1.05, 1.17)}
     >
 ${SAFE_WRAP(`          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 28, textAlign: "center" }}>
-            <h2 style={{ margin: 0, fontFamily: MONO, fontSize: 72, fontWeight: 700, lineHeight: 1.1, color: color.textPrimary, maxWidth: 1300 }}>
+            <h2 style={{ margin: 0, fontFamily: monoStack(), fontSize: 72, fontWeight: 700, lineHeight: 1.1, color: color.textPrimary, maxWidth: 1300 }}>
               ${headline(ctx)}
             </h2>
-            <p style={{ margin: 0, fontFamily: UI, fontSize: 30, lineHeight: 1.5, color: color.textSecondary, maxWidth: 1000 }}>
+            <p style={{ margin: 0, fontFamily: uiStack(), fontSize: 30, lineHeight: 1.5, color: color.textSecondary, maxWidth: 1000 }}>
               ${leadLine(ctx, 160)}
             </p>
           </div>`)}

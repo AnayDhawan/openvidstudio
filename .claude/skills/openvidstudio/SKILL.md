@@ -23,7 +23,7 @@ If the tools are not registered, the server is not installed. Point the user at 
 ## The order
 
 ```
-preflight -> plan_beats -> [write VO] -> validate_beats -> APPROVAL GATE
+preflight -> extract_brand -> plan_beats -> [write VO] -> validate_beats -> APPROVAL GATE
   -> write_beats_file -> capture_screenshot -> scaffold_scene -> validate_scenes
   -> [plan_sound_effects] -> generate_narration -> stitch_composition -> contact_sheet
   -> render_video -> qc_extract_frames
@@ -36,6 +36,23 @@ and whether they have brand assets. If they paste a README, pull the answers out
 it rather than asking again.
 
 Get the app's URL and confirm it is running.
+
+## 1b. Wear the repo's brand
+
+`extract_brand` with `sourceRepo` set to the repo being filmed. It reads Tailwind v4
+`@theme` blocks and `:root` custom properties, picks fonts out of `next/font` imports,
+copies the best logo it finds, and writes `src/brand.ts`.
+
+Run it **before** `scaffold_scene`. A video themed after the fact means re-scaffolding.
+
+Check the `unresolved` list it returns and fill in anything that matters by hand. It
+reports only what it can actually find rather than inventing a plausible colour, so an
+unresolved token is a real gap, not a failure.
+
+One rule this imposes on hand-written scenes: read tokens inside the component, not at
+module scope. `applyBrand` mutates the shared token objects, so `const MONO =
+\`"${font.mono}"\`` at the top of a file captures the default and never sees the brand.
+Use `monoStack()` and `uiStack()` instead.
 
 ## 2. Plan the beats
 

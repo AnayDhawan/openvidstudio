@@ -63,8 +63,14 @@ function writeRegistry(projectRoot: string, entries: RegistryEntry[]): void {
   fs.writeFileSync(p, JSON.stringify(entries, null, 2) + "\n", "utf8");
 }
 
-function renderRootTsx(entries: RegistryEntry[]): string {
+function renderRootTsx(entries: RegistryEntry[], hasBrand: boolean): string {
   const imports = entries.map((e) => `import { ${e.componentName} } from "${e.importPath}";`).join("\n");
+  // Brand has to evaluate before any scene module, because applyBrand mutates the
+  // shared token objects rather than replacing them. Import order is evaluation order.
+  const brandImport = hasBrand
+    ? '// Brand first. applyBrand mutates the shared tokens, so this has to run\n' +
+      '// before any scene module reads them.\nimport "./brand";\n\n'
+    : "";
   const comps = entries
     .map(
       (e) =>
@@ -78,7 +84,7 @@ function renderRootTsx(entries: RegistryEntry[]): string {
 // next time stitch_composition runs for ANY video in this project, not just the one you
 // edited. Add a video by calling stitch_composition, not by editing this directly.
 
-import React from "react";
+${brandImport}import React from "react";
 import { Composition } from "remotion";
 ${imports}
 
@@ -219,7 +225,11 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
   writeRegistry(projectRoot, entries);
 
   const rootPath = path.join(projectRoot, "src", "Root.tsx");
-  fs.writeFileSync(rootPath, renderRootTsx(entries), "utf8");
+  fs.writeFileSync(
+    rootPath,
+    renderRootTsx(entries, fs.existsSync(path.join(projectRoot, "src", "brand.ts"))),
+    "utf8",
+  );
 
   return {
     written: true,

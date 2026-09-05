@@ -1,9 +1,13 @@
-<img src="brand/wordmark.png" alt="openvidstudio" width="560">
+<p align="center">
+  <img src="brand/wordmark.png" alt="openvidstudio" width="480">
+</p>
 
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
-![Stack](https://img.shields.io/badge/stack-Remotion%20%2B%20Playwright%20%2B%20MCP-38bdf8)
-[![GitHub stars](https://img.shields.io/github/stars/AnayDhawan/openvidstudio?style=social)](https://github.com/AnayDhawan/openvidstudio/stargazers)
-![Last commit](https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio)
+<p align="center">
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache-2.0"></a>
+  <img src="https://img.shields.io/badge/stack-Remotion%20%2B%20Playwright%20%2B%20MCP-38bdf8" alt="Stack">
+  <a href="https://github.com/AnayDhawan/openvidstudio/stargazers"><img src="https://img.shields.io/github/stars/AnayDhawan/openvidstudio?style=social" alt="GitHub stars"></a>
+  <img src="https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio" alt="Last commit">
+</p>
 
 openvidstudio is an open-source video-generation add-on, built on Remotion and
 Playwright, that an AI coding agent drives through MCP tools to produce
@@ -12,11 +16,6 @@ with an optional Higgsfield AI b-roll tier for shots that can't be captured
 from a live screen. `packages/` and `templates/` each get their own README as
 they're built out. The public site lives in a separate repo:
 [vidstudio-site](https://github.com/AnayDhawan/vidstudio-site).
-
-![A frame from a real video, captured from a real running app by this pipeline](docs/media/demo-poster.jpg)
-
-*A frame from a real render, not a mockup. Every screen in it was captured from a
-running app by this pipeline's own capture tools.*
 
 ## Quick Start
 
@@ -102,10 +101,19 @@ Read `packages/docs/PLANNING.md` first for the guided intake flow, then
 `STYLE.md`, `CAPTURE.md` and `SCRIPT.md` cover the individual steps and the rules
 that are enforced rather than suggested.
 
+## Agent skills
+
+Both this repo and every scaffolded project ship the official Remotion
+agent-skills bundle (markup, captions, rendering, SaaS, maps, and more) for
+Claude Code, Cursor, Windsurf, OpenCode, and GitHub Copilot, so whichever
+coding agent writes your scenes has real Remotion knowledge to work from,
+not just this project's own `PIPELINE.md`/`STYLE.md` rules.
+
 ## What the tools do
 
 | Tool | |
 |---|---|
+| `init_project` | Scaffolds the project shell: package.json, Remotion config, the SFX pack, docs |
 | `preflight` | Checks node, ffmpeg, Playwright, Chromium, and whether your app is responding. Every failure names its fix |
 | `plan_beats` | A beat skeleton with a narration word budget per beat |
 | `validate_beats` | Schema and pacing, before anything is written |

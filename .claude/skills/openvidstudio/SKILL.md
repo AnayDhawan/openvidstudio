@@ -31,11 +31,31 @@ preflight -> extract_brand -> plan_beats -> [write VO] -> validate_beats -> APPR
 
 ## 1. Intake
 
-Read `docs/PLANNING.md`. Ask what the product is, which features matter, how long,
-and whether they have brand assets. If they paste a README, pull the answers out of
-it rather than asking again.
+**Work it out before you ask.** The usual request is "make a demo video of this
+project" and nothing else. That is the whole brief, and it is enough.
 
-Get the app's URL and confirm it is running.
+Start by reading the repo rather than interviewing the user:
+
+- `README.md` says what the product is and often what matters about it
+- `package.json` scripts say how to start it, and the dev script usually names the port
+- the routes or pages say what there is to film
+
+Then start the app yourself and confirm it responds. Do not ask the user for a URL
+they have to look up; find the dev command, run it, and check it. Ask only if starting
+it needs something you cannot know, like a missing `.env` or a database that is not up.
+
+What is genuinely worth asking, because the repo cannot tell you:
+
+- how long the video should be
+- which two or three things it should show, if the repo has many
+- who it is for, a landing page visitor or someone already installing
+
+**One question at a time, and only questions the repo cannot answer.** A wall of six
+questions at the start is the fastest way to make this feel like work. `docs/PLANNING.md`
+has the full decision tree if a case is unclear.
+
+End the job by showing the result: the mp4 path, its length, and a `contact_sheet` or a
+few `qc_extract_frames` stills. A render nobody looks at is not a delivered video.
 
 ## 1b. Wear the repo's brand
 

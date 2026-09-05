@@ -34,35 +34,22 @@ running app by this pipeline's own capture tools.*
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
 restart the client. Sixteen tools should appear.
 
-Then start the app you want to film and paste this to your agent. You do not need to
-read the rest of this README first; the prompt tells the agent what order to work in.
+Then paste this to your agent, from inside the repo you want a video of:
 
 ```
-build a demo video of my app with openvidstudio.
+make a demo video of this project with openvidstudio.
 
-my app runs at http://localhost:3000. change that if the port is different.
-
-work in this order:
-1. run preflight and fix anything it reports before going further
-2. run extract_brand against this repo so the video uses my own colours,
-   fonts and logo instead of openvidstudio's defaults
-3. ask me what the video should cover and how long it should be
-4. use plan_beats so the narration is written to fit the beats
-5. show me the full beats file and wait for my yes before writing anything
-6. capture, scaffold the scenes, then run validate_scenes
-7. generate narration, stitch, and show me a contact_sheet before rendering
-8. render a draft first, then full quality once I approve it
-
-for sound, use the synthesized pack that ships with the project. only bring in
-outside audio if I ask, and tell me if anything would need attribution.
-
-write the narration like a developer talking to another developer. short
-sentences, contractions, plain words, no marketing copy.
+handle it end to end. work out what this project is and how to start it, get it
+running, and use its own brand rather than your defaults. ask me anything you
+need along the way, one question at a time, and show me the result when it is
+done.
 ```
 
-The agent checks the machine with `preflight`, reads your brand with `extract_brand`,
-runs a guided intake, drafts a `beats.json`, and shows you the whole draft before
-writing anything to disk.
+That is the whole thing. You do not have to know the port, read the tool list, or
+put the steps in order: the agent works out how to start the app from your scripts,
+checks the machine with `preflight`, reads your palette and fonts with
+`extract_brand`, asks what the video should cover, and shows you the full plan before
+writing anything to disk. Say yes and it captures, renders, and hands you the mp4.
 
 Working from a clone instead:
 

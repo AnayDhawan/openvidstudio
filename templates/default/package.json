@@ -10,13 +10,13 @@
     "@remotion/shapes": "^4.0.490",
     "@remotion/tailwind-v4": "4.0.490",
     "@remotion/transitions": "^4.0.490",
-    "react": "19.2.3",
+    "react": "19.2.8",
     "react-dom": "19.2.3",
     "remotion": "4.0.490",
     "tailwindcss": "4.0.0"
   },
   "devDependencies": {
-    "@types/react": "19.2.7",
+    "@types/react": "19.2.18",
     "@types/web": "0.0.166",
     "typescript": "5.9.3"
   },

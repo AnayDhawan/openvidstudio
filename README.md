@@ -3,7 +3,12 @@
 </p>
 
 <p align="center">
+  <em>Cinematic launch and demo videos for real software, driven by your AI coding agent.</em>
+</p>
+
+<p align="center">
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache-2.0"></a>
+  <a href="https://www.npmjs.com/package/@openvidstudio/mcp-server"><img src="https://img.shields.io/npm/v/@openvidstudio/mcp-server" alt="npm version"></a>
   <img src="https://img.shields.io/badge/stack-Remotion%20%2B%20Playwright%20%2B%20MCP-38bdf8" alt="Stack">
   <a href="https://github.com/AnayDhawan/openvidstudio/stargazers"><img src="https://img.shields.io/github/stars/AnayDhawan/openvidstudio?style=social" alt="GitHub stars"></a>
   <img src="https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio" alt="Last commit">
@@ -17,7 +22,38 @@ from a live screen. `packages/` and `templates/` each get their own README as
 they're built out. The public site lives in a separate repo:
 [vidstudio-site](https://github.com/AnayDhawan/vidstudio-site).
 
+## Why openvidstudio
+
+- **Real product, real pixels.** Every screenshot and recording comes from your
+  actually running app, so nothing on screen is invented: the UI, the product
+  text, and the layout are all ground truth.
+- **Your agent drives.** No separate app, no timeline editor, no manual
+  keyframing. The AI coding agent you already use (Claude Code, Cursor,
+  ChatGPT, or anything that speaks MCP) runs the whole pipeline through
+  sixteen tools, seventeen with the Higgsfield tier enabled.
+- **A directed video, not a screen recording.** Push-ins, drift, shallow depth
+  of field, an oversized cursor, narration, and a synthesized music bed turn
+  plain captures into something you'd ship.
+- **B-roll for what a screen can't show.** An optional Higgsfield tier covers
+  atmosphere and establishing shots, never product UI, when the running app
+  genuinely can't produce a frame.
+
 ## Quick Start
+
+The pipeline, end to end:
+
+1. **Preflight.** `preflight` checks Node, ffmpeg, Playwright, Chromium, and
+   that your app is responding. Every failure names its fix.
+2. **Brand.** `extract_brand` reads your repo's palette, fonts, and logo so the
+   video looks like your product, not a template.
+3. **Plan.** Your agent drafts the full beat-by-beat plan, timing, narration
+   word budget, and a capture method per shot, and shows it to you for
+   approval before writing anything to disk.
+4. **Shoot and render.** Real captures are composited into scenes, narrated,
+   stitched, and rendered to an mp4, with a contact sheet and QC frames for
+   review along the way.
+
+### Install
 
 ```json
 {
@@ -33,7 +69,9 @@ they're built out. The public site lives in a separate repo:
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
 restart the client. Sixteen tools should appear.
 
-Then paste this to your agent, from inside the repo you want a video of:
+### Try it
+
+Paste this to your agent, from inside the repo you want a video of:
 
 ```
 make a demo video of this project with openvidstudio.
@@ -49,6 +87,8 @@ put the steps in order: the agent works out how to start the app from your scrip
 checks the machine with `preflight`, reads your palette and fonts with
 `extract_brand`, asks what the video should cover, and shows you the full plan before
 writing anything to disk. Say yes and it captures, renders, and hands you the mp4.
+
+### From a clone
 
 Working from a clone instead:
 
@@ -111,7 +151,7 @@ not just this project's own `PIPELINE.md`/`STYLE.md` rules.
 
 ## What the tools do
 
-| Tool | |
+| Tool | What it does |
 |---|---|
 | `init_project` | Scaffolds the project shell: package.json, Remotion config, the SFX pack, docs |
 | `preflight` | Checks node, ffmpeg, Playwright, Chromium, and whether your app is responding. Every failure names its fix |
@@ -137,3 +177,13 @@ The pipeline runs end to end and `scaffold_scene` emits scenes that render, so a
 agent can go from a brief to a narrated mp4 without hand writing Remotion. The
 templates are structurally correct but plain: a first render looks right rather than
 good, and making it look good is still your job.
+
+## Community
+
+- [Changelog](./CHANGELOG.md) — what changed in each release
+- [Contributing](./CONTRIBUTING.md) — setup, verification, and PR guidelines
+- [Security](./SECURITY.md) — report a vulnerability privately
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
+- [vidstudio-site](https://github.com/AnayDhawan/vidstudio-site) — the public site repo
+
+Licensed under the [Apache-2.0](./LICENSE) license.

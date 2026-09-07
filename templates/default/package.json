@@ -13,7 +13,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "remotion": "4.0.490",
-    "tailwindcss": "4.0.0"
+    "tailwindcss": "4.3.3"
   },
   "devDependencies": {
     "@types/react": "19.2.7",

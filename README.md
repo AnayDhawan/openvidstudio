@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="brand/wordmark.png" alt="openvidstudio" width="600">
+  <img src="brand/wordmark.png" alt="openvidstudio" width="500">
 </p>
 
 <p align="center">

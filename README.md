@@ -9,13 +9,33 @@
   <img src="https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio" alt="Last commit">
 </p>
 
+<p align="center">
+  <img src="brand/demo.gif" alt="openvidstudio: a real capture of the site, the beats plan, the approval gate, and the repo card, cut straight from a real render" width="720">
+</p>
+
 openvidstudio is an open-source video-generation add-on, built on Remotion and
 Playwright, that an AI coding agent drives through MCP tools to produce
 launch and demo videos for a project directly from its repo and running app,
 with an optional Higgsfield AI b-roll tier for shots that can't be captured
 from a live screen. `packages/` and `templates/` each get their own README as
-they're built out. The public site lives in a separate repo:
-[vidstudio-site](https://github.com/AnayDhawan/vidstudio-site).
+they're built out. The site is live at
+[openvidstudio.vercel.app](https://openvidstudio.vercel.app).
+
+## openvidstudio features
+
+- **Real product, real pixels.** Every screenshot and recording comes from your
+  actually running app, so nothing on screen is invented: the UI, the product
+  text, and the layout are all ground truth.
+- **Your agent drives.** No separate app, no timeline editor, no manual
+  keyframing. The AI coding agent you already use (Claude Code, Cursor,
+  ChatGPT, or anything that speaks MCP) runs the whole pipeline through
+  sixteen tools, seventeen with the Higgsfield tier enabled.
+- **A directed video, not a screen recording.** Push-ins, drift, shallow depth
+  of field, an oversized cursor, narration, and a synthesized music bed turn
+  plain captures into something you'd ship.
+- **B-roll for what a screen can't show.** An optional Higgsfield tier covers
+  atmosphere and establishing shots, never product UI, when the running app
+  genuinely can't produce a frame.
 
 ## Quick Start
 

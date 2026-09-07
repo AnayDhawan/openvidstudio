@@ -14,10 +14,6 @@
   <img src="https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio" alt="Last commit">
 </p>
 
-<p align="center">
-  <img src="brand/demo.gif" alt="openvidstudio: a real capture of the site, the wordmark, and the repo card, cut straight from a real render" width="720">
-</p>
-
 openvidstudio is an open-source video-generation add-on, built on Remotion and
 Playwright, that an AI coding agent drives through MCP tools to produce
 launch and demo videos for a project directly from its repo and running app,

@@ -1,9 +1,9 @@
 <p align="center">
-  <img src="brand/wordmark.png" alt="openvidstudio" width="500">
+  <img src="brand/wordmark.png" alt="openvidstudio" width="480">
 </p>
 
 <p align="center">
-  <em>FOSS video generation for project demos, driven by your AI coding agent.</em>
+  <em>Cinematic launch and demo videos for real software, driven by your AI coding agent.</em>
 </p>
 
 <p align="center">

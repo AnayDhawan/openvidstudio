@@ -333,7 +333,12 @@ if (fs.existsSync(tempNodeModules)) {
   }
 
   const normalOutRel = path.join("out", "render-test-normal.mp4");
-  const normalResult = await runRenderVideo({ projectRoot: tmpRoot, videoName: "rendertest", outPath: normalOutRel });
+  const normalResult = await runRenderVideo({
+    projectRoot: tmpRoot,
+    videoName: "rendertest",
+    outPath: normalOutRel,
+    skipBrandLock: true, // this fixture project never runs extract_brand; the gate itself is Part 10's job
+  });
   check(
     "render_video real invocation succeeds for a normal (no-space) outPath, on this platform " +
       `(${process.platform})`,
@@ -347,7 +352,7 @@ if (fs.existsSync(tempNodeModules)) {
   }
 
   const spacedOutRel = path.join("out", "render test with space.mp4");
-  const spacedResult = await runRenderVideo({ projectRoot: tmpRoot, videoName: "rendertest", outPath: spacedOutRel });
+  const spacedResult = await runRenderVideo({ projectRoot: tmpRoot, videoName: "rendertest", outPath: spacedOutRel, skipBrandLock: true });
   check(
     "render_video real invocation succeeds for a SPACE-containing outPath " +
       "(win32 shell:true arg-quoting regression pin)",
@@ -842,6 +847,48 @@ console.log("\n== Part 9: diff_beats -- pure function (no filesystem-dependent a
     "switching a beat from dom-demo to screenshot sets needsRecapture true",
     recaptureResult.beats[0]?.needsRecapture === true,
   );
+}
+
+console.log("\n== Part 10: render_video's brand-lock gate ==");
+
+{
+  const gateRoot = path.join(tmpRoot, "brand-lock-gate-test");
+  fs.mkdirSync(path.join(gateRoot, "src"), { recursive: true });
+
+  let threw = false;
+  let thrownMessage = "";
+  try {
+    await runRenderVideo({ projectRoot: gateRoot, videoName: "whatever" });
+  } catch (err) {
+    threw = true;
+    thrownMessage = err instanceof Error ? err.message : String(err);
+  }
+  check("render_video refuses to run when src/brand.ts is missing and skipBrandLock is not passed", threw);
+  check("the refusal names extract_brand as the fix", thrownMessage.includes("extract_brand"));
+
+  // skipBrandLock: true bypasses the gate but the render itself still fails fast here
+  // (no real Remotion project scaffolded at gateRoot) -- this only proves the gate check
+  // ran and let it past to the actual spawn, not that the render succeeded.
+  let bypassedGate = false;
+  try {
+    await runRenderVideo({ projectRoot: gateRoot, videoName: "whatever", skipBrandLock: true });
+    bypassedGate = true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    bypassedGate = !msg.includes("Brand-lock gate");
+  }
+  check("skipBrandLock: true bypasses the gate (fails later, on the actual missing project, not on the gate)", bypassedGate);
+
+  fs.writeFileSync(path.join(gateRoot, "src", "brand.ts"), "// fake brand.ts for the gate test\n", "utf8");
+  let gatePassedWithBrandFile = false;
+  try {
+    await runRenderVideo({ projectRoot: gateRoot, videoName: "whatever" });
+    gatePassedWithBrandFile = true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    gatePassedWithBrandFile = !msg.includes("Brand-lock gate");
+  }
+  check("gate passes once src/brand.ts exists, no skipBrandLock needed (fails later, on the missing project)", gatePassedWithBrandFile);
 }
 
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);

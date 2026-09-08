@@ -22,6 +22,17 @@ export interface RenderVideoInput {
    * box, including a second pipeline step running at the same time.
    */
   concurrency?: number;
+  /**
+   * Brand-lock gate escape hatch (default false): render_video refuses to run unless
+   * src/brand.ts exists (written by extract_brand, even when most of its tokens stayed
+   * at the openvidstudio default -- the point is that extract_brand ran and made an
+   * honest attempt, not that every token resolved). Pass true only when the project
+   * deliberately has no brand to extract, e.g. rendering a demo about openvidstudio
+   * itself. This is a fail-closed default, not a hard law: it exists so a video never
+   * ships wearing openvidstudio's own navy/Inter look by accident, the single loudest
+   * "this looks like a template" signal (see extractBrand.ts).
+   */
+  skipBrandLock?: boolean;
 }
 
 export interface RenderVideoResult {
@@ -31,6 +42,8 @@ export interface RenderVideoResult {
   elapsedSeconds: number;
   stdout: string;
   stderr: string;
+  /** True when src/brand.ts existed at render time (whether from this call's skipBrandLock or a real extract_brand run). */
+  brandLocked: boolean;
 }
 
 export interface RenderCommand {
@@ -80,6 +93,17 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
   const outPathRel = input.outPath ?? path.join("output", `${videoName}.mp4`);
   sanitizeRelativeOutPath(projectRoot, outPathRel, "outPath");
 
+  const brandLocked = fs.existsSync(path.join(projectRoot, "src", "brand.ts"));
+  if (!brandLocked && input.skipBrandLock !== true) {
+    throw new Error(
+      "Brand-lock gate: no src/brand.ts found in this project. Run extract_brand against the repo being " +
+        "filmed first (it writes src/brand.ts even when most tokens stay at the openvidstudio default, " +
+        "reporting exactly what it couldn't resolve rather than inventing anything) so the render wears " +
+        "that product's identity instead of openvidstudio's own navy/Inter default. If this project " +
+        "deliberately has no brand to extract, pass skipBrandLock: true.",
+    );
+  }
+
   fs.mkdirSync(path.dirname(path.join(projectRoot, outPathRel)), { recursive: true });
 
   const started = Date.now();
@@ -97,6 +121,7 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
     elapsedSeconds,
     stdout: result.stdout,
     stderr: result.stderr,
+    brandLocked,
   };
 }
 
@@ -118,7 +143,11 @@ export function registerRenderVideo(server: McpServer): void {
         "and one render here spawned 25 Chrome workers and starved a second pipeline step running " +
         "alongside it. Renders with verbose logging, because Remotion hides its progress bar when stdout " +
         "is not a TTY and a piped render otherwise writes an empty log for its entire run, leaving no way " +
-        "to tell progress from a hang. Returns the render's captured stdout/stderr and how long it took.",
+        "to tell progress from a hang. BRAND-LOCK GATE: refuses to run unless src/brand.ts exists (written " +
+        "by extract_brand), so a video never ships wearing openvidstudio's own default look by accident. " +
+        "Run extract_brand against the repo being filmed first; pass skipBrandLock: true only when the " +
+        "project deliberately has no brand to extract. Returns the render's captured stdout/stderr, how " +
+        "long it took, and brandLocked (whether src/brand.ts existed at render time).",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -126,6 +155,7 @@ export function registerRenderVideo(server: McpServer): void {
         outPath: z.string().optional(),
         draft: z.boolean().optional(),
         concurrency: z.number().positive().optional(),
+        skipBrandLock: z.boolean().optional(),
       },
     },
     async (input) => runTool("render_video", () => runRenderVideo(input)),

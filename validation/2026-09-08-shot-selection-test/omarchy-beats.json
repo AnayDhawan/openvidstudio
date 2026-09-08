@@ -1,0 +1,54 @@
+{
+  "fps": 30,
+  "title": "Omarchy",
+  "beats": [
+    {
+      "id": "hook",
+      "start": 0,
+      "duration": 450,
+      "vo": "Omarchy is a beautiful, opinionated Arch Linux distribution, built around Hyprland, by DHH. Twenty two themes restyle the whole desktop at once, every major AI coding agent ships pre wired, and screenshots, recordings, and text extraction all live behind one key.",
+      "transition": "cut",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-themes",
+      "start": 450,
+      "duration": 210,
+      "vo": "Twenty two themes restyle the desktop, the terminal, Neovim, the browser, and the lock screen together, one keystroke apart.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-ai-agents",
+      "start": 660,
+      "duration": 300,
+      "vo": "Every major coding agent comes pre wired as a lazy loaded launcher. Claude, Codex, Hermes, Crush, and a dozen more, ready the moment you type their name.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-capture",
+      "start": 960,
+      "duration": 240,
+      "vo": "One key handles screenshots, recordings, a colour picker, and text extraction, then hands the result straight to an annotation editor.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "differentiator",
+      "start": 1200,
+      "duration": 240,
+      "vo": "Everything ships wired together on day one. No plugin hunting, no dotfiles to assemble, no theme left half applied.",
+      "transition": "cut",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "cta",
+      "start": 1440,
+      "duration": 180,
+      "vo": "Omarchy is free and open source. Install it, or read the manual at omarchy dot org.",
+      "transition": "cut",
+      "visual": { "captureMethod": "dom-demo" }
+    }
+  ]
+}

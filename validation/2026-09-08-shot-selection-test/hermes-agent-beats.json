@@ -1,0 +1,62 @@
+{
+  "fps": 30,
+  "title": "Hermes Agent",
+  "beats": [
+    {
+      "id": "hook",
+      "start": 0,
+      "duration": 450,
+      "vo": "Hermes Agent is the self improving agent from Nous Research. It creates skills from experience, remembers you across sessions, runs scheduled automations unattended, and lives in a real terminal, Telegram, Discord, Slack, WhatsApp, and Signal, all from one gateway.",
+      "transition": "cut",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-terminal",
+      "start": 450,
+      "duration": 210,
+      "vo": "One command starts a real terminal session, multiline editing, slash command autocomplete, streaming tool output, and all.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-skills",
+      "start": 660,
+      "duration": 240,
+      "vo": "After a hard task, Hermes writes itself a skill, then improves that skill the next time it gets used.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-cron",
+      "start": 900,
+      "duration": 195,
+      "vo": "Cron scheduling runs daily reports and nightly backups unattended, delivered to whichever platform you asked for.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "demo-anywhere",
+      "start": 1095,
+      "duration": 270,
+      "vo": "Seven terminal backends, local, Docker, SSH, or serverless, mean Hermes keeps running on a five dollar VPS while you talk to it from Telegram.",
+      "transition": "whip",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "differentiator",
+      "start": 1365,
+      "duration": 210,
+      "vo": "Most agents forget everything on restart. Hermes keeps a closed learning loop, and it only gets better.",
+      "transition": "cut",
+      "visual": { "captureMethod": "dom-demo" }
+    },
+    {
+      "id": "cta",
+      "start": 1575,
+      "duration": 210,
+      "vo": "Hermes Agent is open source. Install it, or read the docs at hermes dash agent dot nousresearch dot com.",
+      "transition": "cut",
+      "visual": { "captureMethod": "dom-demo" }
+    }
+  ]
+}

@@ -30,6 +30,10 @@ Create `<video>/beats.json`:
   clip for a shot that isn't product UI at all. `PLANNING.md` owns the
   full field spec and decision tree; this file just needs every beat to
   carry the field.
+- **`transition`** and **`artifacts`** (both optional, `PLANNING.md` §4.5): the
+  cut/whip/fade choice into a beat, and explicit overrides of that beat's output
+  paths. Omit either and the default (`"cut"`, convention path) is assumed; every
+  existing `beats.json` stays valid without them.
 - Two beat arcs, pick by product complexity:
   - **Simple demo** (single core feature): hook (8s), problem (11s), demo
     x2-3 (12-14s each), differentiator (10s), cta (9s). 60-75s total.
@@ -164,6 +168,10 @@ VO specifically, silently omits the layer with no warning:
 | Built-in SFX | `public/sfx/<name>.{wav,mp3}` | `scripts/gen-sfx.sh`, ships with the template | `@openvidstudio/core`'s `sfx.tsx` helpers |
 | Imported SFX / music | `public/imported_audios/<id>.<ext>` | dropped in by hand, or `plan_sound_effects` (Freesound provider) | scenes, via `staticFile("imported_audios/<id>.<ext>")` |
 | Rendered video, contact sheet, QC stills | `output/<video>.mp4`, `output/contact-sheet.jpg`, `output/qc/<video>/` | `render_video`, `contact_sheet`, `qc_extract_frames` | pick up / upload from here |
+
+Every path in this table is also the default a beat's `artifacts` field
+(`PLANNING.md` §4.5) resolves to when omitted; set `artifacts.screenshotPath` /
+`recordingPath` / `voPath` explicitly only when overriding it.
 
 **VO omission is silent.** `stitch_composition` checks
 `public/audio/vo/<beatId>.mp3` for every beat and just skips the Audio

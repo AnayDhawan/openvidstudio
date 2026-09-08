@@ -12,6 +12,8 @@ const EM_DASH = "—";
 const MIN_PACE = 2.3;
 const MAX_PACE = 2.9;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield"] as const;
+const TRANSITIONS = ["cut", "whip", "fade"] as const;
+const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath"] as const;
 
 function wordCount(text: string): number {
   const trimmed = text.trim();
@@ -155,6 +157,33 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       }
     }
     // dom-demo: no additional required fields.
+
+    if ("transition" in beat && beat.transition !== undefined) {
+      if (typeof beat.transition !== "string" || !(TRANSITIONS as readonly string[]).includes(beat.transition)) {
+        errors.push(`${label}: transition must be one of ${TRANSITIONS.map((t) => `"${t}"`).join(", ")} (omit for "cut")`);
+      }
+    }
+
+    if ("artifacts" in beat && beat.artifacts !== undefined) {
+      const artifacts = beat.artifacts;
+      if (typeof artifacts !== "object" || artifacts === null || Array.isArray(artifacts)) {
+        errors.push(`${label}: artifacts must be an object`);
+      } else {
+        const a = artifacts as Record<string, unknown>;
+        for (const key of Object.keys(a)) {
+          if (!(ARTIFACT_KEYS as readonly string[]).includes(key)) {
+            errors.push(`${label}: artifacts.${key} is not a recognized key (expected one of ${ARTIFACT_KEYS.join(", ")})`);
+            continue;
+          }
+          const val = a[key];
+          if (typeof val !== "string" || val.length === 0) {
+            errors.push(`${label}: artifacts.${key} must be a non-empty string path`);
+          } else if (val.includes(EM_DASH)) {
+            errors.push(`${label}: artifacts.${key} contains an em dash, rewrite with commas/periods`);
+          }
+        }
+      }
+    }
   });
 
   return { valid: errors.length === 0, errors };
@@ -176,9 +205,11 @@ export function registerValidateBeats(server: McpServer): void {
         "for dom-demo). For screenshot/recording beats, every interactions[] entry is also validated against " +
         "the exact schema capture_screenshot/capture_screen_recording enforce at replay time (click, fill, " +
         "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +
-        "time. Returns { valid, errors } with every failure found, never just the first -- this is " +
-        "the tool's normal answer for an invalid draft, not an exceptional case, so it never throws for a " +
-        "validation failure.",
+        "time. Also validates two optional per-beat fields if present: transition (cut/whip/fade, cut assumed " +
+        "if omitted) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
+        "paths, each a non-empty string). Returns { valid, errors } with every failure found, never just the " +
+        "first -- this is the tool's normal answer for an invalid draft, not an exceptional case, so it never " +
+        "throws for a validation failure.",
       inputSchema: {
         beatsJson: z
           .unknown()

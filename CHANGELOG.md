@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Two optional per-beat `beats.json` fields, `transition` (`"cut"` | `"whip"` |
+  `"fade"`, `"cut"` assumed if omitted) and `artifacts`
+  (`screenshotPath`/`recordingPath`/`voPath` overrides of the convention output
+  paths), both validated by `validate_beats`. First step of hardening the manifest
+  into a fully reviewable product boundary: a dev can now read `beats.json` alone
+  and know the transition and asset path for every beat, without opening
+  capture.ts or relying on the path convention from memory. See `PLANNING.md` §4.5.
+  Every existing `beats.json` stays valid unchanged, both fields are additive.
 - `templates/default` now ships the official Remotion agent-skills bundle
   (`remotion-best-practices`, `remotion-markup`, `remotion-captions`,
   `remotion-render`, `remotion-saas`, `remotion-multimedia`,

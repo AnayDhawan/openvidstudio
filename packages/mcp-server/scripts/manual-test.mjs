@@ -747,7 +747,9 @@ check(
 console.log("\n== Part 8: PLANNING.md's own worked example passes validate_beats (I4 regression pin) ==");
 
 const planningMdPath = path.join(monorepoRoot, "packages", "docs", "PLANNING.md");
-const planningMd = fs.readFileSync(planningMdPath, "utf8");
+// Normalize CRLF -> LF first: a Windows checkout with core.autocrlf=true reads this file
+// back as CRLF regardless of what's committed, and the fence regex is LF-literal.
+const planningMd = fs.readFileSync(planningMdPath, "utf8").replace(/\r\n/g, "\n");
 const jsonFenceMatch = planningMd.match(/```json\n([\s\S]*?)\n```/);
 check("PLANNING.md has a fenced ```json worked example", jsonFenceMatch !== null);
 

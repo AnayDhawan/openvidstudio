@@ -111,6 +111,35 @@ Method-specific fields:
 See section 6 below for a concrete `beats.json` fragment with one full,
 working example of each of these four shapes.
 
+## 4.5. Two optional per-beat fields: `transition` and `artifacts` (added 2026-09-08)
+
+`beats.json` is the reviewable product boundary: a dev should be able to read the file
+alone and know exactly what will play and where its assets live, without opening
+capture.ts or guessing a path convention. Two fields close that gap, both optional:
+
+```
+"transition": "cut" | "whip" | "fade"
+"artifacts": { "screenshotPath"?: string, "recordingPath"?: string, "voPath"?: string }
+```
+
+- **`transition`**: the cut/whip/fade choice into this beat. Omit it and `"cut"` is
+  assumed, matching today's SFX default (`PIPELINE.md` §2's Whoosh-on-cuts/whips cue).
+  Setting it explicitly is what makes that choice visible on the manifest instead of
+  only implied by which SFX helper a scene file happens to call.
+- **`artifacts`**: explicit overrides of this beat's output paths. Every capture tool
+  already defaults to the convention path (`PIPELINE.md`'s Asset conventions table:
+  `public/images/<id>.png`, `public/video/<id>.mp4`, `public/audio/vo/<id>.mp3`) and
+  `capture_screenshot`/`capture_screen_recording` already accept an `outPath` override
+  and report it back in their result -- `artifacts` is what records that override, or
+  just the convention path itself, on the beat so it's readable straight off the
+  manifest. Omit a key (or the whole object) and the convention path is assumed; no
+  existing `beats.json` needs to change to stay valid.
+
+Neither field changes how capture or render actually run today; both exist so the
+manifest alone describes the finished video's shape. Making render/capture
+independently rerunnable against an edited manifest (patch one field, rerun one
+stage, no full regenerate) is the next piece of this work, not part of this addition.
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is
@@ -175,6 +204,7 @@ of each `captureMethod` so the shapes above are all represented):
       "start": 300,
       "duration": 240,
       "vo": "That confidence score adjusts your next review date live, so easy cards fade back and hard ones come around sooner.",
+      "transition": "whip",
       "visual": {
         "captureMethod": "recording",
         "url": "https://app.loomcard.example/review",
@@ -182,6 +212,9 @@ of each `captureMethod` so the shapes above are all represented):
           { "type": "click", "selector": "[data-testid=confidence-1]" },
           { "type": "wait", "ms": 600 }
         ]
+      },
+      "artifacts": {
+        "recordingPath": "public/video/demo-schedule.mp4"
       }
     },
     {
@@ -203,4 +236,9 @@ honest `dom-demo` was worth building for a roadmap item this early in the
 pitch. A beat that claimed it anyway would have failed the
 claim-obligates-visual rule (`SCRIPT.md`). The `cta` beat uses `dom-demo`
 because `RepoCta` is a hand-authored scene built from real repo data, not
-a captured screenshot of anything.
+a captured screenshot of anything. `demo-schedule` also shows both optional
+fields from §4.5: `transition: "whip"` records the cut choice into that beat
+explicitly, and `artifacts.recordingPath` records where its capture landed
+(here just the convention path spelled out, not overridden). Every other
+beat in this example omits both fields on purpose: `"cut"` and the
+convention paths are assumed.

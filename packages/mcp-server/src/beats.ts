@@ -40,12 +40,33 @@ export interface HiggsfieldVisual {
 
 export type Visual = CaptureVisual | DomDemoVisual | HiggsfieldVisual;
 
+/** PIPELINE.md §2's cut/whip/fade choice, SFX-cued today but never recorded on the beat itself. */
+export type Transition = "cut" | "whip" | "fade";
+
+/**
+ * Explicit named references to this beat's on-disk outputs. Every tool already agrees on
+ * the convention path (PIPELINE.md's Asset conventions table: public/images/<id>.png,
+ * public/video/<id>.mp4, public/audio/vo/<id>.mp3), and capture_screenshot /
+ * capture_screen_recording already accept an outPath override and report it back -- this
+ * field is what makes that override, and the resulting path, visible on the manifest
+ * itself instead of only in a tool call's return value. All optional: omit a key and the
+ * convention path is assumed.
+ */
+export interface Artifacts {
+  screenshotPath?: string;
+  recordingPath?: string;
+  voPath?: string;
+}
+
 export interface Beat {
   id: string;
   start: number;
   duration: number;
   vo: string;
   visual: Visual;
+  /** Cut if omitted, matching current SFX defaults (PIPELINE.md §2). */
+  transition?: Transition;
+  artifacts?: Artifacts;
 }
 
 export interface BeatsFile {

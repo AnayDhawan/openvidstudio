@@ -14,13 +14,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   openvidstudio's own default navy/Inter look by accident. Pass
   `skipBrandLock: true` when a project deliberately has no brand to extract.
   Result now also reports `brandLocked`.
-- `PRESETS.md`: fixed recipes over the existing tool chain for common video
-  shapes. Two ship now (**gif-demo**: single-beat, no narration/music, capped
-  under 15s, real capture only, GIF output via the CLI's extension-based codec
-  inference; **screenrec-only**: one continuous `capture_screen_recording`
-  spanning the whole flow, one beat, no per-beat choreography, light captions).
-  Three more are speced, not yet built: **remotion-only**, **2min-demo**,
-  **5min-demo**.
+- `PRESETS.md`: fixed recipes over the existing tool chain for five common
+  video shapes. **gif-demo** (single-beat, no narration/music, capped under
+  15s, real capture only, GIF output via the CLI's extension-based codec
+  inference), **screenrec-only** (one continuous `capture_screen_recording`
+  spanning the whole flow, one beat, no per-beat choreography, light
+  captions), **remotion-only** (no capture step at all, pure `dom-demo`/
+  `higgsfield` motion graphics), **2min-demo** (fixed 6-beat structure capped
+  at 2:00, narration+captions mandatory), **5min-demo** (extends the real
+  six-chapter structure `EA/launch_plans/TODO.md` proved out for the project's
+  own launch video into a fixed ~5:00 beat arc for any project). A sixth
+  candidate, vertical reformat with active-speaker tracking, is flagged as
+  real and validated (r/reactjs feedback) but not yet scoped: it needs real
+  face/speaker-detection work, not just a recipe over the existing tools.
 - `diff_beats`: compares an edited `beats.json` draft against the version already on
   disk and returns a per-beat rerun plan (added/removed/unchanged/changed, which
   fields changed, whether capture or `scaffold_scene` need to rerun for that beat,

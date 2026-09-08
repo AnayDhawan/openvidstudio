@@ -13,9 +13,8 @@ calling agent doesn't re-derive them every time, and PLANNING.md's rules
 (claim-obligates-visual, the human-approval gate, no invented functionality)
 still apply in full to every preset.
 
-Two presets ship today: **gif-demo** and **screenrec-only**. Three more
-(**remotion-only**, **2min-demo**, **5min-demo**) are speced but not yet built,
-plus a sixth candidate flagged, not scoped, at the end.
+All five presets are speced below; a sixth candidate is flagged, not scoped, at
+the end.
 
 ## gif-demo
 
@@ -75,3 +74,80 @@ beat, real `url` + `interactions` → `validate_beats` → approval →
 `write_beats_file` → `scaffold_scene` (`recording` template) →
 `capture_screen_recording` → `stitch_composition` → `render_video`. No
 `plan_beats` multi-beat planning step: there's only one beat to plan.
+
+## remotion-only
+
+Pure motion graphics, no capture step of any kind. Every beat is `dom-demo`
+(hand-authored from the project's real design tokens/copy per `PLANNING.md` §3
+step 4) or `higgsfield` (for a genuine non-UI b-roll shot, access permitting).
+Use this when the piece being made isn't a demo of a specific running product at
+all: a conceptual explainer, a brand piece, a recap video assembled from claims
+already proven in a real capture elsewhere. `PLANNING.md`'s claim-obligates-
+visual rule still applies in full: a `dom-demo` beat still can't assert
+something the product doesn't really do.
+
+**Recipe:** `init_project` → `extract_brand` → draft beats (`dom-demo`/
+`higgsfield` only) → `validate_beats` → approval → `write_beats_file` →
+`scaffold_scene` per beat → `stitch_composition` → `render_video`.
+`capture_screenshot` and `capture_screen_recording` are never called, there is
+nothing for them to capture.
+
+## 2min-demo
+
+**Fixed 6-beat structure, capped at 2:00 (3600 frames at 30fps).** Hook, three
+demo beats (one per claimed feature, per `PLANNING.md`'s claim-obligates-visual
+rule), differentiator, cta. This is `PIPELINE.md`'s existing "Packed-hook,
+multi-feature" arc with the demo-beat count pinned at exactly 3 rather than
+left open, so the preset has one fixed shape instead of a range to plan around
+each time.
+
+**Unlike gif-demo/screenrec-only, narration is mandatory, not silent.** Every
+beat needs a real VO file at `public/audio/vo/<beatId>.mp3` (`generate_narration`,
+or a dev-provided recording) before `stitch_composition` runs, plus captions
+burned in per the usual QC checklist. A 2min-demo missing narration on a beat
+fails the same silent-omission trap `PIPELINE.md` already warns about (the
+Audio layer just gets skipped, no error), so treat "did every beat's VO file
+land" as an explicit check for this preset, not an assumption.
+
+**Recipe:** `init_project` → `extract_brand` → `plan_beats` (6 beats: hook +
+3 demo + differentiator + cta, total ≤3600 frames) → `validate_beats` →
+approval → `write_beats_file` → `scaffold_scene` per beat → capture per beat's
+real `captureMethod` → `generate_narration` for every beat → `stitch_composition`
+→ `render_video`.
+
+## 5min-demo
+
+Extends the six-chapter structure `EA\launch_plans\TODO.md` proved out for
+openvidstudio's own human-recorded launch video (modeled on Crynta's Terax
+video, 4:40 total) into a fixed beat arc for a fully agent-generated ~5:00
+demo of *any* project, not just openvidstudio's own site. Same six roles, same
+order, scaled from that brief's 280s total to a 300s (9000 frame) target:
+
+| # | Chapter (beat id) | Target | Role |
+|---|---|---|---|
+| 1 | `cold-open` | ~27s | Name the product, then the one number that earns attention, inside the first 15s. No intro, no logo sting. |
+| 2 | `why-built` | ~54s | Name the real alternatives out loud, then the gap this product closes. |
+| 3 | `walkthrough` | ~102s | The whole real flow in one pass, in order, as a sequence not a feature list. The longest chapter, and the only one allowed real waiting in it. |
+| 4 | `why-real` | ~54s | Make chapter 1's claim checkable: name the actual mechanism behind what was just shown (the stack, the real integration, whatever makes it not-generated). |
+| 5 | `current-state` | ~37s | Where the project actually is: what's shipped, what's still rough. Naming the weak spot here is what makes the rest credible, don't skip it. |
+| 6 | `outro` | ~27s | Ask for the real next step (star, comment, try it), then close on the product's own output, not a static card. |
+
+This preset requires narration+captions like 2min-demo, and real capture for
+every chapter that claims something the product actually does (`walkthrough`
+and `why-real` especially: per `PLANNING.md`'s decision tree, a claim this
+central to the pitch needs a real screenshot or recording behind it, not a
+`dom-demo` standing in).
+
+**Recipe:** same as 2min-demo, with `plan_beats` targeting these six chapter
+roles and a 9000-frame total instead of six generic demo beats.
+
+## Not yet scoped: vertical reformat with speaker tracking
+
+Real, independently validated ask from the r/reactjs feedback (Opening-Dentist-
+1556, cited in the plan's OVS Community signal section): horizontal-to-vertical
+reformatting with active-speaker detection, auto-tracking who's talking and
+placing the vertical crop accordingly. This needs real face/speaker-detection
+work, not just a recipe over the existing tool chain like the five presets
+above, so it isn't a preset yet. Flagging it here as the 6th candidate rather
+than dropping it; scoping and building it is separate work, not done as part
+of this pass.

@@ -763,6 +763,87 @@ if (jsonFenceMatch) {
   );
 }
 
+console.log("\n== Part 9: diff_beats -- pure function (no filesystem-dependent artifact checks) ==");
+
+{
+  const { diffBeatsLogic } = require(path.join(distDir, "tools", "diffBeats.js"));
+  const fakeRoot = path.join(tmpRoot, "diff-beats-fake-root");
+  fs.mkdirSync(fakeRoot, { recursive: true });
+
+  const oldBeats = {
+    fps: 30,
+    title: "Old",
+    beats: [
+      { id: "hook", start: 0, duration: 90, vo: "hook line", visual: { captureMethod: "dom-demo" } },
+      {
+        id: "demo",
+        start: 90,
+        duration: 120,
+        vo: "demo line",
+        visual: { captureMethod: "screenshot", url: "https://example.com", interactions: [] },
+      },
+      { id: "gone", start: 210, duration: 60, vo: "cut me", visual: { captureMethod: "dom-demo" } },
+    ],
+  };
+  const newBeats = {
+    fps: 30,
+    title: "Old",
+    beats: [
+      { id: "hook", start: 0, duration: 90, vo: "hook line", visual: { captureMethod: "dom-demo" } },
+      {
+        id: "demo",
+        start: 90,
+        duration: 150,
+        vo: "demo line, edited",
+        visual: { captureMethod: "screenshot", url: "https://example.com", interactions: [] },
+      },
+      { id: "new-beat", start: 240, duration: 60, vo: "brand new", visual: { captureMethod: "dom-demo" } },
+    ],
+  };
+
+  const result = diffBeatsLogic(oldBeats, newBeats, fakeRoot);
+  const byId = Object.fromEntries(result.beats.map((b) => [b.id, b]));
+
+  check("hook beat (unchanged) reports status unchanged", byId.hook?.status === "unchanged");
+  check("hook beat needs neither recapture nor rescaffold", byId.hook?.needsRecapture === false && byId.hook?.needsRescaffold === false);
+  check(
+    "demo beat (duration + vo edited) reports status changed with both fields listed",
+    byId.demo?.status === "changed" &&
+      byId.demo.changedFields.includes("duration") &&
+      byId.demo.changedFields.includes("vo"),
+  );
+  check("demo beat's visual untouched, so needsRecapture is false", byId.demo?.needsRecapture === false);
+  check("demo beat's content changed, so needsRescaffold is true", byId.demo?.needsRescaffold === true);
+  check("gone beat reports status removed", byId.gone?.status === "removed");
+  check("new-beat reports status added, needsRescaffold true", byId["new-beat"]?.status === "added" && byId["new-beat"].needsRescaffold === true);
+  check(
+    "new-beat is dom-demo, so needsRecapture is false even though added",
+    byId["new-beat"]?.needsRecapture === false,
+  );
+  check(
+    "summary counts match (1 added, 1 removed, 1 changed, 1 unchanged)",
+    result.summary.added === 1 && result.summary.removed === 1 && result.summary.changed === 1 && result.summary.unchanged === 1,
+  );
+  check("rerenderNeeded is true whenever anything changed/added/removed", result.rerenderNeeded === true);
+  check(
+    "identical beats.json against itself reports rerenderNeeded false",
+    diffBeatsLogic(oldBeats, oldBeats, fakeRoot).rerenderNeeded === false,
+  );
+
+  // A visual.captureMethod change on an existing beat is the real needsRecapture case.
+  const recaptureOld = { fps: 30, title: "T", beats: [{ id: "b", start: 0, duration: 60, vo: "x", visual: { captureMethod: "dom-demo" } }] };
+  const recaptureNew = {
+    fps: 30,
+    title: "T",
+    beats: [{ id: "b", start: 0, duration: 60, vo: "x", visual: { captureMethod: "screenshot", url: "https://x.example", interactions: [] } }],
+  };
+  const recaptureResult = diffBeatsLogic(recaptureOld, recaptureNew, fakeRoot);
+  check(
+    "switching a beat from dom-demo to screenshot sets needsRecapture true",
+    recaptureResult.beats[0]?.needsRecapture === true,
+  );
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

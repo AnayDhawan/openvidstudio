@@ -9,6 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `diff_beats`: compares an edited `beats.json` draft against the version already on
+  disk and returns a per-beat rerun plan (added/removed/unchanged/changed, which
+  fields changed, whether capture or `scaffold_scene` need to rerun for that beat,
+  whether its output files exist on disk). Read-only, writes nothing. Makes editing
+  one beat in an already-built video a targeted rerun instead of redoing the whole
+  pipeline; `render_video` still always re-renders the full composition (no partial
+  render in Remotion), reported as one whole-video `rerenderNeeded` flag.
 - Two optional per-beat `beats.json` fields, `transition` (`"cut"` | `"whip"` |
   `"fade"`, `"cut"` assumed if omitted) and `artifacts`
   (`screenshotPath`/`recordingPath`/`voPath` overrides of the convention output

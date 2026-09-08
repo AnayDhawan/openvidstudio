@@ -34,6 +34,14 @@ Create `<video>/beats.json`:
   cut/whip/fade choice into a beat, and explicit overrides of that beat's output
   paths. Omit either and the default (`"cut"`, convention path) is assumed; every
   existing `beats.json` stays valid without them.
+- **Editing an already-written `beats.json`**: run `diff_beats` (new draft in,
+  persisted file on disk compared) before re-running anything. It reports, per beat,
+  whether it's added/removed/unchanged/changed, which fields changed, whether
+  capture or `scaffold_scene` actually need to rerun for it, and whether its output
+  files exist on disk right now. Patch one beat's timing and `diff_beats` tells you
+  that's the only one that needs `scaffold_scene --overwrite`, not the whole video.
+  `render_video` still re-renders the full composition regardless (Remotion has no
+  partial-render mode), so treat that as a single go/no-go signal, not per-beat.
 - Two beat arcs, pick by product complexity:
   - **Simple demo** (single core feature): hook (8s), problem (11s), demo
     x2-3 (12-14s each), differentiator (10s), cta (9s). 60-75s total.

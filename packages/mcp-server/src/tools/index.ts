@@ -18,6 +18,9 @@ import { registerContactSheet } from "./contactSheet";
 import { registerSoundEffects } from "./soundEffects";
 import { registerExtractBrand } from "./extractBrand";
 import { registerDiffBeats } from "./diffBeats";
+import { registerCaptureDesktop } from "./captureDesktop";
+import { registerCaptureMobile } from "./captureMobile";
+import { registerCaptureTerminal } from "./captureTerminal";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -47,6 +50,9 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerSoundEffects(server);
   registerExtractBrand(server);
   registerDiffBeats(server);
+  registerCaptureDesktop(server);
+  registerCaptureMobile(server);
+  registerCaptureTerminal(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

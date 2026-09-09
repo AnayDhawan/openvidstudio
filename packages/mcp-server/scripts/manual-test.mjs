@@ -891,6 +891,142 @@ console.log("\n== Part 10: render_video's brand-lock gate ==");
   check("gate passes once src/brand.ts exists, no skipBrandLock needed (fails later, on the missing project)", gatePassedWithBrandFile);
 }
 
+console.log("\n== Part 11: non-browser capture -- pure argv builders (no process spawned) ==");
+
+{
+  const native = require(path.join(distDir, "nativeCapture.js"));
+  const {
+    buildDesktopCaptureArgs,
+    buildAdbRecordArgs,
+    buildAdbPullArgs,
+    buildSimctlRecordArgs,
+    buildRemuxArgs,
+    sanitizeDeviceId,
+    sanitizeWindowTitle,
+  } = native;
+
+  const win = buildDesktopCaptureArgs({
+    platform: "win32", framerate: 30, durationSeconds: 5, outPath: "out.mp4",
+  });
+  check("win32 full-screen capture uses gdigrab against `desktop`", win.includes("gdigrab") && win.includes("desktop"));
+  check("win32 capture bounds itself with -t", win[win.indexOf("-t") + 1] === "5");
+
+  const winWindow = buildDesktopCaptureArgs({
+    platform: "win32", window: "Hermes Agent", framerate: 30, durationSeconds: 5, outPath: "out.mp4",
+  });
+  check(
+    "win32 window capture passes title= as ONE argv entry (spaces intact, never shell-split)",
+    winWindow.includes("title=Hermes Agent"),
+  );
+
+  const winRegion = buildDesktopCaptureArgs({
+    platform: "win32", region: { x: 10, y: 20, width: 640, height: 480 },
+    framerate: 30, durationSeconds: 5, outPath: "out.mp4",
+  });
+  check(
+    "win32 region capture uses gdigrab's own offset/video_size input flags",
+    winRegion.includes("-offset_x") && winRegion.includes("-video_size") && winRegion.includes("640x480"),
+  );
+
+  const mac = buildDesktopCaptureArgs({
+    platform: "darwin", display: 1, framerate: 30, durationSeconds: 5, outPath: "out.mp4",
+  });
+  check("darwin capture uses avfoundation with a <display>:none input", mac.includes("avfoundation") && mac.includes("1:none"));
+
+  const macRegion = buildDesktopCaptureArgs({
+    platform: "darwin", region: { x: 5, y: 6, width: 300, height: 200 },
+    framerate: 30, durationSeconds: 5, outPath: "out.mp4",
+  });
+  check(
+    "darwin region becomes a crop filter (avfoundation cannot grab a sub-rect)",
+    macRegion.join(" ").includes("crop=300:200:5:6"),
+  );
+
+  const linux = buildDesktopCaptureArgs({
+    platform: "linux", region: { x: 100, y: 50, width: 800, height: 600 },
+    framerate: 25, durationSeconds: 5, outPath: "out.mp4",
+  });
+  check("linux capture uses x11grab with the region in its input spec", linux.includes("x11grab") && linux.includes(":0.0+100,50"));
+
+  // h264/yuv420p cannot encode odd dimensions, and a hand-picked region very often is odd.
+  for (const [name, args] of [["win32", win], ["darwin", mac], ["linux", linux]]) {
+    check(
+      `${name} output forces even dimensions (odd-width regions would fail at the encoder)`,
+      args.join(" ").includes("trunc(iw/2)*2:trunc(ih/2)*2"),
+    );
+  }
+  check("desktop output is yuv420p + faststart so Remotion can seek it", win.includes("yuv420p") && win.includes("+faststart"));
+
+  const adb = buildAdbRecordArgs("/sdcard/x.mp4", 20, "emulator-5554");
+  check("adb record targets the chosen device and self-terminates via --time-limit",
+    adb[0] === "-s" && adb[1] === "emulator-5554" && adb.includes("--time-limit") && adb.includes("20"));
+  check("adb record omits -s entirely when no deviceId is given", buildAdbRecordArgs("/sdcard/x.mp4", 20)[0] === "shell");
+  check("adb pull moves the device file to a local path", buildAdbPullArgs("/sdcard/x.mp4", "local.mp4").join(" ") === "pull /sdcard/x.mp4 local.mp4");
+  check("simctl defaults to the booted simulator", buildSimctlRecordArgs("out.mp4").includes("booted"));
+  check("remux copies streams rather than re-encoding", buildRemuxArgs("in.mp4", "out.mp4").join(" ").includes("-c copy"));
+
+  check("sanitizeDeviceId accepts a real adb serial", sanitizeDeviceId("emulator-5554") === "emulator-5554");
+  let rejectedId = false;
+  try { sanitizeDeviceId("a; rm -rf /"); } catch { rejectedId = true; }
+  check("sanitizeDeviceId rejects a shell-metacharacter payload", rejectedId);
+  check("sanitizeWindowTitle allows spaces and quotes (argv is passed intact)", sanitizeWindowTitle('My "App" v2') === 'My "App" v2');
+  let rejectedTitle = false;
+  try { sanitizeWindowTitle("bad\ntitle"); } catch { rejectedTitle = true; }
+  check("sanitizeWindowTitle rejects a newline (it would truncate gdigrab's selector)", rejectedTitle);
+}
+
+console.log("\n== Part 12: validate_beats understands non-browser sources ==");
+
+{
+  const { validateBeatsLogic } = require(path.join(distDir, "tools", "validateBeats.js"));
+  // 5 words over 2.00s is 2.5 words/sec, inside SCRIPT.md's 2.3-2.9 budget, so these
+  // fixtures exercise the source rules rather than tripping the pacing check.
+  const beat = (visual, extra = {}) => ({
+    fps: 30, title: "T",
+    beats: [{ id: "b", start: 0, duration: 60, vo: "a short narration line here", visual, ...extra }],
+  });
+
+  check(
+    "a browser beat with no source field still validates (backward compatible)",
+    validateBeatsLogic(beat({ captureMethod: "recording", url: "https://x.example", interactions: [] })).valid,
+  );
+  check(
+    "a desktop beat validates with durationSeconds",
+    validateBeatsLogic(beat({ captureMethod: "recording", source: "desktop", window: "App", durationSeconds: 8 })).valid,
+  );
+  check(
+    "a desktop beat without durationSeconds is rejected",
+    !validateBeatsLogic(beat({ captureMethod: "recording", source: "desktop", window: "App" })).valid,
+  );
+  check(
+    "a terminal beat validates with a bare command",
+    validateBeatsLogic(beat({ captureMethod: "recording", source: "terminal", command: "hermes", args: ["--help"] })).valid,
+  );
+  const shellish = validateBeatsLogic(beat({ captureMethod: "recording", source: "terminal", command: "npm run build" }));
+  check("a terminal command containing a full command line is rejected", !shellish.valid);
+  check("...and the error explains that args belong in visual.args", shellish.errors.join(" ").includes("visual.args"));
+  const longAndroid = validateBeatsLogic(
+    beat({ captureMethod: "recording", source: "mobile", device: "android", durationSeconds: 240 }),
+  );
+  check("an Android beat over the 180s screenrecord limit is rejected", !longAndroid.valid);
+  check("...and the error names the silent-truncation reason", longAndroid.errors.join(" ").includes("truncates silently"));
+  check(
+    "a non-browser source on a screenshot beat is rejected",
+    !validateBeatsLogic(beat({ captureMethod: "screenshot", source: "desktop", durationSeconds: 5 })).valid,
+  );
+  check(
+    "an unknown source is rejected",
+    !validateBeatsLogic(beat({ captureMethod: "recording", source: "hologram", durationSeconds: 5 })).valid,
+  );
+  check(
+    "an existing-asset beat validates with a path and attribution",
+    validateBeatsLogic(beat({ captureMethod: "existing-asset", assetPath: "public/images/x.png", attribution: "the project's own README" })).valid,
+  );
+  const unattributed = validateBeatsLogic(beat({ captureMethod: "existing-asset", assetPath: "public/images/x.png" }));
+  check("an existing-asset beat WITHOUT attribution is rejected", !unattributed.valid);
+  check("...and the error says why an unattributed borrowed frame is a problem", unattributed.errors.join(" ").includes("attribution"));
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

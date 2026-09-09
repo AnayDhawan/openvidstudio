@@ -9,6 +9,29 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Capture without a browser.** Three new tools remove the assumption that filmable
+  software has a URL, which previously forced every beat about a desktop app, a phone,
+  or a CLI to degrade into a hand-authored `dom-demo` panel:
+  - `capture_desktop` records a window, a region, or a whole display through ffmpeg,
+    using the right device per platform (gdigrab on Windows, avfoundation on macOS,
+    x11grab on Linux). Output is forced to even dimensions, since h264/yuv420p cannot
+    encode an odd-width region and a hand-picked rectangle very often is one.
+  - `capture_mobile` records an Android device via adb screenrecord, or an iOS
+    Simulator via `xcrun simctl`, remuxing both so Remotion can seek them. Refuses
+    Android recordings over 180 seconds rather than returning the silently truncated
+    file `screenrecord` would produce.
+  - `capture_terminal` records a real command run as timed text rather than pixels,
+    writing a JSON cast to `public/terminal/<beatId>.json` that replays through
+    `TerminalReplay`, so one capture stays sharp at any resolution and picks up the
+    brand palette. It pipes stdout/stderr rather than allocating a pty, so a
+    full-screen TUI still wants `capture_desktop` against the terminal window.
+- **`source` on a recording beat**: `"browser"` (default, so every existing
+  `beats.json` is unchanged), `"desktop"`, `"mobile"`, or `"terminal"`, each with its
+  own validated required fields. See `PLANNING.md` §4.6.
+- **`existing-asset` captureMethod**, for real screenshots a project already publishes.
+  `attribution` is required: an unattributed borrowed frame reads as a real capture,
+  which is the exact dishonesty the rest of the pipeline is built to avoid.
+
 - **Brand-lock gate**: `render_video` now refuses to run unless `src/brand.ts`
   exists (written by `extract_brand`), so a video never ships wearing
   openvidstudio's own default navy/Inter look by accident. Pass

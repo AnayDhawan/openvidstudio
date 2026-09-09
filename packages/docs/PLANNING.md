@@ -140,6 +140,63 @@ manifest alone describes the finished video's shape. Making render/capture
 independently rerunnable against an edited manifest (patch one field, rerun one
 stage, no full regenerate) is the next piece of this work, not part of this addition.
 
+## 4.6. Capture sources: filming software that has no URL (added 2026-09-09)
+
+§3's decision tree assumes the product is a web page. Plenty of real software is not,
+and until now every beat about a desktop app, a phone app, a CLI tool, or an operating
+system collapsed into `dom-demo`, a hand-drawn panel standing in for software that
+could perfectly well have been filmed. A validation run against two of the most starred
+projects on GitHub, a Linux distribution and a terminal agent, produced shot plans in
+which **100% of beats were reconstructions**, against a product whose whole pitch is
+that nothing on screen is generated.
+
+A `recording` beat now carries an optional `source`:
+
+```
+"source": "browser" | "desktop" | "mobile" | "terminal"
+```
+
+**Omit it and it means `browser`**, so every `beats.json` written before this is still
+valid and still behaves identically. Each source has its own required fields and its own
+capture tool:
+
+| `source` | Tool | Required | For |
+|---|---|---|---|
+| `browser` (default) | `capture_screenshot` / `capture_screen_recording` | `url`, `interactions` | Web apps |
+| `desktop` | `capture_desktop` | `durationSeconds` (+ optional `window`, `region`, `display`) | Desktop apps, native windows, an OS shell |
+| `mobile` | `capture_mobile` | `device`, `durationSeconds` (+ optional `deviceId`) | Android devices, iOS Simulators |
+| `terminal` | `capture_terminal` | `command` (+ optional `args`, `cwd`, `script`) | CLIs, agents, build tools |
+
+**Extending §3's decision tree.** At step 1, first ask *what kind of software is this*.
+If it has no URL a browser can navigate to, do not fall through to `dom-demo`; pick the
+source that matches the product and film it for real. `dom-demo` is for a claim no
+capture can back, not for a product this pipeline merely found inconvenient.
+
+**Choosing between `terminal` and `desktop` for a CLI.** Prefer `terminal`. It records
+timed text rather than pixels, so the result is resolution-independent, picks up the
+palette `extract_brand` resolved, and replays through `TerminalReplay`. Reach for
+`capture_desktop` against the terminal window only when the program draws a full-screen
+TUI by addressing the cursor (vim, htop, a rich agent TUI), because `capture_terminal`
+pipes stdout and stderr rather than allocating a pty.
+
+**`existing-asset`, a fifth captureMethod.** Some projects already publish real
+screenshots of themselves. Those are real, and there was previously no honest way to use
+one: the capture methods all mean "film it now," so an existing image had to masquerade
+as a `dom-demo`.
+
+```json
+{
+  "captureMethod": "existing-asset",
+  "assetPath": "public/images/manual-theme.png",
+  "attribution": "from the project's own manual"
+}
+```
+
+`attribution` is **required**, not optional. A frame this pipeline did not capture is
+only honest on screen if the video can say where it came from, and an unattributed
+borrowed image reads to a viewer as a real capture. This is the same rule as everywhere
+else in this document, applied to a new case.
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is

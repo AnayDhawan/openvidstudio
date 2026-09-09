@@ -177,9 +177,17 @@ VO specifically, silently omits the layer with no warning:
 | Imported SFX / music | `public/imported_audios/<id>.<ext>` | dropped in by hand, or `plan_sound_effects` (Freesound provider) | scenes, via `staticFile("imported_audios/<id>.<ext>")` |
 | Rendered video, contact sheet, QC stills | `output/<video>.mp4`, `output/contact-sheet.jpg`, `output/qc/<video>/` | `render_video`, `contact_sheet`, `qc_extract_frames` | pick up / upload from here |
 
+| Terminal cast | `public/terminal/<beatId>.json` | `capture_terminal` | a `TerminalReplay` scene |
+
 Every path in this table is also the default a beat's `artifacts` field
 (`PLANNING.md` §4.5) resolves to when omitted; set `artifacts.screenshotPath` /
-`recordingPath` / `voPath` explicitly only when overriding it.
+`recordingPath` / `voPath` / `terminalPath` explicitly only when overriding it.
+
+**Non-browser captures write to the same paths.** `capture_desktop` and
+`capture_mobile` both produce `public/video/<beatId>.mp4`, exactly like
+`capture_screen_recording`, so a scene does not need to know which backend filmed it.
+`capture_terminal` is the exception: it records timed text rather than pixels, so it
+writes a JSON cast instead of an mp4. See `PLANNING.md` §4.6 for when to use each.
 
 **VO omission is silent.** `stitch_composition` checks
 `public/audio/vo/<beatId>.mp3` for every beat and just skips the Audio

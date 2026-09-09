@@ -11,9 +11,13 @@ export interface ValidateBeatsResult {
 const EM_DASH = "—";
 const MIN_PACE = 2.3;
 const MAX_PACE = 2.9;
-const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield"] as const;
+const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;
 const TRANSITIONS = ["cut", "whip", "fade"] as const;
-const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath"] as const;
+const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
+const CAPTURE_SOURCES = ["browser", "desktop", "mobile", "terminal"] as const;
+const MOBILE_DEVICES = ["android", "ios-simulator"] as const;
+/** Android's screenrecord truncates silently past this, so a longer beat is a latent bug. */
+const ANDROID_MAX_SECONDS = 180;
 
 function wordCount(text: string): number {
   const trimmed = text.trim();
@@ -129,6 +133,63 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       return;
     }
 
+    const rawSource = v.source;
+    if (rawSource !== undefined && (typeof rawSource !== "string" || !(CAPTURE_SOURCES as readonly string[]).includes(rawSource))) {
+      errors.push(
+        `${label}: visual.source must be one of ${CAPTURE_SOURCES.map((s) => `"${s}"`).join(", ")} (omit for "browser")`,
+      );
+      return;
+    }
+    const source = (rawSource as string) ?? "browser";
+
+    if (source !== "browser" && captureMethod !== "recording") {
+      errors.push(
+        `${label}: visual.source "${source}" is only valid with captureMethod "recording" (got "${captureMethod}"). ` +
+          `A still from a non-browser source is an existing-asset beat, not a screenshot beat.`,
+      );
+      return;
+    }
+
+    if (source === "desktop") {
+      if (typeof v.durationSeconds !== "number" || v.durationSeconds <= 0) {
+        errors.push(`${label}: visual.durationSeconds (positive number) is required for source "desktop": a screen has no natural end`);
+      }
+      if (v.window !== undefined && (typeof v.window !== "string" || v.window.length === 0)) {
+        errors.push(`${label}: visual.window must be a non-empty window title when present`);
+      }
+      return;
+    }
+
+    if (source === "mobile") {
+      if (typeof v.device !== "string" || !(MOBILE_DEVICES as readonly string[]).includes(v.device)) {
+        errors.push(`${label}: visual.device must be one of ${MOBILE_DEVICES.map((d) => `"${d}"`).join(", ")} for source "mobile"`);
+      }
+      if (typeof v.durationSeconds !== "number" || v.durationSeconds <= 0) {
+        errors.push(`${label}: visual.durationSeconds (positive number) is required for source "mobile"`);
+      } else if (v.device === "android" && v.durationSeconds > ANDROID_MAX_SECONDS) {
+        errors.push(
+          `${label}: visual.durationSeconds ${v.durationSeconds} exceeds Android screenrecord's ${ANDROID_MAX_SECONDS}s ` +
+            `hard limit, which truncates silently rather than failing. Split this into multiple beats.`,
+        );
+      }
+      return;
+    }
+
+    if (source === "terminal") {
+      if (typeof v.command !== "string" || v.command.length === 0) {
+        errors.push(`${label}: visual.command is required for source "terminal"`);
+      } else if (/[\s;&|<>]/.test(v.command)) {
+        errors.push(
+          `${label}: visual.command "${v.command}" must be an executable name only. Put arguments in visual.args; ` +
+            `this is never run through a shell, so a command line here would be treated as one long filename.`,
+        );
+      }
+      if (v.args !== undefined && (!Array.isArray(v.args) || v.args.some((a) => typeof a !== "string"))) {
+        errors.push(`${label}: visual.args must be an array of strings when present`);
+      }
+      return;
+    }
+
     if (captureMethod === "screenshot" || captureMethod === "recording") {
       if (typeof v.url !== "string" || v.url.length === 0) {
         errors.push(`${label}: visual.url is required for captureMethod "${captureMethod}"`);
@@ -154,6 +215,18 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     } else if (captureMethod === "higgsfield") {
       if (typeof v.higgsfieldPrompt !== "string" || v.higgsfieldPrompt.length === 0) {
         errors.push(`${label}: visual.higgsfieldPrompt is required for captureMethod "higgsfield"`);
+      }
+    } else if (captureMethod === "existing-asset") {
+      if (typeof v.assetPath !== "string" || v.assetPath.length === 0) {
+        errors.push(`${label}: visual.assetPath is required for captureMethod "existing-asset"`);
+      }
+      // Attribution is mandatory by design: a frame this pipeline did not capture is only
+      // honest on screen if the video can say where it came from.
+      if (typeof v.attribution !== "string" || v.attribution.length === 0) {
+        errors.push(
+          `${label}: visual.attribution is required for captureMethod "existing-asset" (say where the asset came ` +
+            `from, e.g. "from the project's own README"). An unattributed borrowed frame reads as a real capture.`,
+        );
       }
     }
     // dom-demo: no additional required fields.

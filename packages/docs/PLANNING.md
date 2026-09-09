@@ -184,7 +184,7 @@ screenshots of themselves. Those are real, and there was previously no honest wa
 one: the capture methods all mean "film it now," so an existing image had to masquerade
 as a `dom-demo`.
 
-```json
+```
 {
   "captureMethod": "existing-asset",
   "assetPath": "public/images/manual-theme.png",

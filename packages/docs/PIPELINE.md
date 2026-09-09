@@ -189,7 +189,15 @@ Every path in this table is also the default a beat's `artifacts` field
 `capture_terminal` is the exception: it records timed text rather than pixels, so it
 writes a JSON cast instead of an mp4. See `PLANNING.md` §4.6 for when to use each.
 
-**VO omission is silent.** `stitch_composition` checks
+**VO omission is reported (changed 2026-09-09).** `stitch_composition` still renders a
+beat with no narration file rather than failing, because a deliberately silent beat is
+legitimate. What changed is that it no longer says nothing: the result now carries
+`voBeatsMissing` and a plain-language `warnings` entry naming every beat that will play
+silent and the exact path it looked for. Pass `requireNarration: true` (which the
+2min-demo and 5min-demo presets should) to turn that into a hard failure instead. The
+old behaviour, described below, is why this exists.
+
+**Historical note on why.** `stitch_composition` checks
 `public/audio/vo/<beatId>.mp3` for every beat and just skips the Audio
 layer for any beat where the file isn't there, no error, no warning. A
 video with a beat missing its VO file renders fine and plays with no

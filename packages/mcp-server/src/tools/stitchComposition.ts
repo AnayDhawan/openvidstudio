@@ -9,6 +9,14 @@ import { runTool } from "./mcp";
 export interface StitchCompositionInput {
   projectRoot?: string;
   videoName: string;
+  /**
+   * Fail instead of silently shipping a partly-silent video. A missing VO file has
+   * always been survivable-by-design, but "survivable" quietly became "invisible":
+   * the Audio layer is skipped with no error and the render succeeds, so the first
+   * time anyone notices is on playback. Presets that declare narration mandatory
+   * (2min-demo, 5min-demo) should set this.
+   */
+  requireNarration?: boolean;
 }
 
 export interface StitchCompositionResult {
@@ -18,7 +26,11 @@ export interface StitchCompositionResult {
   rootPath: string;
   durationInFrames: number;
   voBeatsFound: string[];
+  /** Beats that will render silent. Previously knowable only by diffing two lists by hand. */
+  voBeatsMissing: string[];
   musicBedFound: boolean;
+  /** Plain-language notices for things that succeeded but probably are not what was wanted. */
+  warnings: string[];
 }
 
 interface RegistryEntry {
@@ -206,6 +218,19 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
   }
   const musicBedFound = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
 
+  const voBeatsMissing = beats.map((b) => b.id).filter((id) => !(id in voMap));
+  const warnings: string[] = [];
+  if (voBeatsMissing.length > 0) {
+    const detail =
+      `${voBeatsMissing.length} of ${beats.length} beats have no narration file and will render silent: ` +
+      `${voBeatsMissing.join(", ")}. Expected at public/audio/vo/<beatId>.mp3. ` +
+      `Run generate_narration, or accept the silence deliberately.`;
+    if (input.requireNarration === true) {
+      throw new Error(`Narration is required for this composition but ${detail}`);
+    }
+    warnings.push(detail);
+  }
+
   const componentName = `${pascalCase(videoName)}Demo`;
   const demoTsx = renderDemoTsx({ componentName, beats, voMap, musicBedFound });
   const demoPath = path.join(videoDir, `${componentName}.tsx`);
@@ -238,7 +263,9 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
     rootPath,
     durationInFrames,
     voBeatsFound: Object.keys(voMap),
+    voBeatsMissing,
     musicBedFound,
+    warnings,
   };
 }
 
@@ -260,6 +287,7 @@ export function registerStitchComposition(server: McpServer): void {
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
+        requireNarration: z.boolean().optional(),
       },
     },
     async (input) => runTool("stitch_composition", () => runStitchComposition(input)),

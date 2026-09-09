@@ -755,7 +755,11 @@ const planningMdPath = path.join(monorepoRoot, "packages", "docs", "PLANNING.md"
 // Normalize CRLF -> LF first: a Windows checkout with core.autocrlf=true reads this file
 // back as CRLF regardless of what's committed, and the fence regex is LF-literal.
 const planningMd = fs.readFileSync(planningMdPath, "utf8").replace(/\r\n/g, "\n");
-const jsonFenceMatch = planningMd.match(/```json\n([\s\S]*?)\n```/);
+// Anchor on the worked-example section rather than "first json fence in the file":
+// a fenced example added to any earlier section used to silently steal this pin, which
+// is exactly what happened when the capture-sources section was written.
+const workedExampleSection = planningMd.slice(planningMd.search(/^## \d+\. Worked example/m));
+const jsonFenceMatch = workedExampleSection.match(/```json\n([\s\S]*?)\n```/);
 check("PLANNING.md has a fenced ```json worked example", jsonFenceMatch !== null);
 
 if (jsonFenceMatch) {
@@ -889,6 +893,27 @@ console.log("\n== Part 10: render_video's brand-lock gate ==");
     gatePassedWithBrandFile = !msg.includes("Brand-lock gate");
   }
   check("gate passes once src/brand.ts exists, no skipBrandLock needed (fails later, on the missing project)", gatePassedWithBrandFile);
+}
+
+console.log("\n== Part 10b: missing narration is reported, not silent ==");
+
+{
+  // The demo project from Part 2 has no VO files at all, so every beat is missing one.
+  const stitched = runStitchComposition({ projectRoot: tmpRoot, videoName: "demo" });
+  check("stitch_composition lists every beat that will render silent", stitched.voBeatsMissing.length === 3);
+  check("...and raises a warning rather than staying quiet", stitched.warnings.length === 1);
+  check("...naming the convention path it looked for", stitched.warnings[0].includes("public/audio/vo/<beatId>.mp3"));
+
+  let refused = false;
+  let refusalMessage = "";
+  try {
+    runStitchComposition({ projectRoot: tmpRoot, videoName: "demo", requireNarration: true });
+  } catch (err) {
+    refused = true;
+    refusalMessage = err instanceof Error ? err.message : String(err);
+  }
+  check("requireNarration: true turns missing narration into a hard failure", refused);
+  check("...and the refusal names the offending beats", refusalMessage.includes("hook"));
 }
 
 console.log("\n== Part 11: non-browser capture -- pure argv builders (no process spawned) ==");

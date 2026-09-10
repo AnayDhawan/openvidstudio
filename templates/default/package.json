@@ -7,7 +7,7 @@
     "@openvidstudio/core": "workspace:*",
     "@remotion/cli": "4.0.521",
     "@remotion/google-fonts": "4.0.520",
-    "@remotion/shapes": "4.0.520",
+    "@remotion/shapes": "4.0.521",
     "@remotion/tailwind-v4": "4.0.520",
     "@remotion/transitions": "4.0.520",
     "react": "19.2.8",

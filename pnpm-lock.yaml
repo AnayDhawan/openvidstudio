@@ -89,8 +89,8 @@ importers:
         specifier: 19.2.18
         version: 19.2.18
       '@types/web':
-        specifier: 0.0.166
-        version: 0.0.166
+        specifier: 0.0.356
+        version: 0.0.356
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -1066,8 +1066,8 @@ packages:
   '@types/react@19.2.18':
     resolution: {integrity: sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==}
 
-  '@types/web@0.0.166':
-    resolution: {integrity: sha512-qvY/TzK1WuxfeACL3Zzw+gMivGiIynRKH98nLET7ACzTRTX8CWMA6LQJ9WayIHvTBU1JeFCBRIBjsxhGz4TfHQ==}
+  '@types/web@0.0.356':
+    resolution: {integrity: sha512-FjE7SeW2G2It3cSeEuzxRLDZbBhiy6cmHI4506Q7hGVivabw+xz5aQBW2zoHoCWGoIrNMJAhfB7lV1SU3JZrDA==}
 
   '@webassemblyjs/ast@1.14.1':
     resolution: {integrity: sha512-nuBEDgQfm1ccRp/8bCQrx1frohyufl4JlbMMZ4P1wpeOfDhF6FQkxZJ1b/e+PLwr6X1Nhw6OLme5usuBWYBvuQ==}
@@ -3314,7 +3314,7 @@ snapshots:
     dependencies:
       csstype: 3.2.3
 
-  '@types/web@0.0.166': {}
+  '@types/web@0.0.356': {}
 
   '@webassemblyjs/ast@1.14.1':
     dependencies:

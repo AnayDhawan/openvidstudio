@@ -1057,6 +1057,133 @@ console.log("\n== Part 12: validate_beats understands non-browser sources ==");
   check("...and the error says why an unattributed borrowed frame is a problem", unattributed.errors.join(" ").includes("attribution"));
 }
 
+console.log("\n== Part 13: Wayland backend selection and pipewiregrab argv ==");
+
+{
+  const native = require(path.join(packageRoot, "..", "capture", "dist", "native.js"));
+  const { detectLinuxDisplayServer, buildDesktopCaptureArgs, hasFilter, buildFilterProbeArgs } = native;
+
+  check("XDG_SESSION_TYPE=wayland is detected", detectLinuxDisplayServer({ XDG_SESSION_TYPE: "wayland" }) === "wayland");
+  check("XDG_SESSION_TYPE=x11 is detected", detectLinuxDisplayServer({ XDG_SESSION_TYPE: "x11" }) === "x11");
+  // Containers and some session managers leave XDG_SESSION_TYPE unset, so WAYLAND_DISPLAY
+  // is the fallback signal rather than defaulting a Wayland box to x11grab.
+  check(
+    "WAYLAND_DISPLAY alone still means wayland",
+    detectLinuxDisplayServer({ WAYLAND_DISPLAY: "wayland-0" }) === "wayland",
+  );
+  check("an empty environment falls back to x11", detectLinuxDisplayServer({}) === "x11");
+
+  const wayland = buildDesktopCaptureArgs({
+    platform: "linux",
+    displayServer: "wayland",
+    framerate: 30,
+    durationSeconds: 6,
+    outPath: "out.mp4",
+  });
+  check("a wayland capture goes through lavfi's pipewiregrab", wayland.includes("lavfi") && wayland.some((a) => a.startsWith("pipewiregrab=")));
+  check("...and never through x11grab", !wayland.includes("x11grab"));
+  // pipewiregrab is a filter source, not an input device, so there is no -framerate to ask
+  // the device for: the rate is imposed downstream with fps.
+  check("...and imposes the framerate with the fps filter", wayland.join(" ").includes("fps=30"));
+  check("...and still forces even dimensions for h264", wayland.join(" ").includes("scale=trunc(iw/2)*2"));
+
+  const waylandCropped = buildDesktopCaptureArgs({
+    platform: "linux",
+    displayServer: "wayland",
+    framerate: 24,
+    durationSeconds: 3,
+    outPath: "out.mp4",
+    region: { x: 10, y: 20, width: 640, height: 481 },
+  });
+  check("a region on wayland becomes a crop filter", waylandCropped.join(" ").includes("crop=640:481:10:20"));
+
+  const withNode = buildDesktopCaptureArgs({
+    platform: "linux",
+    displayServer: "wayland",
+    framerate: 30,
+    durationSeconds: 3,
+    outPath: "out.mp4",
+    pipewire: { node: 42 },
+  });
+  check("a pre-negotiated portal node id is passed to the filter", withNode.join(" ").includes("node=42"));
+
+  const x11 = buildDesktopCaptureArgs({ platform: "linux", framerate: 30, durationSeconds: 3, outPath: "out.mp4" });
+  check("an x11 session is unchanged by any of this", x11.includes("x11grab"));
+
+  check("buildFilterProbeArgs asks ffmpeg for its filter list", JSON.stringify(buildFilterProbeArgs()) === JSON.stringify(["-hide_banner", "-filters"]));
+  check(
+    "hasFilter finds pipewiregrab in real ffmpeg -filters output",
+    hasFilter(" T.. crop              V->V       Crop the input video.\n ... pipewiregrab      |->V       Capture a portal stream.\n", "pipewiregrab"),
+  );
+  check(
+    "hasFilter does not false-positive on a build without it",
+    !hasFilter(" T.. crop              V->V       Crop the input video.\n", "pipewiregrab"),
+  );
+}
+
+console.log("\n== Part 14: capture_terminal records a real command run ==");
+
+{
+  const { recordTerminal, loadPty } = require(path.join(packageRoot, "..", "capture", "dist", "terminal.js"));
+  const ptyAvailable = loadPty() !== null;
+  console.log(`  (node-pty ${ptyAvailable ? "is" : "is not"} installed here, so the default path is ${ptyAvailable ? "pty" : "pipe"})`);
+
+  const piped = await recordTerminal({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write('hello\\n'); process.stderr.write('warn\\n');"],
+    cwd: packageRoot,
+    mode: "pipe",
+  });
+  check("a piped run exits 0", piped.cast.exitCode === 0);
+  check("...and reports pipe mode", piped.mode === "pipe");
+  check("...and the cast records the mode it was captured in", piped.cast.mode === "pipe");
+  check("...and captures stdout", piped.cast.events.some(([, stream, text]) => stream === "o" && text.includes("hello")));
+  // The separation of stderr is exactly what a pty cannot give you, so it is worth pinning
+  // on the backend that can.
+  check("...and keeps stderr distinguishable from stdout", piped.cast.events.some(([, stream, text]) => stream === "e" && text.includes("warn")));
+  check("...and nothing is truncated for a small run", piped.truncated === false);
+
+  const scripted = await recordTerminal({
+    command: process.execPath,
+    args: ["-e", "process.stdin.on('data', (d) => process.stdout.write('got:' + d));"],
+    cwd: packageRoot,
+    script: [{ type: "type", text: "ping\n" }, { type: "wait", ms: 50 }],
+    mode: "pipe",
+  });
+  check("scripted stdin reaches the program", scripted.cast.events.some(([, , text]) => text.includes("got:ping")));
+
+  let ptyRefusal = "";
+  if (!ptyAvailable) {
+    try {
+      await recordTerminal({ command: process.execPath, args: ["-e", "0"], cwd: packageRoot, mode: "pty" });
+    } catch (err) {
+      ptyRefusal = err instanceof Error ? err.message : String(err);
+    }
+    check('mode "pty" fails loudly when node-pty is absent rather than silently piping', ptyRefusal.includes("node-pty"));
+  } else {
+    const ptyRun = await recordTerminal({
+      command: process.execPath,
+      args: ["-e", "process.stdout.write('tty:' + Boolean(process.stdout.isTTY) + '\\n');"],
+      cwd: packageRoot,
+      mode: "pty",
+    });
+    check("a pty run reports pty mode", ptyRun.mode === "pty");
+    // The whole point of the pty path: the program believes it is talking to a terminal,
+    // which is what keeps its colour on.
+    check("...and the program sees a real tty", ptyRun.cast.events.some(([, , text]) => text.includes("tty:true")));
+  }
+
+  const truncating = await recordTerminal({
+    command: process.execPath,
+    args: ["-e", "for (let i = 0; i < 200000; i++) process.stdout.write('x'.repeat(200) + '\\n');"],
+    cwd: packageRoot,
+    mode: "pipe",
+    timeoutMs: 30000,
+  });
+  check("a runaway process is truncated rather than exhausting memory", truncating.truncated === true);
+  check("...and the truncation is visible in the cast", truncating.cast.events.some(([, , text]) => text.includes("truncated")));
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

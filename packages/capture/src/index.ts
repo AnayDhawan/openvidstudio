@@ -12,3 +12,4 @@
 export * from "./process";
 export * from "./browser";
 export * from "./native";
+export * from "./terminal";

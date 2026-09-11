@@ -28,6 +28,23 @@ export interface Region {
   height: number;
 }
 
+export type LinuxDisplayServer = "x11" | "wayland";
+
+/**
+ * pipewiregrab's own options. With neither `fd` nor `node`, the filter opens an
+ * xdg-desktop-portal ScreenCast session itself, which shows the desktop's consent dialog
+ * and lets the user pick the surface. That prompt is a Wayland design decision, not an
+ * ffmpeg one, and it cannot be suppressed: a Wayland capture is not headless.
+ */
+export interface PipewireOptions {
+  /** PipeWire node id, when the caller already negotiated a portal session. */
+  node?: number;
+  /** File descriptor for a remote PipeWire instance obtained from the portal. */
+  fd?: number;
+  /** Draw the pointer into the capture. Defaults to true, matching the other backends. */
+  drawMouse?: boolean;
+}
+
 export interface DesktopCaptureOptions {
   /** Omit to capture the whole display. On win32 this maps to gdigrab's `title=` selector. */
   window?: string;
@@ -38,6 +55,65 @@ export interface DesktopCaptureOptions {
   durationSeconds: number;
   outPath: string;
   platform: DesktopPlatform;
+  /** Linux only. Defaults to x11, which is what x11grab needs. */
+  displayServer?: LinuxDisplayServer;
+  pipewire?: PipewireOptions;
+}
+
+/**
+ * Which display server this Linux session is actually running.
+ *
+ * Wayland is the default on current Fedora, Ubuntu, and most GNOME and KDE installs, so
+ * x11grab is now the minority case rather than the safe default. XDG_SESSION_TYPE is the
+ * documented signal; WAYLAND_DISPLAY is the fallback because some session managers and
+ * most containers leave XDG_SESSION_TYPE unset.
+ */
+export function detectLinuxDisplayServer(env: NodeJS.ProcessEnv = process.env): LinuxDisplayServer {
+  const declared = (env.XDG_SESSION_TYPE ?? "").toLowerCase();
+  if (declared === "wayland") return "wayland";
+  if (declared === "x11") return "x11";
+  return env.WAYLAND_DISPLAY ? "wayland" : "x11";
+}
+
+/** `ffmpeg -filters` output, for checking whether this build has pipewiregrab (ffmpeg 7.1+). */
+export function buildFilterProbeArgs(): string[] {
+  return ["-hide_banner", "-filters"];
+}
+
+export function hasFilter(ffmpegFiltersOutput: string, name: string): boolean {
+  // ffmpeg prints one filter per line as "<flags> <name> <io> <description>".
+  const pattern = "^\\s*\\S+\\s+" + name + "\\s";
+  return new RegExp(pattern, "m").test(ffmpegFiltersOutput);
+}
+
+/**
+ * Wayland capture through PipeWire.
+ *
+ * pipewiregrab is a libavfilter source rather than an input device, so it arrives through
+ * `-f lavfi` and the framerate is applied downstream with `fps` instead of being requested
+ * from the device. There is no equivalent of gdigrab's `title=`: on Wayland a client
+ * cannot enumerate or address another client's windows at all, which is the point of the
+ * design. The portal's own picker chooses the surface.
+ */
+export function buildPipewireCaptureArgs(opts: DesktopCaptureOptions): string[] {
+  const { framerate, durationSeconds, outPath, region, pipewire } = opts;
+  const filterOpts = [`draw_mouse=${pipewire?.drawMouse === false ? 0 : 1}`];
+  if (pipewire?.fd !== undefined) filterOpts.push(`fd=${pipewire.fd}`);
+  if (pipewire?.node !== undefined) filterOpts.push(`node=${pipewire.node}`);
+
+  const chain = [`fps=${framerate}`];
+  if (region) chain.push(`crop=${region.width}:${region.height}:${region.x}:${region.y}`);
+
+  return [
+    "-nostdin",
+    "-f",
+    "lavfi",
+    "-i",
+    `pipewiregrab=${filterOpts.join(":")}`,
+    "-t",
+    String(durationSeconds),
+    ...encodeArgs(outPath, chain.join(",")),
+  ];
 }
 
 /**
@@ -58,7 +134,8 @@ function encodeArgs(outPath: string, extraFilter?: string): string[] {
  *
  * win32   gdigrab, which can address a window by title without it being focused
  * darwin  avfoundation, which can only grab a whole display, so a region becomes a crop
- * linux   x11grab, which takes the region directly in its input spec
+ * linux   x11grab, which takes the region directly in its input spec, or pipewiregrab on
+ *         a Wayland session, where no client may address another client's windows
  */
 export function buildDesktopCaptureArgs(opts: DesktopCaptureOptions): string[] {
   const { platform, framerate, durationSeconds, outPath, region, window, display = 0 } = opts;
@@ -88,6 +165,8 @@ export function buildDesktopCaptureArgs(opts: DesktopCaptureOptions): string[] {
       encodeArgs(outPath, region ? `crop=${region.width}:${region.height}:${region.x}:${region.y}` : undefined),
     );
   }
+
+  if ((opts.displayServer ?? "x11") === "wayland") return buildPipewireCaptureArgs(opts);
 
   args.push("x11grab", "-framerate", String(framerate));
   if (region) {

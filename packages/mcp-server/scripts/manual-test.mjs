@@ -1433,6 +1433,95 @@ if (fs.existsSync(path.join(tmpRoot, "out", "incremental.mp4"))) {
   skip("Part 18: real vertical reformat (entire section)", "Part 16 did not produce a video to reformat");
 }
 
+console.log("\n== Part 19: other renderers over the same beats ==");
+
+{
+  const rend = require(path.join(distDir, "tools", "exportRendition.js"));
+  const { buildPaletteArgs, buildGifArgs, buildFrameArgs, buildStoreFrameArgs, buildScreenshotIndex, beatMidpointSeconds, STORE_DEVICES } = rend;
+
+  // A GIF is 256 colours. Without a generated palette ffmpeg uses a fixed web-safe one and
+  // bands flat UI into mud, which is why most README GIFs look the way they do.
+  check("the GIF export generates a palette first", buildPaletteArgs("in.mp4", "p.png", 12, 720).join(" ").includes("palettegen"));
+  check("...and uses it on the second pass", buildGifArgs("in.mp4", "p.png", "out.gif", 12, 720).join(" ").includes("paletteuse"));
+  check("...and loops forever, since a README GIF that plays once is a still", buildGifArgs("in.mp4", "p.png", "out.gif", 12, 720).includes("-loop"));
+
+  // -ss after -i decodes to the exact timestamp. Before -i it seeks on keyframes, which is
+  // fast and lands on the wrong frame, which is not acceptable for a docs screenshot.
+  const frameArgs = buildFrameArgs("in.mp4", 1.5, "out.png");
+  check("a docs frame seeks accurately, not to the nearest keyframe", frameArgs.indexOf("-i") < frameArgs.indexOf("-ss"));
+
+  check("a beat's screenshot comes from its midpoint", beatMidpointSeconds({ id: "b", start: 30, duration: 60 }, 30) === 2);
+
+  check("every store device has real dimensions", STORE_DEVICES["iphone-6.9"].width === 1290 && STORE_DEVICES["iphone-6.9"].height === 2796);
+  const storeArgs = buildStoreFrameArgs("in.mp4", 1, "out.png", STORE_DEVICES["android-phone"], 32).join(" ");
+  check("a store frame is padded to the exact canvas the store demands", storeArgs.includes("pad=1080:1920"));
+  // Filling the canvas would crop away exactly the UI the screenshot exists to show.
+  check("...and fits the shot rather than cropping it to fill", storeArgs.includes("force_original_aspect_ratio=decrease"));
+
+  const index = buildScreenshotIndex("demo", [{ file: "01-hook.png", beat: { id: "hook", start: 0, duration: 90, vo: "What this beat says." } }]);
+  check("the screenshot index pairs each shot with its narration", index.includes("![hook](./01-hook.png)") && index.includes("What this beat says."));
+  check("...and says it is generated, so nobody hand-edits it", index.includes("overwritten"));
+}
+
+console.log("\n== Part 20: other renderers -- real ffmpeg runs ==");
+
+if (fs.existsSync(path.join(tmpRoot, "out", "incremental.mp4"))) {
+  const { runExportRendition } = require(path.join(distDir, "tools", "exportRendition.js"));
+  const src = path.join("out", "incremental.mp4");
+
+  const gif = await runExportRendition({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    format: "gif",
+    inPath: src,
+    outPath: path.join("out", "inctest.gif"),
+    width: 320,
+    fps: 8,
+  });
+  check("the GIF export produces a real gif", fs.existsSync(path.join(tmpRoot, gif.files[0])));
+  check("...and reports its size, since a README GIF that is too big is a real problem", gif.notes.join(" ").includes("MB"));
+  // The palette is an intermediate, not an artefact. Leaving it behind next to the gif
+  // would be litter in someone's output directory.
+  check("...and cleans up the palette it generated", !fs.existsSync(path.join(tmpRoot, "out", "inctest-palette.png")) && !fs.existsSync(path.join(tmpRoot, "output", "inctest-palette.png")));
+
+  const shots = await runExportRendition({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    format: "screenshots",
+    inPath: src,
+    outDir: path.join("out", "shots"),
+  });
+  check("the screenshot export writes one frame per beat", shots.files.length === 3 && shots.files.every((f) => fs.existsSync(path.join(tmpRoot, f))));
+  check("...and a docs index beside them", fs.existsSync(path.join(tmpRoot, shots.indexPath)));
+  check(
+    "...whose captions are the beats' own narration",
+    fs.readFileSync(path.join(tmpRoot, shots.indexPath), "utf8").includes("Second beat of the incremental render test."),
+  );
+
+  const store = await runExportRendition({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    format: "store-frames",
+    inPath: src,
+    outDir: path.join("out", "store"),
+    device: "android-phone",
+    beatIds: ["two"],
+  });
+  check("the store export honours a beat selection", store.files.length === 1);
+  try {
+    const dims = execFileSync(
+      "ffprobe",
+      ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", path.join(tmpRoot, store.files[0])],
+      { encoding: "utf8" },
+    );
+    check("...and produces exactly the store's dimensions", dims.includes("1080,1920"));
+  } catch (err) {
+    skip("...and produces exactly the store's dimensions", `ffprobe unavailable: ${err.message}`);
+  }
+} else {
+  skip("Part 20: real rendition exports (entire section)", "Part 16 did not produce a video to export from");
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

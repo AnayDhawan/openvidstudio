@@ -1,12 +1,27 @@
 version: 2
 updates:
-  # Replace package-ecosystem with your stack:
-  # npm | pip | cargo | gomod | composer | nuget | bundler | maven | gradle | swift
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    # Remotion ships every package on one version line and fails loudly when they
+    # disagree, and React and react-dom share a hard internal invariant. Ungrouped,
+    # dependabot opens one PR per package and merging them separately leaves the tree
+    # split: that is what put remotion at 4.0.490 against @remotion/cli at 4.0.520, and
+    # react-dom at 19.2.3 against react at 19.2.8, which broke every render with a
+    # minified React #527 until it was found by hand. Grouping makes the bump atomic.
+    groups:
+      remotion:
+        patterns:
+          - "remotion"
+          - "@remotion/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

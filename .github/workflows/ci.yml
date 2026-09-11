@@ -19,6 +19,9 @@ jobs:
         with:
           node-version: "20"
           cache: "pnpm"
+      # Before install, so a split dependency tree is named as such rather than
+      # surfacing later as a minified React error during a render.
+      - run: node scripts/check-version-alignment.mjs
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck

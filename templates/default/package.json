@@ -6,13 +6,13 @@
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
     "@remotion/cli": "4.0.521",
-    "@remotion/google-fonts": "4.0.520",
+    "@remotion/google-fonts": "4.0.521",
     "@remotion/shapes": "4.0.521",
-    "@remotion/tailwind-v4": "4.0.520",
-    "@remotion/transitions": "4.0.520",
+    "@remotion/tailwind-v4": "4.0.521",
+    "@remotion/transitions": "4.0.521",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "remotion": "4.0.520",
+    "remotion": "4.0.521",
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {

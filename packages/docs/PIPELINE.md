@@ -151,6 +151,15 @@ components. Register in the project's `Root.tsx` with duration from beats.
 
 ## 5. Render + exports
 - `npx remotion render <composition-id> output/<video>.mp4`
+- After the first full render, prefer `render_video` with `incremental: true`.
+  Each beat renders to `output/segments/<video>/<beatId>.mp4` and the segments
+  are joined with ffmpeg's concat demuxer under stream copy, so a beat whose
+  inputs did not change is not re-rendered and its bytes reach the final file
+  untouched. A segment is reused only when the beat's JSON, its scene source,
+  every artifact it references, its narration, and the project-wide inputs
+  (`src/brand.ts`, the generated composition, the music bed) all hash the same.
+  Editing one caption in a five minute video then costs that beat, not 9000
+  frames. `diff_beats` tells you what changed; this is what acts on it.
 - `node scripts/markers.mjs <video>` writes `output/<video>-markers.json` and
   `output/<video>-vo.srt`
 - The finished video, the contact sheet, and every QC still all land under
@@ -158,6 +167,35 @@ components. Register in the project's `Root.tsx` with duration from beats.
   source) and is where an upload step should pick the finished mp4 up from.
 - Write `<video>/script.md`: VO table (timestamps from markers), delivery
   notes, description draft. See `SCRIPT.md` for VO pacing/duration rules.
+
+### Other outputs from the same render
+
+The finished mp4 is one consumer of the beats, not the only one. All of these
+read the render plus `beats.json`, so none of them can drift from the video:
+
+- `export_rendition` with `format: "gif"` writes a README GIF through a real
+  two-pass palette. A one-pass GIF falls back to a fixed 256 colour palette and
+  bands flat UI into mud, which is most of what a product demo is.
+- `export_rendition` with `format: "screenshots"` writes one frame per beat plus
+  an index pairing each with that beat's narration, which is already written.
+- `export_rendition` with `format: "store-frames"` writes App Store and Play
+  Store images at the exact dimensions each store rejects submissions over.
+- `reformat_vertical` writes a 9:16 cut with the crop chosen per beat from the
+  manifest rather than by taking the middle of the frame.
+
+### Keeping it true after it ships
+
+- `visual_regression` diffs this render's beats against the last accepted one
+  and returns markdown ready to post on a pull request. Scaffolded projects get
+  a workflow for it at `.github/workflows/visual-regression.yml`; the baseline
+  lives in `.openvidstudio/visual-baseline/<video>/` and is meant to be
+  committed, so accepting a visual change is an ordinary commit.
+- `docs_drift` re-captures the pages the beats came from and names the clips
+  that no longer match them. Run it on a schedule.
+- `release_diff` takes two refs and a running instance of each, and drafts a
+  before/after manifest covering only the routes that actually changed on
+  screen. It does not write the narration and does not install the manifest:
+  both go through the approval gate in `PLANNING.md` §5.
 
 ## Asset conventions
 
@@ -176,8 +214,10 @@ VO specifically, silently omits the layer with no warning:
 | Built-in SFX | `public/sfx/<name>.{wav,mp3}` | `scripts/gen-sfx.sh`, ships with the template | `@openvidstudio/core`'s `sfx.tsx` helpers |
 | Imported SFX / music | `public/imported_audios/<id>.<ext>` | dropped in by hand, or `plan_sound_effects` (Freesound provider) | scenes, via `staticFile("imported_audios/<id>.<ext>")` |
 | Rendered video, contact sheet, QC stills | `output/<video>.mp4`, `output/contact-sheet.jpg`, `output/qc/<video>/` | `render_video`, `contact_sheet`, `qc_extract_frames` | pick up / upload from here |
-
 | Terminal cast | `public/terminal/<beatId>.json` | `capture_terminal` | a `TerminalReplay` scene |
+| Translated VO | `public/audio/vo/<lang>/<beatId>.mp3` | `generate_narration` with `languages` | `stitch_composition`, as that language's composition |
+| Beat segments and their cache | `output/segments/<video>/` | `render_video` with `incremental` | `render_video`, on the next run |
+| Visual baseline | `.openvidstudio/visual-baseline/<video>/<beatId>.png` | `visual_regression` | `visual_regression`, on the next run. Commit these |
 
 Every path in this table is also the default a beat's `artifacts` field
 (`PLANNING.md` §4.5) resolves to when omitted; set `artifacts.screenshotPath` /
@@ -188,6 +228,14 @@ Every path in this table is also the default a beat's `artifacts` field
 `capture_screen_recording`, so a scene does not need to know which backend filmed it.
 `capture_terminal` is the exception: it records timed text rather than pixels, so it
 writes a JSON cast instead of an mp4. See `PLANNING.md` §4.6 for when to use each.
+
+**One language per composition.** The base language keeps the flat
+`public/audio/vo/<beatId>.mp3` path, so nothing that already has narration moves.
+Every other language lives under its own tag, and `stitch_composition` with
+`languages` emits one composition per language over a single shared scene tree.
+`requireNarration` is then enforced per language: a video fully narrated in
+English and half narrated in Hindi is a failure of the Hindi cut, and one
+combined complaint would hide which cut broke.
 
 **VO omission is reported (changed 2026-09-09).** `stitch_composition` still renders a
 beat with no narration file rather than failing, because a deliberately silent beat is

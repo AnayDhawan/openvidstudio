@@ -197,6 +197,47 @@ only honest on screen if the video can say where it came from, and an unattribut
 borrowed image reads to a viewer as a real capture. This is the same rule as everywhere
 else in this document, applied to a new case.
 
+## 4.7. Translated narration (added 2026-09-11)
+
+A beat can carry `voTranslations`, an object keyed by BCP-47 language tag:
+
+```json
+"vo": "Every frame here is a capture of the real product.",
+"voTranslations": {
+  "hi": "yahan har frame asli product ka capture hai",
+  "pt-BR": "cada quadro aqui e uma captura do produto real"
+}
+```
+
+The lines are drafted by you, the calling agent, and go through the same
+approval gate as the original script (§5). The server does not translate: a
+translation is content, and content that will be spoken over someone's product
+gets seen by a human first.
+
+`validate_beats` checks the shape and the language tags, since a tag becomes a
+directory name. It deliberately does **not** apply `SCRIPT.md`'s 2.3-2.9
+words/sec budget to a translation. That is an English number: the same sentence
+runs 20 to 30 percent longer in German or Hindi, and holding a translation to it
+would reject correct translations. `generate_narration` reports an overrun
+instead, where the fix is a shorter translation rather than a faster read.
+
+## 4.8. Vertical reformat hints (added 2026-09-11)
+
+A beat can carry `vertical`, which only `reformat_vertical` reads:
+
+```json
+"vertical": { "focus": "left" }
+"vertical": { "crop": { "x": 240, "y": 0, "width": 1200, "height": 1080 } }
+```
+
+Omit it and the crop is inferred from the beat itself: a `source: "terminal"`
+beat crops left, because a terminal is text pinned to the left margin and a
+centre crop cuts the command in half; a `source: "mobile"` beat is already
+portrait and gets fitted rather than cropped; a `dom-demo` panel is centred.
+Set it when the content sits to one side for a reason the manifest cannot see.
+Both forms are validated, because a typo here would be silent: the reformat
+would fall back to the inferred crop and look almost right.
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is

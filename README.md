@@ -30,13 +30,22 @@ they're built out. The site is live at
 - **Your agent drives.** No separate app, no timeline editor, no manual
   keyframing. The AI coding agent you already use (Claude Code, Cursor,
   ChatGPT, or anything that speaks MCP) runs the whole pipeline through
-  sixteen tools, seventeen with the Higgsfield tier enabled.
+  twenty-six tools, twenty-seven with the Higgsfield tier enabled.
 - **A directed video, not a screen recording.** Push-ins, drift, shallow depth
   of field, an oversized cursor, narration, and a synthesized music bed turn
   plain captures into something you'd ship.
 - **B-roll for what a screen can't show.** An optional Higgsfield tier covers
   atmosphere and establishing shots, never product UI, when the running app
   genuinely can't produce a frame.
+- **Not only web apps.** A desktop window, an Android device or iOS Simulator,
+  and a terminal session are all capturable, so a CLI tool or a Linux distro
+  gets real footage instead of a hand-drawn panel standing in for it.
+- **One edit costs one beat.** Beats render to their own cached segments and
+  join under a stream copy, so fixing a caption in a five minute video
+  re-renders ninety frames, not nine thousand.
+- **The same beats, other outputs.** A README GIF, a docs screenshot set, store
+  frames at each store's exact dimensions, and a manifest-driven 9:16 cut all
+  come out of the finished render.
 
 ## Quick Start
 
@@ -52,7 +61,7 @@ they're built out. The site is live at
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Sixteen tools should appear.
+restart the client. Twenty-six tools should appear.
 
 Then paste this to your agent, from inside the repo you want a video of:
 
@@ -141,16 +150,34 @@ not just this project's own `PIPELINE.md`/`STYLE.md` rules.
 | `write_beats_file` | Commits the approved beats |
 | `capture_screenshot` | Zoom compensated capture of the real running app |
 | `capture_screen_recording` | Full viewport recording |
+| `capture_desktop` | A native window, a region, or a whole screen, through ffmpeg. Wayland goes through pipewire |
+| `capture_mobile` | An Android device or an iOS Simulator |
+| `capture_terminal` | A real command run, recorded as timed text rather than pixels, with a pty when one is available |
+| `plan_shots` | Ranks what the video should show from the repo's own emphasis, with the evidence for each |
 | `scaffold_scene` | A scene that renders, from one of ten templates, using that beat's own copy |
 | `validate_scenes` | Catches what renders successfully and is wrong, chiefly content cropped outside the camera |
 | `generate_narration` | One clip per beat, paced to fit without sounding stretched |
 | `stitch_composition` | Sequences scenes and audio |
 | `contact_sheet` | Every beat in one image, in a fraction of a render |
-| `render_video` | Draft or full quality |
+| `render_video` | Draft or full quality, and incrementally: only the beats whose inputs changed |
 | `qc_extract_frames` | Frames back out for review |
+| `diff_beats` | What changed between two manifests, and what that costs to fix |
+| `visual_regression` | This render against the last accepted one, per beat, with a PR comment |
+| `docs_drift` | Which clips no longer match the pages they document |
+| `release_diff` | Two refs in, a before/after manifest for a what's-new clip out |
+| `export_rendition` | A README GIF, a docs screenshot set, or store frames from the same render |
+| `reformat_vertical` | A 9:16 cut with the crop chosen per beat from the manifest |
 | `plan_sound_effects` | Works out which sounds the synthesized pack already covers, and where to get the rest |
 | `extract_brand` | Reads your repo's palette, fonts and logo so the video looks like your product |
 | `import_higgsfield_clip` | Optional AI b roll, gated on config |
+
+## The capture engine on its own
+
+[`@openvidstudio/capture`](./packages/capture) is published separately: zoom
+compensated browser capture, interaction replay, and the desktop, mobile and
+terminal backends, with no dependency on Remotion, React, or the video pipeline.
+If you want trustworthy captures of your app and you are not making a video,
+take that package and ignore the rest.
 
 ## Status
 

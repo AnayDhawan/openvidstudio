@@ -1184,6 +1184,143 @@ console.log("\n== Part 14: capture_terminal records a real command run ==");
   check("...and the truncation is visible in the cast", truncating.cast.events.some(([, , text]) => text.includes("truncated")));
 }
 
+console.log("\n== Part 15: per-beat render cache -- pure logic ==");
+
+{
+  const cache = require(path.join(distDir, "renderCache.js"));
+  const { buildSegmentRenderArgs, buildConcatList, buildConcatArgs, renderKey, hashFile } = cache;
+
+  const seg = buildSegmentRenderArgs("DemoDemo", "output/segments/demo/hook.mp4", 0, 89);
+  check("a segment render asks Remotion for exactly that beat's frame range", seg.args.includes("--frames=0-89"));
+  // Without this, a beat with no narration renders with no audio stream at all, and the
+  // concat demuxer cannot stream-copy a segment that has an audio track together with one
+  // that does not. It either fails or silently drops audio for the rest of the file.
+  check("...and forces an audio track so every segment has uniform streams", seg.args.includes("--enforce-audio-track"));
+  check("...and still asks for verbose logs, since Remotion hides progress off a TTY", seg.args.includes("--log=verbose"));
+  const draftSeg = buildSegmentRenderArgs("DemoDemo", "s.mp4", 0, 9, { draft: true, concurrency: 4 });
+  check("a draft segment carries the draft flags", draftSeg.args.includes("--scale=0.5") && draftSeg.args.includes("--concurrency=4"));
+
+  check(
+    "draft and final never share a cache",
+    renderKey({ draft: true, width: 1920, height: 1080, fps: 30 }) !==
+      renderKey({ draft: false, width: 1920, height: 1080, fps: 30 }),
+  );
+  check(
+    "a resolution change invalidates the cache",
+    renderKey({ draft: false, width: 1920, height: 1080, fps: 30 }) !==
+      renderKey({ draft: false, width: 1080, height: 1920, fps: 30 }),
+  );
+
+  check(
+    "the concat list is in ffmpeg's own format",
+    buildConcatList(["hook.mp4", "body.mp4"]) === "file 'hook.mp4'\nfile 'body.mp4'\n",
+  );
+  // A beat id cannot contain a quote (sanitizeSegment forbids it), but the list writer is
+  // the wrong place to rely on that, so it escapes per ffmpeg's rules regardless.
+  check("...and escapes a quote the way ffmpeg expects", buildConcatList(["it's.mp4"]).includes("'it'\\''s.mp4'"));
+  const concatArgs = buildConcatArgs("concat.txt", "../../demo.mp4");
+  check("the concat is a stream copy, never a re-encode", concatArgs.includes("-c") && concatArgs.includes("copy"));
+  check("...and writes a seekable moov", concatArgs.includes("+faststart"));
+  check("...and allows relative paths in the list", concatArgs.includes("-safe") && concatArgs.includes("0"));
+
+  const missing = hashFile(path.join(tmpRoot, "definitely-not-here.png"));
+  check("a missing artifact hashes to a stable sentinel rather than throwing", typeof missing === "string" && missing.length === 64);
+}
+
+console.log("\n== Part 16: per-beat render cache -- real incremental render ==");
+
+if (fs.existsSync(tempNodeModules)) {
+  const cacheMod = require(path.join(distDir, "renderCache.js"));
+  const incBeatsJson = {
+    fps: 30,
+    title: "Incremental",
+    beats: [
+      { id: "one", start: 0, duration: 90, vo: "First beat of the incremental render test.", visual: { captureMethod: "dom-demo" } },
+      { id: "two", start: 90, duration: 90, vo: "Second beat of the incremental render test.", visual: { captureMethod: "dom-demo" } },
+      { id: "three", start: 180, duration: 90, vo: "Third beat of the incremental render test.", visual: { captureMethod: "dom-demo" } },
+    ],
+  };
+  const incWrite = runWriteBeatsFile({ projectRoot: tmpRoot, videoName: "inctest", beatsJson: incBeatsJson });
+  check("the incremental fixture passes validate_beats", incWrite.written === true);
+  for (const id of ["one", "two", "three"]) {
+    runScaffoldScene({ projectRoot: tmpRoot, videoName: "inctest", beatId: id, kind: "dom-demo" });
+  }
+  runStitchComposition({ projectRoot: tmpRoot, videoName: "inctest" });
+
+  const incOut = path.join("out", "incremental.mp4");
+  const first = await runRenderVideo({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    outPath: incOut,
+    skipBrandLock: true,
+    incremental: true,
+  });
+  check("a cold incremental render succeeds", first.success === true && fs.existsSync(first.outPath));
+  check("...and renders every beat, because nothing is cached yet", first.renderedBeats.length === 3 && first.reusedBeats.length === 0);
+  check("...and renders exactly the composition's frame count", first.framesRendered === 270 && first.totalFrames === 270);
+  check("...and leaves one segment per beat on disk", ["one", "two", "three"].every((id) => fs.existsSync(path.join(tmpRoot, "output", "segments", "inctest", `${id}.mp4`))));
+
+  const second = await runRenderVideo({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    outPath: incOut,
+    skipBrandLock: true,
+    incremental: true,
+  });
+  check("an unchanged re-render reuses every segment", second.success === true && second.reusedBeats.length === 3);
+  check("...and renders zero frames", second.framesRendered === 0);
+
+  // The acceptance criterion from the issue: change one beat, re-render, and only that
+  // beat is recomputed.
+  const scenePath = path.join(tmpRoot, "src", "videos", "inctest", "scenes", "Two.tsx");
+  const sceneSrc = fs.readFileSync(scenePath, "utf8");
+  fs.writeFileSync(scenePath, sceneSrc + "\n// edited by the cache test\n", "utf8");
+
+  const third = await runRenderVideo({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    outPath: incOut,
+    skipBrandLock: true,
+    incremental: true,
+  });
+  check("editing one beat's scene re-renders only that beat", third.renderedBeats.join(",") === "two");
+  check("...and reuses the other two", third.reusedBeats.join(",") === "one,three");
+  check("...and renders only that beat's frames", third.framesRendered === 90);
+  check("...and still produces the whole video", third.success === true && fs.existsSync(third.outPath));
+
+  // A brand change repaints frames whose own scene file never moved, because applyBrand
+  // mutates the token objects every scene reads. If the cache misses that, it ships a
+  // video half in the old palette.
+  fs.writeFileSync(path.join(tmpRoot, "src", "brand.ts"), "// brand touched by the cache test\nexport {};\n", "utf8");
+  const fourth = await runRenderVideo({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    outPath: incOut,
+    skipBrandLock: true,
+    incremental: true,
+  });
+  check("touching brand.ts invalidates every segment, not just one", fourth.renderedBeats.length === 3);
+
+  const cacheFile = cacheMod.cachePath(tmpRoot, "inctest");
+  check("the cache manifest is written beside the segments", fs.existsSync(cacheFile));
+
+  try {
+    const probe = execFileSync(
+      "ffprobe",
+      ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path.join(tmpRoot, incOut)],
+      { encoding: "utf8" },
+    );
+    const seconds = Number.parseFloat(probe.trim().replace(/[,\s]+$/, ""));
+    // 270 frames at 30fps. Concatenated segments must add up to the same duration a single
+    // pass would have produced, otherwise the stream copy dropped or duplicated something.
+    check("the concatenated video is the full nine seconds, not one segment", Math.abs(seconds - 9) < 0.35);
+  } catch (err) {
+    skip("the concatenated video is the full nine seconds", `ffprobe unavailable: ${err.message}`);
+  }
+} else {
+  skip("Part 16: real incremental render (entire section)", `${tempNodeModules} not present`);
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

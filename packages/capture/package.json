@@ -41,13 +41,5 @@
     "capture",
     "ffmpeg",
     "adb"
-  ],
-  "peerDependencies": {
-    "node-pty": "*"
-  },
-  "peerDependenciesMeta": {
-    "node-pty": {
-      "optional": true
-    }
-  }
+  ]
 }

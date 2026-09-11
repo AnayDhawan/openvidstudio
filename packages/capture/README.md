@@ -36,6 +36,19 @@ npx playwright install chromium   # browser capture only
 `ffmpeg` on PATH is required for the native backends, `adb` for Android, Xcode command
 line tools for the iOS Simulator.
 
+Terminal recording works out of the box through pipes. For a faithful recording, with the
+program's colour and cursor addressing intact, also install `node-pty`:
+
+```bash
+npm install node-pty
+```
+
+It is deliberately not declared as a dependency of any kind here, not even an optional
+peer: package managers install optional peers anyway, and `node-pty` compiles a native
+addon. Requiring everyone to build one in order to record `npm test` is a bad trade. The
+module is loaded at runtime if it is present, and `recordTerminal` reports which mode it
+actually used.
+
 ## Use
 
 ```ts

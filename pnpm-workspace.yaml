@@ -3,4 +3,5 @@ packages:
   - "templates/*"
 allowBuilds:
   esbuild: true
+  node-pty: set this to true or false
   sharp: true

@@ -3,6 +3,20 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, pascalCase, spawnCapture } from "../util";
+import { loadConfig } from "../config";
+import {
+  CACHE_VERSION,
+  buildConcatArgs,
+  buildConcatList,
+  buildSegmentRenderArgs,
+  planSegments,
+  readCache,
+  renderKey,
+  segmentsDir,
+  writeCache,
+  type BeatLike,
+  type CachedSegment,
+} from "../renderCache";
 import { runTool } from "./mcp";
 
 export interface RenderVideoInput {
@@ -33,6 +47,12 @@ export interface RenderVideoInput {
    * "this looks like a template" signal (see extractBrand.ts).
    */
   skipBrandLock?: boolean;
+  /**
+   * Render each beat to its own cached segment and concatenate, re-rendering only the
+   * beats whose inputs actually changed. Costs one extra ffmpeg stream copy and makes a
+   * one caption edit cost one beat instead of nine thousand frames.
+   */
+  incremental?: boolean;
 }
 
 export interface RenderVideoResult {
@@ -44,6 +64,13 @@ export interface RenderVideoResult {
   stderr: string;
   /** True when src/brand.ts existed at render time (whether from this call's skipBrandLock or a real extract_brand run). */
   brandLocked: boolean;
+  /** Incremental renders only: beats whose cached segment was reused untouched. */
+  reusedBeats?: string[];
+  /** Incremental renders only: beats that were actually re-rendered. */
+  renderedBeats?: string[];
+  /** Incremental renders only: frames sent to the renderer, against the composition's total. */
+  framesRendered?: number;
+  totalFrames?: number;
 }
 
 export interface RenderCommand {
@@ -83,6 +110,141 @@ export function buildRenderCommand(
   };
 }
 
+interface BeatsDoc {
+  fps?: number;
+  beats?: BeatLike[];
+}
+
+function readBeats(projectRoot: string, videoName: string): BeatsDoc {
+  const beatsPath = path.join(projectRoot, "src", "videos", videoName, "beats.json");
+  if (!fs.existsSync(beatsPath)) {
+    throw new Error(`${beatsPath} does not exist. Call write_beats_file for "${videoName}" first.`);
+  }
+  return JSON.parse(fs.readFileSync(beatsPath, "utf8")) as BeatsDoc;
+}
+
+/**
+ * Renders only the beats whose inputs changed, then concatenates every segment.
+ *
+ * The concat is a stream copy, so a reused segment's bytes reach the final file unchanged
+ * rather than being decoded and re-encoded. That is what makes this worth doing: a cache
+ * that costs a generation of quality on every reuse is not a cache anyone should want.
+ */
+async function runIncrementalRender(
+  input: RenderVideoInput,
+  ctx: {
+    projectRoot: string;
+    videoName: string;
+    compositionId: string;
+    outPathRel: string;
+    brandLocked: boolean;
+    started: number;
+  },
+): Promise<RenderVideoResult> {
+  const { projectRoot, videoName, compositionId, outPathRel, brandLocked, started } = ctx;
+  const doc = readBeats(projectRoot, videoName);
+  const beats = doc.beats;
+  if (!Array.isArray(beats) || beats.length === 0) {
+    throw new Error(`src/videos/${videoName}/beats.json has no beats.`);
+  }
+
+  const config = loadConfig(projectRoot);
+  const key = renderKey({
+    draft: input.draft,
+    width: config.videoConfig.width,
+    height: config.videoConfig.height,
+    fps: doc.fps ?? config.videoConfig.fps,
+  });
+
+  const { plan } = planSegments({
+    projectRoot,
+    videoName,
+    compositionId,
+    beats,
+    renderKey: key,
+    cache: readCache(projectRoot, videoName),
+  });
+
+  const dir = segmentsDir(projectRoot, videoName);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const log: string[] = [];
+  const errors: string[] = [];
+  let framesRendered = 0;
+
+  for (const segment of plan) {
+    if (segment.reused) {
+      log.push(`reused  ${segment.beatId} (frames ${segment.firstFrame}-${segment.lastFrame})`);
+      continue;
+    }
+    const { command, args } = buildSegmentRenderArgs(
+      compositionId,
+      segment.file,
+      segment.firstFrame,
+      segment.lastFrame,
+      { draft: input.draft, concurrency: input.concurrency },
+    );
+    const result = await spawnCapture(command, args, projectRoot);
+    if (result.code !== 0 || !fs.existsSync(path.join(projectRoot, segment.file))) {
+      errors.push(`render of beat "${segment.beatId}" failed:\n${result.stderr.slice(-2000)}`);
+      break;
+    }
+    framesRendered += segment.lastFrame - segment.firstFrame + 1;
+    log.push(`rendered ${segment.beatId} (frames ${segment.firstFrame}-${segment.lastFrame})`);
+  }
+
+  if (errors.length > 0) {
+    return {
+      success: false,
+      outPath: path.join(projectRoot, outPathRel),
+      draft: Boolean(input.draft),
+      elapsedSeconds: Math.round((Date.now() - started) / 1000),
+      stdout: log.join("\n"),
+      stderr: errors.join("\n\n"),
+      brandLocked,
+    };
+  }
+
+  // The list lives beside the segments and names them by basename, so the whole segments
+  // directory stays relocatable and ffmpeg's -safe 0 has the least to swallow.
+  const listPath = path.join(dir, "concat.txt");
+  fs.writeFileSync(listPath, buildConcatList(plan.map((p) => path.basename(p.file))), "utf8");
+
+  const concat = await spawnCapture("ffmpeg", buildConcatArgs("concat.txt", path.relative(dir, path.join(projectRoot, outPathRel))), dir);
+  const success = concat.code === 0 && fs.existsSync(path.join(projectRoot, outPathRel));
+
+  if (success) {
+    const segments: Record<string, CachedSegment> = {};
+    const renderedAt = new Date().toISOString();
+    for (const segment of plan) {
+      const beat = beats.find((b) => b.id === segment.beatId);
+      segments[segment.beatId] = {
+        hash: segment.hash,
+        file: segment.file,
+        start: beat?.start ?? segment.firstFrame,
+        duration: beat?.duration ?? segment.lastFrame - segment.firstFrame + 1,
+        renderedAt,
+      };
+    }
+    writeCache(projectRoot, videoName, { version: CACHE_VERSION, compositionId, renderKey: key, segments });
+  }
+
+  const last = beats[beats.length - 1];
+  return {
+    success,
+    outPath: path.join(projectRoot, outPathRel),
+    draft: Boolean(input.draft),
+    elapsedSeconds: Math.round((Date.now() - started) / 1000),
+    stdout: log.join("\n") + "\n" + concat.stdout,
+    stderr: concat.stderr,
+    brandLocked,
+    reusedBeats: plan.filter((p) => p.reused).map((p) => p.beatId),
+    renderedBeats: plan.filter((p) => !p.reused).map((p) => p.beatId),
+    framesRendered,
+    totalFrames: last.start + last.duration,
+  };
+}
+
 export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVideoResult> {
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
@@ -107,6 +269,17 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
   fs.mkdirSync(path.dirname(path.join(projectRoot, outPathRel)), { recursive: true });
 
   const started = Date.now();
+  if (input.incremental === true) {
+    return runIncrementalRender(input, {
+      projectRoot,
+      videoName,
+      compositionId,
+      outPathRel,
+      brandLocked,
+      started,
+    });
+  }
+
   const { command, args } = buildRenderCommand(compositionId, outPathRel, {
     draft: input.draft,
     concurrency: input.concurrency,
@@ -147,7 +320,14 @@ export function registerRenderVideo(server: McpServer): void {
         "by extract_brand), so a video never ships wearing openvidstudio's own default look by accident. " +
         "Run extract_brand against the repo being filmed first; pass skipBrandLock: true only when the " +
         "project deliberately has no brand to extract. Returns the render's captured stdout/stderr, how " +
-        "long it took, and brandLocked (whether src/brand.ts existed at render time).",
+        "long it took, and brandLocked (whether src/brand.ts existed at render time). Pass incremental to render "
+        + "each beat to its own cached segment under output/segments/<videoName>/ and concatenate them with "
+        + "ffmpeg under stream copy, re-rendering only the beats whose inputs actually changed. A segment is "
+        + "reused only when the beat's JSON, its scene source, every artifact it references, its narration, and "
+        + "the project-wide inputs (brand tokens, the generated composition, the music bed) all hash identical "
+        + "to when it was rendered, so a false hit cannot ship a stale frame. This is what makes diff_beats "
+        + "actionable: editing one caption in a ten beat video re-renders one beat instead of all of them. The "
+        + "result then also reports reusedBeats, renderedBeats, and how many frames were actually rendered.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -156,6 +336,7 @@ export function registerRenderVideo(server: McpServer): void {
         draft: z.boolean().optional(),
         concurrency: z.number().positive().optional(),
         skipBrandLock: z.boolean().optional(),
+        incremental: z.boolean().optional(),
       },
     },
     async (input) => runTool("render_video", () => runRenderVideo(input)),

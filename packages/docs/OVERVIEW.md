@@ -1,7 +1,8 @@
 # OVERVIEW.md: what openvidstudio is
 
-openvidstudio is a free, open-source video-generation add-on for any
-software project. It's built on Remotion (React-based programmatic video)
+openvidstudio is a free, open-source demo-video add-on for any software
+project. Nothing on screen is generated: a real browser drives your real
+app, and every frame is a capture of it. It's built on Remotion (React-based programmatic video)
 and Playwright (real-browser automation), and it's driven entirely through
 MCP tools by whatever AI coding agent you're already using (Claude Code,
 Cursor, ChatGPT, or anything else that speaks MCP). There's no separate app

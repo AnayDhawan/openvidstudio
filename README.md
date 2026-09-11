@@ -9,11 +9,12 @@
   <img src="https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio" alt="Last commit">
 </p>
 
-openvidstudio is an open-source video-generation add-on, built on Remotion and
+openvidstudio is an open-source demo-video add-on, built on Remotion and
 Playwright, that an AI coding agent drives through MCP tools to produce
-launch and demo videos for a project directly from its repo and running app,
-with an optional Higgsfield AI b-roll tier for shots that can't be captured
-from a live screen. `packages/` and `templates/` each get their own README as
+launch and demo videos for a project directly from its repo and running app.
+Nothing on screen is generated: a real browser drives your real product and
+every frame is a capture of it, with an optional Higgsfield AI b-roll tier
+for atmosphere shots that can't be captured from a live screen. `packages/` and `templates/` each get their own README as
 they're built out. The site is live at
 [openvidstudio.vercel.app](https://openvidstudio.vercel.app).
 

@@ -1711,6 +1711,114 @@ if (browserAvailable) {
   skip("Part 23: docs drift (entire section)", "real Chromium is not available in this environment");
 }
 
+console.log("\n== Part 24: multilingual narration ==");
+
+{
+  const narration = require(path.join(distDir, "tools", "generateNarration.js"));
+  const { lineFor, sanitizeLanguage } = narration;
+  const { validateBeatsLogic: validateLangBeats } = require(path.join(distDir, "tools", "validateBeats.js"));
+
+  const beat = { id: "hook", duration: 90, vo: "The English line.", voTranslations: { hi: "The Hindi line.", "pt-BR": "The Brazilian line." } };
+  check("the base language reads the beat's own vo", lineFor(beat, "en", "en") === "The English line.");
+  check("another language reads its translation", lineFor(beat, "hi", "en") === "The Hindi line.");
+  check("a language with no translation has no line, rather than falling back silently", lineFor(beat, "de", "en") === undefined);
+
+  check("a regional tag is a valid language", sanitizeLanguage("pt-BR") === "pt-BR");
+  let langRefusal = "";
+  try {
+    // The tag becomes a directory name, so it is checked before it is joined into a path.
+    sanitizeLanguage("../../etc");
+  } catch (err) {
+    langRefusal = err instanceof Error ? err.message : String(err);
+  }
+  check("a path traversal dressed as a language tag is refused", langRefusal.includes("BCP-47"));
+
+  const langBeat = (extra) => ({
+    fps: 30,
+    beats: [{ id: "b", start: 0, duration: 60, vo: "a short narration line here", visual: { captureMethod: "dom-demo" }, ...extra }],
+  });
+  check("a beat with translations validates", validateLangBeats(langBeat({ voTranslations: { hi: "kuch shabd yahan" } })).valid);
+  check("...an empty translation is rejected", !validateLangBeats(langBeat({ voTranslations: { hi: "  " } })).valid);
+  check("...a bad language key is rejected", !validateLangBeats(langBeat({ voTranslations: { "not a tag": "x" } })).valid);
+  check("...and an em dash in a translation is caught too", !validateLangBeats(langBeat({ voTranslations: { hi: "kuch — shabd" } })).valid);
+  // English pacing is an English number. The same sentence runs 20 to 30 percent longer in
+  // German or Hindi, so holding a translation to it would reject correct translations.
+  check(
+    "a long translation is NOT held to the English words-per-second budget",
+    validateLangBeats(langBeat({ voTranslations: { de: "ein deutlich laengerer deutscher satz mit sehr vielen zusaetzlichen woertern darin" } })).valid,
+  );
+}
+
+console.log("\n== Part 25: one composition per language ==");
+
+if (fs.existsSync(tempNodeModules)) {
+  const langBeatsJson = {
+    fps: 30,
+    title: "Languages",
+    beats: [
+      { id: "one", start: 0, duration: 90, vo: "First beat of the multilingual narration test.", voTranslations: { hi: "pehla hissa is video ka" }, visual: { captureMethod: "dom-demo" } },
+      { id: "two", start: 90, duration: 90, vo: "Second beat of the multilingual narration test.", voTranslations: { hi: "doosra hissa is video ka" }, visual: { captureMethod: "dom-demo" } },
+    ],
+  };
+  const langWrite = runWriteBeatsFile({ projectRoot: tmpRoot, videoName: "langtest", beatsJson: langBeatsJson });
+  check("the multilingual fixture passes validate_beats", langWrite.written === true);
+  for (const id of ["one", "two"]) {
+    runScaffoldScene({ projectRoot: tmpRoot, videoName: "langtest", beatId: id, kind: "dom-demo" });
+  }
+
+  // Real narration files rather than mocked paths: what is being tested is that the stitch
+  // finds each language where generate_narration puts it.
+  const voRoot = path.join(tmpRoot, "public", "audio", "vo");
+  fs.mkdirSync(path.join(voRoot, "hi"), { recursive: true });
+  for (const id of ["one", "two"]) {
+    fs.writeFileSync(path.join(voRoot, `${id}.mp3`), "not really audio");
+    fs.writeFileSync(path.join(voRoot, "hi", `${id}.mp3`), "not really audio");
+  }
+
+  const stitched = runStitchComposition({ projectRoot: tmpRoot, videoName: "langtest", languages: ["en", "hi"] });
+  check("both languages are reported", stitched.languages.length === 2);
+  check("the base language keeps the unsuffixed composition id", stitched.languages[0].compositionId === "LangtestDemo");
+  check("...and another language gets its own composition", stitched.languages[1].compositionId === "LangtestDemoHi");
+  check("each language found its own narration", stitched.languages.every((l) => l.voBeatsFound.length === 2));
+
+  const demoSrc = fs.readFileSync(stitched.demoPath, "utf8");
+  check("the generated file exports a component per language", demoSrc.includes("export const LangtestDemo:") && demoSrc.includes("export const LangtestDemoHi:"));
+  // One scene tree, one audio map per language: duplicating the scene tree per language
+  // would be a second copy of the thing most likely to be edited.
+  check("...over a single shared scene tree", (demoSrc.match(/<Series>/g) || []).length === 1);
+  check("...and points the Hindi cut at the Hindi directory", demoSrc.includes('"audio/vo/hi/one.mp3"'));
+  check("...while the base cut keeps the flat path", demoSrc.includes('"audio/vo/one.mp3"'));
+
+  const registry = JSON.parse(fs.readFileSync(path.join(tmpRoot, "src", "videos", ".registry.json"), "utf8"));
+  check("Root.tsx registers both compositions", registry.filter((e) => e.videoName === "langtest").length === 2);
+
+  // A missing translation has to fail the language it is missing from, not the whole
+  // stitch: saying "narration is missing" once would hide which cut is broken.
+  fs.rmSync(path.join(voRoot, "hi", "two.mp3"));
+  let perLanguageRefusal = "";
+  try {
+    runStitchComposition({ projectRoot: tmpRoot, videoName: "langtest", languages: ["en", "hi"], requireNarration: true });
+  } catch (err) {
+    perLanguageRefusal = err instanceof Error ? err.message : String(err);
+  }
+  check("requireNarration fails on the language that is missing a line", perLanguageRefusal.includes("hi narration"));
+  check("...and names the beat", perLanguageRefusal.includes("two"));
+
+  // The generated multi-language component has to compile, which is the check that catches
+  // a template bug no assertion on the string would.
+  fs.writeFileSync(path.join(voRoot, "hi", "two.mp3"), "not really audio");
+  runStitchComposition({ projectRoot: tmpRoot, videoName: "langtest", languages: ["en", "hi"] });
+  try {
+    const tscBin = path.join(tempNodeModules, ".bin", process.platform === "win32" ? "tsc.CMD" : "tsc");
+    execFileSync(tscBin, ["--noEmit"], { cwd: tmpRoot, stdio: "inherit", shell: process.platform === "win32" });
+    check("the multilingual composition typechecks", true);
+  } catch (err) {
+    check(`the multilingual composition typechecks (${err.message})`, false);
+  }
+} else {
+  skip("Part 25: one composition per language (entire section)", `${tempNodeModules} not present`);
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

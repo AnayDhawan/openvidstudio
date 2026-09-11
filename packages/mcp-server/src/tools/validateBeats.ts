@@ -16,6 +16,7 @@ const TRANSITIONS = ["cut", "whip", "fade"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
 const CAPTURE_SOURCES = ["browser", "desktop", "mobile", "terminal"] as const;
 const CROP_FOCUSES = ["left", "center", "right"] as const;
+const LANGUAGE_TAG = /^[A-Za-z]{2,8}(-[A-Za-z0-9]{2,8})*$/;
 const MOBILE_DEVICES = ["android", "ios-simulator"] as const;
 /** Android's screenrecord truncates silently past this, so a longer beat is a latent bug. */
 const ANDROID_MAX_SECONDS = 180;
@@ -108,6 +109,31 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
               `${label}: VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
                 `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`,
             );
+          }
+        }
+      }
+    }
+
+    // Translated narration lines. Only the shape is checked here, never the pacing: the
+    // 2.3-2.9 words/sec budget in SCRIPT.md is an English number, and the same sentence is
+    // routinely 20 to 30 percent longer in German or Hindi. Holding a translation to
+    // English pacing would reject correct translations.
+    const translations = beat.voTranslations;
+    if (translations !== undefined) {
+      if (typeof translations !== "object" || translations === null || Array.isArray(translations)) {
+        errors.push(`${label}: "voTranslations" must be an object keyed by language tag`);
+      } else {
+        for (const [tag, line] of Object.entries(translations as Record<string, unknown>)) {
+          if (!LANGUAGE_TAG.test(tag)) {
+            errors.push(
+              `${label}: voTranslations key "${tag}" is not a BCP-47 language tag, and it becomes a ` +
+                `directory name under public/audio/vo/`,
+            );
+          }
+          if (typeof line !== "string" || line.trim().length === 0) {
+            errors.push(`${label}: voTranslations.${tag} must be a non-empty string`);
+          } else if (line.includes(EM_DASH)) {
+            errors.push(`${label}: voTranslations.${tag} contains an em dash, rewrite with commas/periods`);
           }
         }
       }

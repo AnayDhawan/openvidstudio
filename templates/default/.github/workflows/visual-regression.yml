@@ -1,0 +1,69 @@
+name: Visual regression
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      accept:
+        description: "Accept the current render as the new baseline"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm ci
+      # Not a project dependency: the video project needs Remotion and this script needs
+      # the pipeline, and only CI needs both in one place.
+      - run: npm install --no-save @openvidstudio/mcp-server
+      - name: Render and diff
+        run: node scripts/visual-regression.mjs ${{ vars.OPENVIDSTUDIO_VIDEO_NAME || 'demo' }} ${{ inputs.accept && '--accept' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-diff
+          path: output/visual-diff/
+          if-no-files-found: ignore
+      - name: Comment the deltas
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const file = 'output/visual-regression.md';
+            if (!fs.existsSync(file)) return;
+            const body = fs.readFileSync(file, 'utf8');
+            // One comment, edited in place. A new comment per push buries the PR.
+            const marker = '<!-- openvidstudio-visual-regression -->';
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.data.find((c) => c.body.includes(marker));
+            const payload = `${marker}\n${body}`;
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body: payload,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: payload,
+              });
+            }

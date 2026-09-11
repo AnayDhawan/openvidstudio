@@ -23,6 +23,8 @@ import { registerCaptureMobile } from "./captureMobile";
 import { registerCaptureTerminal } from "./captureTerminal";
 import { registerReformatVertical } from "./reformatVertical";
 import { registerExportRendition } from "./exportRendition";
+import { registerVisualRegression } from "./visualRegression";
+import { registerDocsDrift } from "./docsDrift";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -57,6 +59,8 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerCaptureTerminal(server);
   registerReformatVertical(server);
   registerExportRendition(server);
+  registerVisualRegression(server);
+  registerDocsDrift(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

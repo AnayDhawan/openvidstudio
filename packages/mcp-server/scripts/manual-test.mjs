@@ -1522,6 +1522,195 @@ if (fs.existsSync(path.join(tmpRoot, "out", "incremental.mp4"))) {
   skip("Part 20: real rendition exports (entire section)", "Part 16 did not produce a video to export from");
 }
 
+console.log("\n== Part 21: frame comparison ==");
+
+{
+  const sharp = require("sharp");
+  const { compareFrames, judgeDrift } = require(path.join(distDir, "frameDiff.js"));
+  const { inferBindings } = require(path.join(distDir, "tools", "docsDrift.js"));
+
+  const diffDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-framediff-"));
+  const flat = (r, g, b, width = 400, height = 300) =>
+    sharp({ create: { width, height, channels: 3, background: { r, g, b } } }).png();
+
+  const base = path.join(diffDir, "base.png");
+  const same = path.join(diffDir, "same.png");
+  const nudged = path.join(diffDir, "nudged.png");
+  const repainted = path.join(diffDir, "repainted.png");
+  const taller = path.join(diffDir, "taller.png");
+  await flat(30, 30, 40).toFile(base);
+  await flat(30, 30, 40).toFile(same);
+  // Within the per-pixel threshold: this is the shape of encoder noise, which a useful
+  // comparison has to ignore or it reports a difference on every single run.
+  await flat(31, 31, 41).toFile(nudged);
+  await flat(200, 40, 40).toFile(repainted);
+  await flat(30, 30, 40, 400, 500).toFile(taller);
+
+  const identical = await compareFrames(base, same);
+  check("two identical frames compare as identical", identical.changedRatio === 0 && identical.meanDelta === 0);
+  check("...and are not reported as resized", identical.resized === false);
+  check("...and judge as unchanged", judgeDrift(identical).drifted === false);
+
+  const noise = await compareFrames(base, nudged);
+  check("a sub-threshold nudge moves no pixels past the threshold", noise.changedRatio === 0);
+  check("...and still judges as unchanged, which is what stops every run flagging", judgeDrift(noise).drifted === false);
+
+  const changed = await compareFrames(base, repainted);
+  check("a repaint moves every pixel", changed.changedRatio === 1);
+  check("...and judges as drifted", judgeDrift(changed).drifted === true);
+
+  // A page that got taller has genuinely changed. Refusing to compare would hide the
+  // finding behind a crash.
+  const resized = await compareFrames(base, taller);
+  check("a size change is reported rather than throwing", resized.resized === true);
+  check("...and is drift on its own", judgeDrift(resized).drifted === true);
+
+  const diffOut = path.join(diffDir, "out.diff.png");
+  await compareFrames(base, repainted, { diffPath: diffOut });
+  check("a diff image is written when asked for", fs.existsSync(diffOut));
+
+  // Either signal alone is enough: a repainted button barely moves the mean, and a
+  // palette shift barely moves the changed-pixel count.
+  check(
+    "a small mean shift alone still counts as drift",
+    judgeDrift({ meanDelta: 0.05, changedRatio: 0, width: 10, height: 10, resized: false }).drifted === true,
+  );
+
+  const bindings = inferBindings([
+    { id: "hook", visual: { captureMethod: "screenshot", url: "https://example.com/docs/start" } },
+    { id: "panel", visual: { captureMethod: "dom-demo" } },
+    { id: "term", visual: { captureMethod: "recording", source: "terminal" } },
+    { id: "noUrl", visual: { captureMethod: "screenshot" } },
+  ]);
+  check("drift bindings are inferred from browser screenshot beats that carry a url", bindings.length === 1 && bindings[0].beatId === "hook");
+  check("...and default to that beat's own capture as the reference", bindings[0].referencePath.includes("hook.png"));
+}
+
+console.log("\n== Part 22: visual regression against a real render ==");
+
+if (fs.existsSync(path.join(tmpRoot, "out", "incremental.mp4"))) {
+  const { runVisualRegression } = require(path.join(distDir, "tools", "visualRegression.js"));
+  const src = path.join("out", "incremental.mp4");
+
+  const first = await runVisualRegression({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    videoPath: src,
+    baselineDir: path.join("out", "baseline"),
+    outDir: path.join("out", "vdiff"),
+  });
+  // A check that fails its own first run, because there is nothing to compare against
+  // yet, is a check people turn off.
+  check("the first run writes a baseline instead of failing", first.baselineCreated === true && first.ok === true);
+  check("...and says so in the comment it would post", first.markdown.includes("baseline created"));
+  check("...and stored one frame per beat", ["one", "two", "three"].every((id) => fs.existsSync(path.join(tmpRoot, "out", "baseline", `${id}.png`))));
+
+  const second = await runVisualRegression({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    videoPath: src,
+    baselineDir: path.join("out", "baseline"),
+    outDir: path.join("out", "vdiff"),
+  });
+  check("an unchanged render reports no visual change", second.ok === true && second.changedBeats.length === 0);
+  check("...and the comment stays short when nothing happened", second.markdown.includes("No visual change"));
+
+  // A hue rotation is a global change: it barely moves the changed-pixel count on a dark
+  // frame but moves every pixel a little, which is exactly the case a pixel-count-only
+  // check would miss.
+  const shifted = path.join("out", "incremental-shifted.mp4");
+  execFileSync(
+    "ffmpeg",
+    ["-nostdin", "-v", "error", "-i", path.join(tmpRoot, src), "-vf", "hue=h=120:s=2", "-c:a", "copy", path.join(tmpRoot, shifted), "-y"],
+    { stdio: "inherit" },
+  );
+  const third = await runVisualRegression({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    videoPath: shifted,
+    baselineDir: path.join("out", "baseline"),
+    outDir: path.join("out", "vdiff"),
+  });
+  check("a recoloured render is caught", third.ok === false && third.changedBeats.length === 3);
+  check("...and the comment names the beats and the numbers", third.markdown.includes("`two`") && third.markdown.includes("%"));
+  check("...and a diff image exists for each", third.beats.every((b) => fs.existsSync(path.join(tmpRoot, b.diffFrame))));
+
+  const accepted = await runVisualRegression({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    videoPath: shifted,
+    baselineDir: path.join("out", "baseline"),
+    outDir: path.join("out", "vdiff"),
+    updateBaseline: true,
+  });
+  check("accepting the change updates the baseline", accepted.baselineUpdated === true);
+  const afterAccept = await runVisualRegression({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    videoPath: shifted,
+    baselineDir: path.join("out", "baseline"),
+    outDir: path.join("out", "vdiff"),
+  });
+  check("...so the next run is clean", afterAccept.ok === true);
+} else {
+  skip("Part 22: visual regression (entire section)", "Part 16 did not produce a video to diff");
+}
+
+console.log("\n== Part 23: docs drift against a real page ==");
+
+if (browserAvailable) {
+  const http = await import("node:http");
+  const { runDocsDrift } = require(path.join(distDir, "tools", "docsDrift.js"));
+  const { runCaptureScreenshot } = require(path.join(distDir, "tools", "captureScreenshot.js"));
+
+  let pageBody = '<h1 style="font:700 48px sans-serif">Install</h1><p style="font:24px sans-serif">npm install the-thing</p>';
+  const driftServer = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(`<!doctype html><html><body style="margin:0;background:#ffffff">${pageBody}</body></html>`);
+  });
+  await new Promise((resolve) => driftServer.listen(0, "127.0.0.1", resolve));
+  const driftUrl = `http://127.0.0.1:${driftServer.address().port}/`;
+  const driftRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-drift-test-"));
+
+  try {
+    // A real manifest, so the bindings can be inferred rather than handed over: the beat
+    // already records the url it was captured from.
+    const driftBeats = {
+      fps: 30,
+      title: "Drift",
+      beats: [
+        {
+          id: "install",
+          start: 0,
+          duration: 90,
+          vo: "The install page, captured straight from the docs.",
+          visual: { captureMethod: "screenshot", url: driftUrl, interactions: [] },
+        },
+      ],
+    };
+    const driftWrite = runWriteBeatsFile({ projectRoot: driftRoot, videoName: "drift", beatsJson: driftBeats });
+    check("the drift fixture passes validate_beats", driftWrite.written === true);
+
+    await runCaptureScreenshot({ projectRoot: driftRoot, beatId: "install", url: driftUrl, viewport: { width: 800, height: 600 } });
+
+    const clean = await runDocsDrift({ projectRoot: driftRoot, videoName: "drift" });
+    check("a page that has not changed reports no drift", clean.ok === true && clean.checked === 1);
+    check("...and says the clip still matches", clean.nextSteps.join(" ").includes("still match"));
+
+    pageBody = '<h1 style="font:700 48px sans-serif">Install</h1><p style="font:24px sans-serif">pnpm add the-thing, the npm route is gone</p><div style="width:600px;height:300px;background:#c0392b"></div>';
+    const drifted = await runDocsDrift({ projectRoot: driftRoot, videoName: "drift" });
+    check("a changed page is caught", drifted.ok === false && drifted.driftedBeats.join(",") === "install");
+    check("...with a diff image showing where", fs.existsSync(path.join(driftRoot, drifted.findings[0].diffPath)));
+    // Knowing which beat is stale is only half of it; the point is that fixing it is now
+    // one capture and one beat's worth of render, not a re-record.
+    check("...and the next steps name the incremental re-render", drifted.nextSteps.join(" ").includes("incremental"));
+  } finally {
+    driftServer.close();
+  }
+} else {
+  skip("Part 23: docs drift (entire section)", "real Chromium is not available in this environment");
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

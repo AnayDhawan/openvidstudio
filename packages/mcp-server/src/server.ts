@@ -2,6 +2,9 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerTools } from "./tools";
 import type { OpenvidstudioConfig } from "./config";
 
+// The non-MCP entry points, for callers with no agent in the loop (CI, cron).
+export * from "./api";
+
 export const SERVER_NAME = "openvidstudio";
 export const SERVER_VERSION = "0.1.0";
 

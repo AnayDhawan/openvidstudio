@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "scripts": {
     "build": "node scripts/copy-template.mjs && node scripts/copy-docs.mjs && tsc",

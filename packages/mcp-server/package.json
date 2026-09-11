@@ -1,7 +1,7 @@
 {
   "name": "@openvidstudio/mcp-server",
   "version": "0.2.0",
-  "description": "MCP server exposing openvidstudio's mechanical pipeline tools: project scaffolding, beats validation, scene stubs, composition stitching, render, QC frame extraction, and zoom-compensated screenshot/screen-recording capture.",
+  "description": "MCP server exposing openvidstudio's mechanical pipeline tools: project scaffolding, beats validation, scene stubs, composition stitching, render, QC frame extraction, and capture driven by @openvidstudio/capture.",
   "license": "Apache-2.0",
   "type": "commonjs",
   "bin": {
@@ -16,6 +16,7 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
+    "@openvidstudio/capture": "workspace:*",
     "playwright": "^1.48.0",
     "sharp": "^0.33.5",
     "zod": "^4.5.4"

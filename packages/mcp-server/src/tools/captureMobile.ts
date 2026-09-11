@@ -12,7 +12,7 @@ import {
   buildSimctlRecordArgs,
   sanitizeDeviceId,
   spawnForDuration,
-} from "../nativeCapture";
+} from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 
 export type MobilePlatform = "android" | "ios-simulator";

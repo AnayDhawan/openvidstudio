@@ -227,21 +227,26 @@ check(
 // Source-level confirmation these two tools use spawn (argv array) and never exec/execSync.
 const renderSrc = fs.readFileSync(path.join(packageRoot, "src", "tools", "renderVideo.ts"), "utf8");
 const qcSrc = fs.readFileSync(path.join(packageRoot, "src", "tools", "qcExtractFrames.ts"), "utf8");
-const utilSrc = fs.readFileSync(path.join(packageRoot, "src", "util.ts"), "utf8");
+// spawnCapture moved to @openvidstudio/capture when the capture engine was split out; the
+// invariant it has to hold is unchanged, so the check follows it to its new home.
+const spawnSrc = fs.readFileSync(
+  path.join(packageRoot, "..", "capture", "src", "process.ts"),
+  "utf8",
+);
 check("renderVideo.ts never calls exec/execSync", !/\bexec(Sync)?\(/.test(renderSrc));
 check("qcExtractFrames.ts never calls exec/execSync", !/\bexec(Sync)?\(/.test(qcSrc));
 // Task 4 (real end-to-end pipeline run) found spawnCapture's old blanket shell:false threw a
 // synchronous EINVAL for npx.cmd on this repo's actual Windows/Node runtime -- Node does not
 // transparently shell out for a .cmd/.bat target the way the old comment here assumed. Fixed
-// by routing exactly that one Windows-shim case through shell:true (util.ts's WINDOWS_SHIM_RE),
+// by routing exactly that one Windows-shim case through shell:true (WINDOWS_SHIM_RE),
 // still always via an argv array, never an interpolated shell string, and still behind the same
 // DANGEROUS_CHARS sanitization every path/id reaching this function already passes through. This
 // check now pins the narrower, actually-correct invariant instead of the always-false claim.
 check(
-  "util.ts's spawnCapture always uses an argv array (never exec/execSync), and only sets shell:true for the win32 .cmd/.bat shim case",
-  /const child = spawn\(command, finalArgs, \{ cwd, shell \}\)/.test(utilSrc) &&
-    /WINDOWS_SHIM_RE\.test\(command\)/.test(utilSrc) &&
-    !/\bexec(Sync)?\(/.test(utilSrc),
+  "@openvidstudio/capture's spawnCapture always uses an argv array (never exec/execSync), and only sets shell:true for the win32 .cmd/.bat shim case",
+  /const child = spawn\(command, finalArgs, \{ cwd, shell \}\)/.test(spawnSrc) &&
+    /WINDOWS_SHIM_RE\.test\(command\)/.test(spawnSrc) &&
+    !/\bexec(Sync)?\(/.test(spawnSrc),
 );
 
 console.log("\n== Part 4: tsc --noEmit against the scaffolded project ==");
@@ -919,7 +924,7 @@ console.log("\n== Part 10b: missing narration is reported, not silent ==");
 console.log("\n== Part 11: non-browser capture -- pure argv builders (no process spawned) ==");
 
 {
-  const native = require(path.join(distDir, "nativeCapture.js"));
+  const native = require(path.join(packageRoot, "..", "capture", "dist", "native.js"));
   const {
     buildDesktopCaptureArgs,
     buildAdbRecordArgs,

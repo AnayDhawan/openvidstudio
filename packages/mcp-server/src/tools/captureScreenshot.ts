@@ -13,7 +13,7 @@ import {
   viewportSchema,
   type Interaction,
   type Viewport,
-} from "../capture";
+} from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 
 export interface CaptureScreenshotInput {

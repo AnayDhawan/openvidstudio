@@ -23,6 +23,7 @@ jobs:
       # surfacing later as a minified React error during a render.
       - run: node scripts/check-version-alignment.mjs
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @openvidstudio/capture build
+      - run: pnpm --filter @openvidstudio/capture typecheck
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck
-      - run: pnpm --filter @openvidstudio/site build

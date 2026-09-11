@@ -1,0 +1,45 @@
+{
+  "name": "@openvidstudio/capture",
+  "version": "0.1.0",
+  "description": "Zoom-compensated browser capture plus desktop, mobile, and terminal recording backends. No Remotion, no React, no video pipeline.",
+  "license": "Apache-2.0",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "playwright": "^1.48.0",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnayDhawan/openvidstudio.git",
+    "directory": "packages/capture"
+  },
+  "homepage": "https://github.com/AnayDhawan/openvidstudio#readme",
+  "bugs": {
+    "url": "https://github.com/AnayDhawan/openvidstudio/issues"
+  },
+  "keywords": [
+    "playwright",
+    "screenshot",
+    "screen-recording",
+    "capture",
+    "ffmpeg",
+    "adb"
+  ]
+}

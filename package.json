@@ -6,5 +6,10 @@
   "workspaces": [
     "packages/*",
     "templates/*"
-  ]
+  ],
+  "scripts": {
+    "build": "pnpm --filter @openvidstudio/capture build && pnpm --filter @openvidstudio/mcp-server build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm --filter @openvidstudio/mcp-server test"
+  }
 }

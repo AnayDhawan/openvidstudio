@@ -7,7 +7,7 @@
  */
 
 import type { z } from "zod";
-import type { interactionSchema } from "./capture";
+import type { interactionSchema } from "@openvidstudio/capture";
 
 export type CaptureMethod = "screenshot" | "recording" | "dom-demo" | "higgsfield" | "existing-asset";
 

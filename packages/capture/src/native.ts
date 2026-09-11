@@ -17,7 +17,7 @@
  */
 
 import { spawn } from "node:child_process";
-import type { SpawnResult } from "./util";
+import type { SpawnResult } from "./process";
 
 export type DesktopPlatform = "win32" | "darwin" | "linux";
 

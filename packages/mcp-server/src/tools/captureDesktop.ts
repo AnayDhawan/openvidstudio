@@ -8,7 +8,7 @@ import {
   sanitizeWindowTitle,
   type DesktopPlatform,
   type Region,
-} from "../nativeCapture";
+} from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 
 export interface CaptureDesktopInput {

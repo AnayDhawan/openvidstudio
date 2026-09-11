@@ -5,14 +5,14 @@
   "private": true,
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
-    "@remotion/cli": "4.0.521",
-    "@remotion/google-fonts": "4.0.521",
-    "@remotion/shapes": "4.0.521",
-    "@remotion/tailwind-v4": "4.0.521",
-    "@remotion/transitions": "4.0.521",
+    "@remotion/cli": "4.0.522",
+    "@remotion/google-fonts": "4.0.522",
+    "@remotion/shapes": "4.0.522",
+    "@remotion/tailwind-v4": "4.0.522",
+    "@remotion/transitions": "4.0.522",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "remotion": "4.0.521",
+    "remotion": "4.0.522",
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {

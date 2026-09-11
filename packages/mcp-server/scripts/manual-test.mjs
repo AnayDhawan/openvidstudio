@@ -1321,6 +1321,118 @@ if (fs.existsSync(tempNodeModules)) {
   skip("Part 16: real incremental render (entire section)", `${tempNodeModules} not present`);
 }
 
+console.log("\n== Part 17: vertical reformat -- manifest-driven crop ==");
+
+{
+  const vert = require(path.join(distDir, "tools", "reformatVertical.js"));
+  const { inferFocus, cropRect, planCrops, buildVerticalFilterGraph, buildReformatArgs, parseProbe } = vert;
+
+  // A terminal is text pinned to the left margin. A centre crop cuts the command in half,
+  // which is the single most visible way automated reframing gets it wrong.
+  check(
+    "a terminal beat crops left",
+    inferFocus({ id: "t", start: 0, duration: 30, visual: { captureMethod: "recording", source: "terminal" } }).focus === "left",
+  );
+  check(
+    "a dom-demo panel crops centre",
+    inferFocus({ id: "d", start: 0, duration: 30, visual: { captureMethod: "dom-demo" } }).focus === "center",
+  );
+  check(
+    "an explicit focus overrides the inference",
+    inferFocus({ id: "x", start: 0, duration: 30, visual: { captureMethod: "dom-demo" }, vertical: { focus: "right" } }).focus === "right",
+  );
+  check(
+    "...and the result says why, so a wrong guess is visible",
+    inferFocus({ id: "t", start: 0, duration: 30, visual: { captureMethod: "recording", source: "terminal" } }).reason.includes("left margin"),
+  );
+
+  const centre = cropRect(1920, 1080, 1080, 1920, "center");
+  check("a 9:16 crop of 1920x1080 is the full height", centre.height === 1080);
+  check("...and 608 wide, the largest 9:16 width that fits", centre.width === 608);
+  check("...and centred horizontally", centre.x === 656);
+  // h264 in yuv420p subsamples chroma 2x2, so an odd crop or offset fails at the encoder
+  // with an error that never mentions the real cause.
+  check(
+    "every crop dimension and offset is even",
+    [centre.x, centre.y, centre.width, centre.height].every((n) => n % 2 === 0),
+  );
+  check("a left focus starts at x=0", cropRect(1920, 1080, 1080, 1920, "left").x === 0);
+  check("a right focus ends at the right edge", cropRect(1920, 1080, 1080, 1920, "right").x === 1312);
+
+  // A phone recording is already portrait: there is nothing to crop away, and the frame
+  // gets fitted and padded instead of stretched.
+  const portrait = cropRect(886, 1920, 1080, 1920, "center");
+  check("a source narrower than the target aspect is not cropped wider than it is", portrait.width === 886);
+
+  const crops = planCrops({
+    beats: [
+      { id: "one", start: 0, duration: 30, visual: { captureMethod: "dom-demo" } },
+      { id: "two", start: 30, duration: 60, visual: { captureMethod: "recording", source: "terminal" } },
+    ],
+    fps: 30,
+    sourceWidth: 1920,
+    sourceHeight: 1080,
+    targetWidth: 1080,
+    targetHeight: 1920,
+  });
+  check("each beat gets its own crop", crops.length === 2 && crops[0].focus === "center" && crops[1].focus === "left");
+  check("...over its own time range", crops[1].startSeconds === 1 && crops[1].endSeconds === 3);
+
+  const graph = buildVerticalFilterGraph(crops, 1080, 1920, true);
+  check("the filtergraph trims per beat", graph.includes("trim=start=1.0000:end=3.0000"));
+  check("...crops per beat", graph.includes("crop=608:1080:0:0") && graph.includes("crop=608:1080:656:0"));
+  check("...pads rather than stretching a portrait source", graph.includes("force_original_aspect_ratio=decrease") && graph.includes("pad=1080:1920"));
+  check("...and concatenates the slices back into one stream", graph.includes("concat=n=2:v=1:a=1"));
+  const silentGraph = buildVerticalFilterGraph(crops, 1080, 1920, false);
+  check("a silent source produces no audio branch", !silentGraph.includes("atrim") && silentGraph.includes("concat=n=2:v=1:a=0"));
+
+  const args = buildReformatArgs("in.mp4", "out.mp4", graph, true);
+  check("the reformat maps the concatenated streams", args.includes("[vout]") && args.includes("[aout]"));
+  check("...and writes a seekable h264 file", args.includes("+faststart") && args.includes("yuv420p"));
+
+  const probed = parseProbe(JSON.stringify({ streams: [{ codec_type: "video", width: 1920, height: 1080 }, { codec_type: "audio" }] }));
+  check("ffprobe json is parsed into dimensions plus an audio flag", probed.width === 1920 && probed.hasAudio === true);
+  let probeRefusal = "";
+  try {
+    parseProbe(JSON.stringify({ streams: [{ codec_type: "audio" }] }));
+  } catch (err) {
+    probeRefusal = err instanceof Error ? err.message : String(err);
+  }
+  check("an input with no video stream is refused rather than reformatted", probeRefusal.includes("no video stream"));
+}
+
+console.log("\n== Part 18: vertical reformat -- real ffmpeg run ==");
+
+if (fs.existsSync(path.join(tmpRoot, "out", "incremental.mp4"))) {
+  const { runReformatVertical } = require(path.join(distDir, "tools", "reformatVertical.js"));
+  const reformatted = await runReformatVertical({
+    projectRoot: tmpRoot,
+    videoName: "inctest",
+    inPath: path.join("out", "incremental.mp4"),
+    outPath: path.join("out", "incremental-vertical.mp4"),
+  });
+  check("the reformat produces a file", fs.existsSync(reformatted.outPath));
+  check("...and reports a crop for every beat", reformatted.beats.length === 3);
+  check("...and read the source dimensions from the file itself", reformatted.sourceWidth === 1920 && reformatted.sourceHeight === 1080);
+
+  try {
+    const out = execFileSync(
+      "ffprobe",
+      ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration", "-of", "csv=p=0", reformatted.outPath],
+      { encoding: "utf8" },
+    );
+    check("the reformatted file is actually 1080x1920", out.includes("1080,1920"));
+    const seconds = Number.parseFloat(out.trim().split("\n").pop().replace(/[,\s]+$/, ""));
+    // The trims have to add back up to the original: a reformat that silently drops the
+    // last beat is the failure mode worth pinning.
+    check("...and the same nine seconds as the source", Math.abs(seconds - 9) < 0.35);
+  } catch (err) {
+    skip("the reformatted file is actually 1080x1920", `ffprobe unavailable: ${err.message}`);
+  }
+} else {
+  skip("Part 18: real vertical reformat (entire section)", "Part 16 did not produce a video to reformat");
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

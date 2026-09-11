@@ -15,6 +15,7 @@ const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "e
 const TRANSITIONS = ["cut", "whip", "fade"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
 const CAPTURE_SOURCES = ["browser", "desktop", "mobile", "terminal"] as const;
+const CROP_FOCUSES = ["left", "center", "right"] as const;
 const MOBILE_DEVICES = ["android", "ios-simulator"] as const;
 /** Android's screenrecord truncates silently past this, so a longer beat is a latent bug. */
 const ANDROID_MAX_SECONDS = 180;
@@ -107,6 +108,36 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
               `${label}: VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
                 `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`,
             );
+          }
+        }
+      }
+    }
+
+    // reformat_vertical's per-beat override. Checked here rather than left to that tool
+    // because a typo in it would otherwise be silent: the reformat would fall back to the
+    // inferred crop and look almost right.
+    const vertical = beat.vertical;
+    if (vertical !== undefined) {
+      if (typeof vertical !== "object" || vertical === null) {
+        errors.push(`${label}: "vertical" must be an object with a focus and/or a crop`);
+      } else {
+        const vert = vertical as Record<string, unknown>;
+        if (
+          vert.focus !== undefined &&
+          (typeof vert.focus !== "string" || !(CROP_FOCUSES as readonly string[]).includes(vert.focus))
+        ) {
+          errors.push(
+            `${label}: vertical.focus must be one of ${CROP_FOCUSES.map((f) => `"${f}"`).join(", ")}`,
+          );
+        }
+        if (vert.crop !== undefined) {
+          const crop = vert.crop as Record<string, unknown> | null;
+          const ok =
+            typeof crop === "object" &&
+            crop !== null &&
+            ["x", "y", "width", "height"].every((k) => typeof crop[k] === "number" && (crop[k] as number) >= 0);
+          if (!ok) {
+            errors.push(`${label}: vertical.crop must be { x, y, width, height } with non-negative numbers`);
           }
         }
       }

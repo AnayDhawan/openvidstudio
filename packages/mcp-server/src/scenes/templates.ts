@@ -23,7 +23,13 @@
  * 2. Real captures get their frame size from the file on disk, not from a guess.
  */
 
-export type SceneKind = "real-screenshot" | "real-recording" | "dom-demo" | "higgsfield-clip";
+export type SceneKind =
+  | "real-screenshot"
+  | "real-recording"
+  | "dom-demo"
+  | "higgsfield-clip"
+  | "terminal-cast"
+  | "existing-asset";
 
 export type TemplateName =
   | "browser-capture"
@@ -35,7 +41,9 @@ export type TemplateName =
   | "code"
   | "comparison"
   | "cta"
-  | "title";
+  | "title"
+  | "terminal-cast"
+  | "existing-asset";
 
 export interface SceneContext {
   beatId: string;
@@ -49,6 +57,18 @@ export interface SceneContext {
   url?: string;
   captureWidth?: number;
   captureHeight?: number;
+  /**
+   * Serialized TermStep[] for the terminal-cast template, built at scaffold time from
+   * the real cast on disk. Inlined rather than fetched at render time for the same
+   * reason browser-capture reads pngSize at scaffold time: the artifact already exists
+   * by then, and a static scene renders deterministically with no delayRender dance.
+   */
+  termSteps?: string;
+  /** Terminal window title, taken from the recorded command. */
+  termTitle?: string;
+  /** For existing-asset: the staticFile-relative path and the mandatory credit. */
+  assetStaticPath?: string;
+  attribution?: string;
 }
 
 /** Content wider or taller than this gets cropped once the camera pushes in. */
@@ -230,6 +250,107 @@ ${SAFE_WRAP(`          <TerminalReplay
               },
             ]}
           />`)}
+    </CinematicScene>
+  );
+};
+`;
+}
+
+/**
+ * Replays a real recorded session captured by capture_terminal.
+ *
+ * The steps are inlined rather than loaded at render time. capture_terminal always runs
+ * before scaffold_scene, so the cast exists on disk by now, and baking it in keeps the
+ * scene a pure function of its props: no fetch, no delayRender, and the same frame
+ * every render. stderr keeps its own colour so a real error in a real run stays legible
+ * as an error rather than blending into the output.
+ */
+function terminalCast(ctx: SceneContext): string {
+  const cap = captionWindow(ctx.durationFrames);
+  return `${HEADER(ctx.beatId, "terminal-cast", ctx.description)}
+//
+// Steps below are the REAL recorded session from public/terminal/${ctx.beatId}.json,
+// with the original inter-chunk timing preserved as pause steps. Re-run
+// capture_terminal and re-scaffold to refresh them; editing them by hand makes the
+// video stop matching the recording.
+
+import React from "react";
+import { CinematicScene, Layer, TerminalReplay, Caption, color, E } from "@openvidstudio/core";
+
+export const ${ctx.componentName}: React.FC = () => {
+  return (
+    <CinematicScene
+${GENTLE_CAMERA(ctx.durationFrames, 1.05, 1.16)}
+      overlay={<Caption text="${esc(ctx.vo).slice(0, 70)}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
+    >
+${SAFE_WRAP(`          <TerminalReplay
+            title="${esc(ctx.termTitle ?? "terminal")}"
+            width={1400}
+            fontSize={26}
+            cps={28}
+            steps={${ctx.termSteps ?? "[]"}}
+          />`)}
+    </CinematicScene>
+  );
+};
+`;
+}
+
+/**
+ * Shows a real asset the project already published, which this pipeline did not capture.
+ *
+ * The credit is rendered for the beat's whole duration, not flashed. validate_beats makes
+ * `attribution` mandatory precisely so this can be on screen; a borrowed frame without a
+ * visible source reads to a viewer as a capture of the running product, which is the one
+ * thing the honesty rules exist to prevent.
+ */
+function existingAsset(ctx: SceneContext): string {
+  const w = ctx.captureWidth ?? 1440;
+  const h = ctx.captureHeight ?? 900;
+  const frameW = Math.min(1500, w);
+  const frameH = Math.round(frameW * (h / w));
+  const cap = captionWindow(ctx.durationFrames);
+  return `${HEADER(ctx.beatId, "existing-asset", ctx.description)}
+//
+// This frame was NOT captured by this pipeline. It is an asset the project already
+// publishes, sized from the real file on disk (${w}x${h}). The credit below is
+// required, not decorative: it is what keeps a borrowed frame honest on screen.
+
+import React from "react";
+import { Img, staticFile } from "remotion";
+import { CinematicScene, Layer, Caption, color, font, radius, E } from "@openvidstudio/core";
+
+const FRAME_W = ${frameW};
+const FRAME_H = ${frameH};
+const LEFT = (1920 - FRAME_W) / 2;
+const TOP = (1080 - FRAME_H) / 2;
+
+export const ${ctx.componentName}: React.FC = () => {
+  return (
+    <CinematicScene
+${GENTLE_CAMERA(ctx.durationFrames, 1.03, 1.12)}
+      overlay={<Caption text="${esc(ctx.vo).slice(0, 70)}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
+    >
+      <Layer depth={0}>
+        <div style={{ position: "absolute", left: LEFT, top: TOP, width: FRAME_W }}>
+          <Img
+            src={staticFile("${esc(ctx.assetStaticPath ?? `images/${ctx.beatId}.png`)}")}
+            style={{ width: FRAME_W, height: FRAME_H, objectFit: "contain", borderRadius: radius.card }}
+          />
+          <div
+            style={{
+              marginTop: 14,
+              fontFamily: font.mono,
+              fontSize: 20,
+              letterSpacing: 0.4,
+              color: color.textSecondary,
+              textAlign: "right",
+            }}
+          >
+            ${esc(ctx.attribution ?? "source not stated")}
+          </div>
+        </div>
+      </Layer>
     </CinematicScene>
   );
 };
@@ -476,6 +597,8 @@ const KEYWORDS: [RegExp, TemplateName][] = [
 export function pickTemplate(kind: SceneKind, description: string): TemplateName {
   if (kind === "real-screenshot") return "browser-capture";
   if (kind === "real-recording" || kind === "higgsfield-clip") return "recording";
+  if (kind === "terminal-cast") return "terminal-cast";
+  if (kind === "existing-asset") return "existing-asset";
   for (const [re, name] of KEYWORDS) {
     if (re.test(description)) return name;
   }
@@ -494,6 +617,10 @@ export function renderTemplate(
       return recording(ctx, kind === "higgsfield-clip");
     case "terminal":
       return terminal(ctx);
+    case "terminal-cast":
+      return terminalCast(ctx);
+    case "existing-asset":
+      return existingAsset(ctx);
     case "split-panel":
       return splitPanel(ctx);
     case "checklist":

@@ -43,7 +43,9 @@ const STAGE_H = 1080;
 
 interface BeatLike {
   id: string;
-  visual?: { captureMethod?: string };
+  visual?: { captureMethod?: string; source?: string; assetPath?: string };
+  artifacts?: { screenshotPath?: string; recordingPath?: string; terminalPath?: string };
+  // (expectedArtifact below resolves these into the one path this beat actually needs.)
 }
 
 /** Every numeric `scale:` in the camera array. */
@@ -60,6 +62,57 @@ function declaredWidths(src: string): number[] {
   for (const m of src.matchAll(/\bFRAME_W\s*=\s*(\d{3,4})\b/g)) out.push(Number(m[1]));
   for (const m of src.matchAll(/\bmaxWidth:\s*(\d{3,4})\b/g)) out.push(Number(m[1]));
   return out;
+}
+
+/**
+ * The one artifact a beat actually needs, plus the command that produces it.
+ *
+ * Returns null for beats that need no capture at all (dom-demo), so the caller does not
+ * have to special-case them. Honours an `artifacts` override, since a beat is allowed to
+ * put its capture somewhere other than the convention path.
+ */
+function expectedArtifact(
+  beat: BeatLike,
+  method: string | undefined,
+  source: string,
+): { rel: string; fix: string } | null {
+  const a = beat.artifacts ?? {};
+
+  if (method === "existing-asset") {
+    const rel = beat.visual?.assetPath;
+    return rel
+      ? { rel, fix: `This beat shows an asset the project already publishes; put the real file at that path.` }
+      : null;
+  }
+
+  if (method === "screenshot") {
+    return {
+      rel: a.screenshotPath ?? `public/images/${beat.id}.png`,
+      fix: "Run capture_screenshot.",
+    };
+  }
+
+  if (method === "recording") {
+    if (source === "terminal") {
+      return {
+        rel: a.terminalPath ?? `public/terminal/${beat.id}.json`,
+        fix: "Run capture_terminal for this beat.",
+      };
+    }
+    const rel = a.recordingPath ?? `public/video/${beat.id}.mp4`;
+    if (source === "desktop") return { rel, fix: "Run capture_desktop for this beat." };
+    if (source === "mobile") return { rel, fix: "Run capture_mobile for this beat." };
+    return { rel, fix: "Run capture_screen_recording." };
+  }
+
+  if (method === "higgsfield") {
+    return {
+      rel: a.recordingPath ?? `public/video/${beat.id}.mp4`,
+      fix: "Run import_higgsfield_clip.",
+    };
+  }
+
+  return null;
 }
 
 export function runValidateScenes(input: ValidateScenesInput): ValidateScenesResult {
@@ -133,28 +186,21 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
     }
 
     // Capture assets the scene references but that are not on disk yet.
+    //
+    // Which artifact a beat needs, and which tool produces it, both depend on the beat's
+    // `source` as well as its captureMethod. Telling someone to run capture_screenshot
+    // for a `source: "desktop"` beat is worse than saying nothing: the suggested command
+    // cannot produce the missing file.
     const method = beat.visual?.captureMethod;
-    if (method === "screenshot") {
-      const asset = path.join(projectRoot, "public", "images", `${beat.id}.png`);
-      if (!fs.existsSync(asset)) {
-        findings.push({
-          beatId: beat.id,
-          scene: `${component}.tsx`,
-          severity: "error",
-          message: `References public/images/${beat.id}.png, which does not exist. Run capture_screenshot.`,
-        });
-      }
-    }
-    if (method === "recording" || method === "higgsfield") {
-      const asset = path.join(projectRoot, "public", "video", `${beat.id}.mp4`);
-      if (!fs.existsSync(asset)) {
-        findings.push({
-          beatId: beat.id,
-          scene: `${component}.tsx`,
-          severity: "error",
-          message: `References public/video/${beat.id}.mp4, which does not exist.`,
-        });
-      }
+    const source = beat.visual?.source ?? "browser";
+    const expected = expectedArtifact(beat, method, source);
+    if (expected && !fs.existsSync(path.join(projectRoot, expected.rel))) {
+      findings.push({
+        beatId: beat.id,
+        scene: `${component}.tsx`,
+        severity: "error",
+        message: `References ${expected.rel}, which does not exist. ${expected.fix}`,
+      });
     }
 
     if (/TODO/.test(src)) {

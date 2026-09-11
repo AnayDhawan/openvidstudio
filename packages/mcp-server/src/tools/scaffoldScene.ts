@@ -12,6 +12,7 @@ import {
   type TemplateName,
 } from "../scenes/templates";
 import { pngSize } from "../scenes/pngSize";
+import { castToSteps, serializeSteps, type TerminalCastLike } from "../scenes/castToSteps";
 
 export type { SceneKind };
 
@@ -39,7 +40,15 @@ interface BeatLike {
   id: string;
   duration?: number;
   vo?: string;
-  visual?: { description?: string; url?: string; captureMethod?: string };
+  visual?: {
+    description?: string;
+    url?: string;
+    captureMethod?: string;
+    source?: string;
+    assetPath?: string;
+    attribution?: string;
+  };
+  artifacts?: { terminalPath?: string };
 }
 
 /**
@@ -106,6 +115,54 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
     }
   }
 
+  if (input.kind === "terminal-cast") {
+    const castRel = beat?.artifacts?.terminalPath ?? path.join("public", "terminal", `${beatId}.json`);
+    const castPath = path.join(projectRoot, castRel);
+    try {
+      const cast = JSON.parse(fs.readFileSync(castPath, "utf8")) as TerminalCastLike;
+      const steps = castToSteps(cast);
+      ctx.termSteps = serializeSteps(steps);
+      ctx.termTitle = (cast.command ?? "terminal").split(/\s+/)[0] ?? "terminal";
+      notes.push(
+        `Replaying the real recorded session: ${steps.length} steps from ${castRel}, original timing preserved.`,
+      );
+    } catch {
+      // A scene that renders an empty terminal is worse than useless, it looks like a
+      // successful render of nothing, so say plainly which tool produces the missing file.
+      ctx.termSteps = "[]";
+      notes.push(
+        `No terminal cast found at ${castRel}, so the scene has no steps and will render an empty ` +
+          `terminal. Run capture_terminal for this beat, then re-run scaffold_scene with overwrite: true.`,
+      );
+    }
+  }
+
+  if (input.kind === "existing-asset") {
+    const assetRel = beat?.visual?.assetPath;
+    if (!assetRel) {
+      notes.push(
+        `This beat has no visual.assetPath, so the scene falls back to public/images/${beatId}.png. ` +
+          `An existing-asset beat should name the real file it is showing.`,
+      );
+    }
+    const rel = assetRel ?? path.join("public", "images", `${beatId}.png`);
+    // staticFile() resolves against public/, so the prefix has to come off.
+    ctx.assetStaticPath = rel.replace(/\\/g, "/").replace(/^public\//, "");
+    ctx.attribution = beat?.visual?.attribution;
+    const size = pngSize(path.join(projectRoot, rel));
+    if (size) {
+      ctx.captureWidth = size.width;
+      ctx.captureHeight = size.height;
+      notes.push(`Frame sized from the real asset: ${size.width}x${size.height}.`);
+    }
+    if (!ctx.attribution) {
+      notes.push(
+        `This beat has no visual.attribution, so the credit reads "source not stated". validate_beats ` +
+          `requires attribution; fix the beat rather than the scene.`,
+      );
+    }
+  }
+
   const template = input.template ?? pickTemplate(input.kind, description);
   const source = renderTemplate(template, ctx, input.kind);
 
@@ -142,7 +199,7 @@ export function registerScaffoldScene(server: McpServer): void {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
         beatId: z.string().min(1),
-        kind: z.enum(["real-screenshot", "real-recording", "dom-demo", "higgsfield-clip"]),
+        kind: z.enum(["real-screenshot", "real-recording", "dom-demo", "higgsfield-clip", "terminal-cast", "existing-asset"]),
         overwrite: z.boolean().optional(),
         template: z
           .enum([
@@ -156,6 +213,8 @@ export function registerScaffoldScene(server: McpServer): void {
             "comparison",
             "cta",
             "title",
+            "terminal-cast",
+            "existing-asset",
           ])
           .optional(),
       },

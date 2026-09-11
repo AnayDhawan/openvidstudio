@@ -50,3 +50,6 @@ pnpm-debug.log*
 # Env
 .env
 .env.local
+
+# Scratch state written by local tooling, not part of the project.
+.freebuff/

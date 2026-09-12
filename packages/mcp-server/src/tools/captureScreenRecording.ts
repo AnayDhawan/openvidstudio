@@ -8,6 +8,7 @@ import {
   DEFAULT_DEVICE_SCALE,
   DEFAULT_VIEWPORT,
   screenEncodeArgs,
+  settlePage,
   detectAndCompensateZoom,
   interactionSchema,
   launchChromium,
@@ -25,6 +26,24 @@ export interface CaptureScreenRecordingInput {
   viewport?: Viewport;
   /** Pixels recorded per CSS pixel. Defaults to 2, same reasoning as capture_screenshot. */
   deviceScaleFactor?: number;
+  /**
+   * Settle the page before the recording starts. Defaults to true.
+   *
+   * Without it the first second of every clip is the page still assembling itself: fonts
+   * swapping, images popping in, the hero animating from nothing. That is the second a
+   * viewer decides whether the product looks finished.
+   */
+  settle?: boolean;
+  settleTimeoutMs?: number;
+  /**
+   * Replay rate. 2 is twice as fast, 0.5 is half speed. Defaults to 1.
+   *
+   * Real interaction is often too slow to watch and occasionally too fast to follow. A
+   * form being filled wants speeding up; a state change worth noticing wants slowing down.
+   * Applied at transcode with setpts, so the recording itself is untouched and the beat's
+   * duration in the manifest is the duration after the change.
+   */
+  speed?: number;
   interactions?: Interaction[];
   outPath?: string;
 }
@@ -43,15 +62,20 @@ export interface CaptureScreenRecordingResult {
  * transcoded to mp4 (h264/yuv420p, +faststart) -- same spawn/argv-array
  * discipline as render_video/qc_extract_frames.
  */
-export function buildFfmpegTranscodeArgs(inputPath: string, outputPath: string): string[] {
+export function buildFfmpegTranscodeArgs(inputPath: string, outputPath: string, speed = 1): string[] {
   // Screen-tuned, not film-tuned. x264's defaults (crf 23, film psy settings) spend bitrate
   // on grain this footage does not have and starve the hard edges it is entirely made of,
   // which reads as ringing around text. Shared with the native backends so every capture in
   // the pipeline is encoded identically.
+  // setpts scales presentation timestamps: 2x faster means each frame is shown at half its
+  // original time, so the multiplier is the reciprocal. Captures are silent, so there is no
+  // audio track to keep in step.
+  const retime = speed !== 1 ? ["-vf", `setpts=${(1 / speed).toFixed(6)}*PTS`] : [];
   return [
     "-nostdin",
     "-i",
     inputPath,
+    ...retime,
     ...screenEncodeArgs(),
     "-pix_fmt",
     "yuv420p",
@@ -91,6 +115,8 @@ export async function runCaptureScreenRecording(
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const target = input.viewport ?? DEFAULT_VIEWPORT;
   const deviceScaleFactor = input.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE;
+  const speed = input.speed ?? 1;
+  if (!(speed > 0)) throw new Error("speed must be greater than 0. 2 is twice as fast, 0.5 is half speed.");
 
   const outPathRel = input.outPath ?? path.join("public", "video", `${beatId}.mp4`);
   sanitizeRelativeOutPath(projectRoot, outPathRel, "outPath");
@@ -140,6 +166,10 @@ export async function runCaptureScreenRecording(
       try {
         const page = await recordContext.newPage();
         await page.goto(input.url, { waitUntil: "load" });
+        // Settle BEFORE the interactions, not after: the recording is already running, so
+        // this is what keeps the opening seconds of the clip from being the page still
+        // loading rather than the product working.
+        if (input.settle !== false) await settlePage(page, { timeoutMs: input.settleTimeoutMs });
         await replayInteractions(page, input.interactions);
         const video = page.video();
         if (!video) {
@@ -157,7 +187,7 @@ export async function runCaptureScreenRecording(
       fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
       const transcodeResult = await spawnCapture(
         "ffmpeg",
-        buildFfmpegTranscodeArgs(webmPath, outPathAbs),
+        buildFfmpegTranscodeArgs(webmPath, outPathAbs, speed),
         projectRoot,
       );
       if (transcodeResult.code !== 0) {
@@ -207,6 +237,16 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         beatId: z.string().min(1),
         url: z.string().min(1),
         viewport: viewportSchema.optional(),
+        settle: z
+          .boolean()
+          .optional()
+          .describe("Settle the page before recording starts, so the opening second is the product working rather than the page still loading. Defaults to true."),
+        settleTimeoutMs: z.number().int().positive().optional(),
+        speed: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Replay rate. 2 is twice as fast, 0.5 is half speed. Defaults to 1. Use it when real interaction is too slow to watch or too quick to follow."),
         deviceScaleFactor: z
           .number()
           .positive()

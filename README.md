@@ -14,7 +14,12 @@ Playwright, that an AI coding agent drives through MCP tools to produce
 launch and demo videos for a project directly from its repo and running app.
 Nothing on screen is generated: a real browser drives your real product and
 every frame is a capture of it, with an optional Higgsfield AI b-roll tier
-for atmosphere shots that can't be captured from a live screen. `packages/` and `templates/` each get their own README as
+for atmosphere shots that can't be captured from a live screen.
+
+> **Requirement:** your frontend has to load and work in Chrome under
+> Playwright. Playwright-driven capture is what this tool is for and what it is
+> tuned around. If a human can click through your app in Chrome, this can film
+> it; if not, it cannot. `packages/` and `templates/` each get their own README as
 they're built out. The site is live at
 [openvidstudio.vercel.app](https://openvidstudio.vercel.app).
 

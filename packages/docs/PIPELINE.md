@@ -1,5 +1,11 @@
 # PIPELINE.md: how a new video gets made
 
+> **Before anything else:** this pipeline films a web frontend that loads and works in
+> Chrome under Playwright. That is the requirement the whole chain rests on. The desktop,
+> mobile and terminal backends exist for beats a browser genuinely cannot reach, and they
+> are deliberately secondary: the browser path is the one that is tuned and tested end to
+> end.
+
 Brief in, video out. Follow in order; `STYLE.md`'s rules are binding at
 every step. Beat authoring itself is driven by `PLANNING.md`'s guided
 intake process: read that first, before hand-writing a `beats.json`.

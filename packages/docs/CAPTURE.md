@@ -1,5 +1,10 @@
 # CAPTURE.md: real screenshots and recordings for scenes
 
+**This document is the browser path, which is the path this project exists for.**
+Everything here assumes your frontend loads and works in Chrome under Playwright. That is
+a hard requirement, not a preference: if a human cannot click through your app in Chrome,
+none of what follows applies and no setting changes it.
+
 Binding for every scene with `captureMethod: "screenshot"` or
 `"recording"` (see `PLANNING.md`). This protocol exists because
 uncorrected captures reliably come out small, soft, or bleed in content
@@ -20,6 +25,40 @@ fully correctable, not something to route around by guessing crop
 coordinates.
 
 **Never trust a resize at face value. Always verify.**
+
+## The other three things that make a capture wrong
+
+Zoom is the subtlest of four, not the only one. The rest are handled automatically and are
+documented here so that a capture that still looks wrong can be debugged against the real
+mechanism rather than guessed at.
+
+**Resolution.** A capture is placed on a 1920x1080 stage and then a camera pushes into it,
+so a capture taken at 1x is upscaled twice over and arrives soft. Captures default to
+`deviceScaleFactor: 2`. Measured on a real page at the size the renderer shows it, 2x keeps
+about 1.6x the fine detail. Pass 1 only when you want the old behaviour.
+
+**Timing.** A page is not finished when `load` fires. Webfonts are still swapping, images
+are still decoding, and any entrance transition is mid-flight. Capturing then produces a
+frame no real user ever sees: fallback type, a blank hero, a panel frozen at 40% opacity
+halfway through its fade. Every capture therefore settles first, waiting on
+`document.fonts.ready`, on images to decode, and on every running animation to reach its
+end.
+
+There is one trap in that last wait and it is worth knowing about: **an infinite animation
+never finishes.** A looping spinner, a pulsing dot, a permanently drifting gradient all
+return a `finished` promise that never resolves. Waiting on them indiscriminately would
+burn the full timeout on most real pages. They are filtered out by their computed timing,
+which is also correct on the merits, because a loop has no settled state to wait for. The
+result reports how many were skipped, so a page that seems to settle instantly can be
+checked rather than trusted.
+
+Use the `settle` interaction to force the same wait mid-script, after a click that opens a
+modal or triggers a route change. Use `settle: false` on the tool only when catching a page
+mid-transition is the actual point of the beat.
+
+**Encoding.** x264's defaults are tuned for camera footage: grain, motion, no hard edges. A
+screen is the opposite, and the default crf 23 puts visible ringing around text. Every
+capture path in this project encodes with crf 18 and `-tune stillimage` instead.
 
 ## Protocol
 

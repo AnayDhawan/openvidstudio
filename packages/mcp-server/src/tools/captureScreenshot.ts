@@ -11,8 +11,10 @@ import {
   interactionSchema,
   launchChromium,
   replayInteractions,
+  settlePage,
   viewportSchema,
   type Interaction,
+  type SettleReport,
   type Viewport,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
@@ -25,6 +27,14 @@ export interface CaptureScreenshotInput {
   interactions?: Interaction[];
   cropSelector?: string;
   outPath?: string;
+  /**
+   * Wait for fonts, images and finite animations before the shot. Defaults to true.
+   *
+   * Off only when the point of the beat is to catch a page mid-transition deliberately.
+   */
+  settle?: boolean;
+  /** How long to allow for that, in ms. Defaults to 5000. */
+  settleTimeoutMs?: number;
   /**
    * Pixels captured per CSS pixel. Defaults to 2; 1 restores the old behaviour.
    *
@@ -44,6 +54,8 @@ export interface CaptureScreenshotResult {
   pixelHeight: number;
   deviceScaleFactor: number;
   zoom: number;
+  /** What the pre-capture wait actually waited for. Absent when settling was disabled. */
+  settle?: SettleReport;
 }
 
 export interface CropRect {
@@ -112,6 +124,12 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
 
       await replayInteractions(page, input.interactions);
 
+      // Nothing is captured until the page has finished becoming itself: webfonts swapped
+      // in, images decoded, entrance transitions driven to their end. Capturing before that
+      // produces a frame no real user ever sees, which is the opposite of the point.
+      const settleReport =
+        input.settle === false ? null : await settlePage(page, { timeoutMs: input.settleTimeoutMs });
+
       // Full-viewport screenshot, no fullPage, no element target: CAPTURE.md explains why
       // element-scoped locator().screenshot() is wrong (it re-measures/auto-scrolls at shot
       // time, independent of what was measured a moment earlier). Buffered in memory; only
@@ -143,7 +161,16 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
       fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
       fs.writeFileSync(outPathAbs, finalBuffer);
 
-      return { outPath: outPathAbs, width, height, pixelWidth, pixelHeight, deviceScaleFactor, zoom };
+      return {
+        outPath: outPathAbs,
+        width,
+        height,
+        pixelWidth,
+        pixelHeight,
+        deviceScaleFactor,
+        zoom,
+        ...(settleReport ? { settle: settleReport } : {}),
+      };
     } finally {
       await context.close();
     }
@@ -181,6 +208,11 @@ export function registerCaptureScreenshot(server: McpServer): void {
         interactions: z.array(interactionSchema).optional(),
         cropSelector: z.string().optional(),
         outPath: z.string().optional(),
+        settle: z
+          .boolean()
+          .optional()
+          .describe("Wait for fonts, images and finite animations before the shot. Defaults to true. Turn it off only to catch a page mid-transition on purpose."),
+        settleTimeoutMs: z.number().int().positive().optional(),
         deviceScaleFactor: z
           .number()
           .positive()

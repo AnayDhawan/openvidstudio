@@ -1,5 +1,6 @@
 import type { Browser, Page } from "playwright";
 import { chromium } from "playwright";
+import { settlePage } from "./settle";
 import { z } from "zod";
 
 /**
@@ -44,7 +45,8 @@ export type Interaction =
   | { type: "select"; selector: string; value: string }
   | { type: "hover"; selector: string }
   | { type: "scroll"; selector?: string; x?: number; y?: number }
-  | { type: "wait"; ms?: number; selector?: string };
+  | { type: "wait"; ms?: number; selector?: string }
+  | { type: "settle"; ms?: number };
 
 export const interactionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("click"), selector: z.string().min(1) }),
@@ -58,6 +60,10 @@ export const interactionSchema = z.discriminatedUnion("type", [
     y: z.number().optional(),
   }),
   z.object({ type: z.literal("wait"), ms: z.number().optional(), selector: z.string().optional() }),
+  // Not a timed guess. "settle" drives whatever the previous step started (a modal
+  // transition, a route change, a lazily loaded image) to completion before the next step
+  // runs, which is what stops a capture landing halfway through a fade.
+  z.object({ type: z.literal("settle"), ms: z.number().optional() }),
 ]);
 
 /**
@@ -101,6 +107,9 @@ export async function replayInteractions(page: Page, interactions: Interaction[]
         } else {
           await page.waitForTimeout(interaction.ms ?? 500);
         }
+        break;
+      case "settle":
+        await settlePage(page, { timeoutMs: interaction.ms });
         break;
     }
   }

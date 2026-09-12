@@ -53,6 +53,15 @@ one pass of its literal questions.
 Run this once per feature/claim the video will make. It's meant to be
 followed mechanically, not judged holistically.
 
+**Step 0, asked once for the whole video, not per feature: does the product's frontend load
+and work in Chrome under Playwright?** If yes, the tree below applies and the browser path
+is the default for everything it can reach. If no, this tool is the wrong tool and the
+honest answer is to say so rather than routing every beat to `dom-demo`, which produces a
+video of drawings for a product whose pitch is that nothing on screen is drawn. The desktop,
+mobile and terminal sources exist for individual beats a browser cannot reach inside an
+otherwise browser-driven video, not as a way to film a product that has no web frontend at
+all.
+
 1. Does this claim describe real, working functionality in a running
    instance of the product right now (not "will do," not roadmap, not
    something a real screenshot would contradict)?
@@ -69,7 +78,16 @@ followed mechanically, not judged holistically.
    running product on screen, within v1's fixed full-viewport scope (no
    post-hoc DOM-rect cropping of a moving recording, see `PIPELINE.md`)?
    - Yes: `captureMethod: "recording"`. Capture per `CAPTURE.md`'s
-     recording section.
+     recording section. Two judgement calls belong to you here, and the
+     tool will not make them for you. **Speed:** real interaction is often
+     too slow to watch (a form being filled, a long scroll) and
+     occasionally too quick to follow (a state flip, a toast). Pass
+     `speed` on the capture, above 1 to compress dead time and below 1
+     when the thing worth seeing happens in three frames. **Settling:**
+     captures wait for fonts, images and finite animations by default, so
+     a clip opens on the product working rather than on the page still
+     assembling itself. Turn that off only when catching a page
+     mid-transition is the actual point of the beat.
    - No, the motion needed isn't something the product's own UI can
      produce at all (an atmosphere shot, a desk/hands shot, an abstract
      visual metaphor with no real UI in it): go to step 4, but check

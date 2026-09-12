@@ -48,7 +48,7 @@ codec from the output extension, no new flag needed).
 **The fastest path, and the one with the sharpest tradeoff.** `STYLE.md`/
 `PIPELINE.md`'s QC checklist requires camera motion on every scene (min: subtle
 push-in) and there is currently only one scene template for a captured
-recording (`recording`, `PIPELINE.md` §2's camera-over-video pattern) — there is
+recording (`recording`, `PIPELINE.md` §2's camera-over-video pattern): there is
 no zero-motion "just play the file" template today, and adding one is a real
 scene-template change, not a preset recipe, so it's out of scope here. What
 "skip Remotion animation entirely" means in practice for this preset: **one
@@ -62,7 +62,7 @@ in via the beat's own `vo`/on-screen text, nothing else.
 **Answers to PLANNING.md's intake, pre-decided:**
 - Beat count: 1 (occasionally 2, for a hard cut between two separate flows).
 - captureMethod: always `recording`. No `screenshot`, no `dom-demo`, no
-  `higgsfield` — this preset exists specifically for "I have a real flow to
+  `higgsfield`. This preset exists specifically for "I have a real flow to
   show and don't want to plan beats," so if any part of it needs a constructed
   panel, this isn't the right preset for that part.
 - Target length: as long as the real interaction actually takes, capped by

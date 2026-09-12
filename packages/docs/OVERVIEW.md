@@ -8,6 +8,26 @@ MCP tools by whatever AI coding agent you're already using (Claude Code,
 Cursor, ChatGPT, or anything else that speaks MCP). There's no separate app
 to open, no timeline editor, no manual keyframing.
 
+## What this needs from your product
+
+**Your frontend has to load and work in Chrome, driven by Playwright.** That is the whole
+requirement, and it is a real one rather than a formality. If a human can open your app in
+Chrome and click through it, this can film it. If they cannot, this cannot, and no option
+changes that.
+
+Concretely, it works on a web app you can reach at a URL: a dev server on localhost, a
+staging deployment, a production site. It does not work on something that only runs behind
+a login you cannot script, only renders in a native shell, or only exists as a design file.
+
+Everything else in this project is downstream of that one capability. The camera work, the
+narration, the render cache and the other renderers all operate on frames a real browser
+produced, so a browser that cannot reach your product is the end of the line.
+
+There are backends for a desktop window, a phone screen and a terminal, and they are useful
+for the beats a browser genuinely cannot reach. They are not the point of the tool and they
+are not held to the same standard: the browser path is the one that is measured, tuned and
+tested end to end on every commit.
+
 ## The core idea
 
 Launch and demo videos for software usually mean one of two compromises:

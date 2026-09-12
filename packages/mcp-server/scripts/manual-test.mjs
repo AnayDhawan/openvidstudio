@@ -2173,6 +2173,78 @@ console.log("\n== Part 31: capture and render quality ==");
   check("...and a 1x crop is unchanged from before", meta1x.width === 200 && meta1x.height === 150);
 }
 
+console.log("\n== Part 32: settling, so nothing is captured half-finished ==");
+
+{
+  const { buildFfmpegTranscodeArgs } = require(path.join(distDir, "tools", "captureScreenRecording.js"));
+
+  // setpts scales presentation timestamps, so the multiplier is the reciprocal of the rate.
+  check("2x speed halves each frame's presentation time", buildFfmpegTranscodeArgs("i.webm", "o.mp4", 2).join(" ").includes("setpts=0.500000*PTS"));
+  check("half speed doubles it", buildFfmpegTranscodeArgs("i.webm", "o.mp4", 0.5).join(" ").includes("setpts=2.000000*PTS"));
+  check("1x adds no filter at all", !buildFfmpegTranscodeArgs("i.webm", "o.mp4", 1).join(" ").includes("setpts"));
+}
+
+if (browserAvailable) {
+  const http = await import("node:http");
+  const { runCaptureScreenshot } = require(path.join(distDir, "tools", "captureScreenshot.js"));
+  const sharp = require("sharp");
+
+  // A 1500ms entrance transition and an infinite spinner on the same page. The transition is
+  // the thing to wait for; the spinner is the trap, because its `finished` promise never
+  // resolves and waiting on it would burn the whole timeout on every capture.
+  const settleHtml = `<!doctype html><html><head><style>
+    body{margin:0;background:#fff;font:48px system-ui}
+    #panel{opacity:0;transform:translateY(60px);animation:in 1500ms ease-out forwards}
+    @keyframes in{to{opacity:1;transform:none}}
+    #spin{width:40px;height:40px;border:6px solid #ccc;border-top-color:#333;border-radius:50%;animation:spin 800ms linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style></head><body><div id=spin></div><div id=panel>PANEL</div></body></html>`;
+
+  const settleServer = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(settleHtml);
+  });
+  await new Promise((resolve) => settleServer.listen(0, "127.0.0.1", resolve));
+  const settleUrl = `http://127.0.0.1:${settleServer.address().port}/`;
+  const settleRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-settle-"));
+
+  try {
+    const on = await runCaptureScreenshot({
+      projectRoot: settleRoot, beatId: "on", url: settleUrl,
+      viewport: { width: 900, height: 400 }, deviceScaleFactor: 1,
+    });
+    check("settling reports that it finished", on.settle.settled === true);
+    check("...having waited for the 1500ms transition", on.settle.waitedMs >= 1400);
+    // The whole point of the infinite filter: without it this capture would have taken the
+    // full 5s timeout and still reported unsettled.
+    check("...and identified the infinite spinner rather than waiting on it", on.settle.loopingAnimations === 1);
+    check("...and did not blow the timeout doing so", on.settle.waitedMs < 4000);
+    check("...with fonts and images accounted for", on.settle.fontsReady === true && on.settle.imagesReady === true);
+
+    const off = await runCaptureScreenshot({
+      projectRoot: settleRoot, beatId: "off", url: settleUrl,
+      viewport: { width: 900, height: 400 }, deviceScaleFactor: 1, settle: false,
+    });
+    check("settling can be turned off deliberately", off.settle === undefined);
+
+    // The real difference: settled catches the panel landed, unsettled catches it mid-fade.
+    // Measured as ink on the page, since a faded panel is nearly white.
+    const ink = async (file) => {
+      const { data } = await sharp(file).greyscale().raw().toBuffer({ resolveWithObject: true });
+      let dark = 0;
+      for (let i = 0; i < data.length; i++) if (data[i] < 128) dark++;
+      return dark;
+    };
+    const inkOn = await ink(on.outPath);
+    const inkOff = await ink(off.outPath);
+    check(`the settled capture has the panel fully painted (${inkOn} dark px vs ${inkOff})`, inkOn > inkOff * 1.5);
+  } finally {
+    settleServer.close();
+  }
+} else {
+  skip("Part 32: real settling E2E", "real Chromium is not available in this environment");
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

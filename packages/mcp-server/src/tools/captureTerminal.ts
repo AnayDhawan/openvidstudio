@@ -45,6 +45,8 @@ export interface CaptureTerminalInput {
   timeoutSeconds?: number;
   outPath?: string;
   mode?: "auto" | "pty" | "pipe";
+  /** Record only the first N characters of output, and mark the cast truncated. */
+  maxOutputChars?: number;
 }
 
 export interface CaptureTerminalResult {
@@ -83,6 +85,7 @@ export async function runCaptureTerminal(input: CaptureTerminalInput): Promise<C
     rows: input.rows,
     timeoutMs: input.timeoutSeconds === undefined ? undefined : input.timeoutSeconds * 1000,
     mode: input.mode,
+    maxOutputChars: input.maxOutputChars,
   });
 
   fs.writeFileSync(outPathAbs, JSON.stringify(cast, null, 2) + "\n", "utf8");
@@ -125,7 +128,10 @@ export function registerCaptureTerminal(server: McpServer): void {
         "real pty, so the program keeps its colour and cursor addressing and a full-screen TUI records " +
         "faithfully; otherwise it falls back to piped stdout/stderr, which needs no native build but makes most " +
         "CLIs disable colour. The mode used is returned and stored in the cast. Output is capped at 20k events " +
-        "and 4MB and reports `truncated` rather than exhausting memory on a runaway process.",
+        "and 4MB and reports `truncated` rather than exhausting memory on a runaway process. Pass "
+        + "maxOutputChars to bound it deliberately: a command whose real output runs to six figures "
+        + "produces a cast nothing can replay inside a beat, and cutting it at capture time keeps the "
+        + "cast and the video the same thing, which trimming the file afterwards would not.",
       inputSchema: {
         projectRoot: z.string().optional(),
         beatId: z.string().min(1),
@@ -137,6 +143,15 @@ export function registerCaptureTerminal(server: McpServer): void {
         rows: z.number().int().positive().optional(),
         timeoutSeconds: z.number().positive().optional(),
         outPath: z.string().optional(),
+        maxOutputChars: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Record only the first N characters of output and mark the cast truncated. Use it when a command's "
+              + "output is far larger than a beat can replay: the first screenful is what a demo shows anyway.",
+          ),
         mode: z
           .enum(["auto", "pty", "pipe"])
           .optional()

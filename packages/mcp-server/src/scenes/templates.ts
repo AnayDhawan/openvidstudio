@@ -110,6 +110,29 @@ function esc(s: string): string {
 }
 
 /** Caption timing: in after the opening settle, out before the cut. */
+/**
+ * The caption line for a beat, taken from its narration.
+ *
+ * A caption is not the whole VO line: it is the phrase a viewer reads while hearing it,
+ * and a long sentence does not fit on one line at 30px. The old rule was a hard
+ * `slice(0, 70)`, which cut mid-word and put "This is their real installer, rec" on screen.
+ *
+ * So: prefer the first complete sentence when there is one short enough, otherwise cut at
+ * the last word boundary that fits. Either way the line on screen is a whole thought, and
+ * the rest of the sentence is still spoken.
+ */
+export function captionLine(vo: string, max = 82): string {
+  const text = vo.trim();
+  if (text.length <= max) return text;
+
+  const firstStop = text.search(/[.!?](\s|$)/);
+  if (firstStop > 0 && firstStop + 1 <= max) return text.slice(0, firstStop + 1);
+
+  const cut = text.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).replace(/[,;:]$/, "");
+}
+
 function captionWindow(frames: number): { at: number; out: number } {
   return { at: Math.round(frames * 0.18), out: Math.max(24, Math.round(frames * 0.82)) };
 }
@@ -120,8 +143,23 @@ function browserCapture(ctx: SceneContext): string {
   const w = ctx.captureWidth ?? 1440;
   const h = ctx.captureHeight ?? 900;
   // BrowserFrame adds a chrome bar above the page.
-  const frameW = Math.min(1600, w + 80);
+  //
+  // 1200 rather than 1600: the frame has to leave the camera somewhere to go. A 1440x900
+  // capture at the old cap produced a 1520x1006 frame, which very nearly fills the
+  // 1920x1080 stage, and the camera then pushed to 1.78 anyway. That crops the page at the
+  // frame edge with no error at render time, which is precisely what validate_scenes
+  // exists to catch, so scaffold_scene was generating scenes its own sibling tool rejected
+  // on the single commonest path there is (CAPTURE.md's own default viewport).
+  const frameW = Math.min(1200, w + 80);
   const frameH = Math.round(frameW * (h / w)) + 56;
+
+  // Camera derived from the frame rather than hardcoded. The push-in can only go as far as
+  // the point where the frame still fits inside the visible box, on both axes: the visible
+  // stage is 1920/scale by 1080/scale, so the binding limit is whichever runs out first.
+  const floor2 = (n: number) => Math.floor(n * 100) / 100;
+  const maxScale = Math.min(1.78, floor2(1920 / frameW), floor2(1080 / frameH));
+  const startScale = Math.max(1.02, floor2(maxScale - 0.24));
+  const midScale = floor2((startScale + maxScale) / 2);
   const mid = Math.round(ctx.durationFrames * 0.55);
   const cap = captionWindow(ctx.durationFrames);
   return `${HEADER(ctx.beatId, "browser-capture", ctx.description)}
@@ -142,11 +180,11 @@ export const ${ctx.componentName}: React.FC = () => {
   return (
     <CinematicScene
       camera={[
-        { frame: 0, x: 960, y: 470, scale: 1.35, rotZ: -0.5 },
-        { frame: ${mid}, x: 960, y: 560, scale: 1.62, rotZ: 0.4, easing: E.cinematic },
-        { frame: ${ctx.durationFrames}, x: 985, y: 620, scale: 1.78, rotZ: 0.8, easing: E.drift },
+        { frame: 0, x: 960, y: 470, scale: ${startScale}, rotZ: -0.5 },
+        { frame: ${mid}, x: 960, y: 560, scale: ${midScale}, rotZ: 0.4, easing: E.cinematic },
+        { frame: ${ctx.durationFrames}, x: 985, y: 620, scale: ${maxScale}, rotZ: 0.8, easing: E.drift },
       ]}
-      overlay={<Caption text="${esc(ctx.vo).slice(0, 70)}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
+      overlay={<Caption text="${esc(captionLine(ctx.vo))}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
     >
       <Layer depth={0}>
         <div style={{ position: "absolute", left: LEFT, top: TOP }}>
@@ -187,7 +225,7 @@ export const ${ctx.componentName}: React.FC = () => {
         { frame: 0, x: 960, y: 520, scale: 1.28, rotZ: 0.4 },
         { frame: ${ctx.durationFrames}, x: 960, y: 560, scale: 1.5, rotZ: -0.3, easing: E.drift },
       ]}
-      overlay={<Caption text="${esc(ctx.vo).slice(0, 70)}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
+      overlay={<Caption text="${esc(captionLine(ctx.vo))}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
     >
       <Layer depth={0}>
         <OffthreadVideo
@@ -281,13 +319,13 @@ export const ${ctx.componentName}: React.FC = () => {
   return (
     <CinematicScene
 ${GENTLE_CAMERA(ctx.durationFrames, 1.05, 1.16)}
-      overlay={<Caption text="${esc(ctx.vo).slice(0, 70)}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
+      overlay={<Caption text="${esc(captionLine(ctx.vo))}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
     >
 ${SAFE_WRAP(`          <TerminalReplay
             title="${esc(ctx.termTitle ?? "terminal")}"
-            width={1400}
-            fontSize={26}
-            cps={28}
+            width={1560}
+            fontSize={30}
+            cps={34}
             steps={${ctx.termSteps ?? "[]"}}
           />`)}
     </CinematicScene>
@@ -329,7 +367,7 @@ export const ${ctx.componentName}: React.FC = () => {
   return (
     <CinematicScene
 ${GENTLE_CAMERA(ctx.durationFrames, 1.03, 1.12)}
-      overlay={<Caption text="${esc(ctx.vo).slice(0, 70)}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
+      overlay={<Caption text="${esc(captionLine(ctx.vo))}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
     >
       <Layer depth={0}>
         <div style={{ position: "absolute", left: LEFT, top: TOP, width: FRAME_W }}>

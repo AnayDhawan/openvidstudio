@@ -2014,6 +2014,99 @@ if (browserAvailable) {
   skip("Part 28: release diff (entire section)", "real Chromium is not available in this environment");
 }
 
+console.log("\n== Part 29: scene templates, from a real production run ==");
+
+{
+  const tpl = require(path.join(distDir, "scenes", "templates.js"));
+  const { captionLine, renderTemplate } = tpl;
+
+  // A hard slice(0, 70) put "This is their real installer, rec" on screen in a real video.
+  check(
+    "a caption prefers the first whole sentence when the line is too long for one",
+    captionLine(
+      "A terminal is not a web page either. This is their real installer, recorded as text rather than pixels.",
+    ) === "A terminal is not a web page either.",
+  );
+  // 79 characters: it fits, so it is not cut at all. The rule is "cut well when you must",
+  // not "always cut".
+  check(
+    "a line that fits is left whole",
+    captionLine("Omarchy is a Linux distribution. No localhost, no browser, nothing to point at.") ===
+      "Omarchy is a Linux distribution. No localhost, no browser, nothing to point at.",
+  );
+  check("a short line is left alone", captionLine("Short enough already.") === "Short enough already.");
+  const long = "Forty thousand stars read live from the GitHub API during this particular recording session";
+  const noStop = captionLine(long);
+  check("a long line with no sentence break is cut", noStop.length <= 82 && noStop.length < long.length);
+  check("...at a word boundary, never mid-word", long.startsWith(noStop) && !long.slice(noStop.length).startsWith("x"));
+  check("...and the cut lands on a space in the original", long[noStop.length] === " ");
+
+  // The browser template sized the frame to nearly fill the stage and then pushed the
+  // camera to 1.78 anyway, so validate_scenes rejected what scaffold_scene had just
+  // written. A 1440x900 capture is CAPTURE.md's own default viewport, which made this the
+  // commonest path through the tool rather than an edge case.
+  const src = renderTemplate("browser-capture", {
+    beatId: "shot",
+    componentName: "Shot",
+    vo: "A line of narration for this beat.",
+    durationFrames: 150,
+    captureWidth: 1440,
+    captureHeight: 900,
+    url: "https://example.com",
+  }, "real-screenshot");
+  const frameW = Number(/const FRAME_W = (\d+)/.exec(src)[1]);
+  const frameH = Number(/const FRAME_H = (\d+)/.exec(src)[1]);
+  const scales = [...src.matchAll(/scale: ([\d.]+)/g)].map((m) => Number(m[1]));
+  const maxScale = Math.max(...scales);
+  check("the browser template still pushes in", scales.length >= 2 && maxScale > Math.min(...scales));
+  check("...but never past the point where the frame gets cropped", frameW <= 1920 / maxScale && frameH <= 1080 / maxScale);
+
+  // Same check against a capture wide enough that the old fixed 1.78 was fine, so the fix
+  // did not just clamp every scene to a near-static camera.
+  const small = renderTemplate("browser-capture", {
+    beatId: "shot",
+    componentName: "Shot",
+    vo: "A line of narration for this beat.",
+    durationFrames: 150,
+    captureWidth: 800,
+    captureHeight: 600,
+    url: "https://example.com",
+  }, "real-screenshot");
+  const smallScales = [...small.matchAll(/scale: ([\d.]+)/g)].map((m) => Number(m[1]));
+  check("a small capture still gets a real push-in", Math.max(...smallScales) >= 1.3);
+}
+
+console.log("\n== Part 30: capture_terminal bounds an unshowable output ==");
+
+{
+  const { recordTerminal } = require(path.join(packageRoot, "..", "capture", "dist", "terminal.js"));
+
+  // The real case: fetching one project's installer returned 169,000 characters, which at
+  // any watchable typing speed is over an hour of screen time for a seven second beat.
+  const bounded = await recordTerminal({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write('x'.repeat(50000));"],
+    cwd: packageRoot,
+    mode: "pipe",
+    maxOutputChars: 900,
+  });
+  const text = bounded.cast.events.map(([, , t]) => t).join("");
+  check("output is cut at the bound", bounded.truncated === true);
+  check("...close to the bound, not a whole chunk past it", text.length < 1100);
+  // Cutting mid-chunk matters: a single write can be the entire file, so dropping the
+  // chunk (what the memory cap does) would record nothing at all here.
+  check("...and what was kept is real output, not an empty cast", text.startsWith("xxxx"));
+  check("...with the truncation visible on screen", text.includes("truncated"));
+
+  const unbounded = await recordTerminal({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write('hello');"],
+    cwd: packageRoot,
+    mode: "pipe",
+  });
+  check("no bound means no change in behaviour", unbounded.truncated === false);
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

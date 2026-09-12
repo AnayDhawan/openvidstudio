@@ -55,6 +55,18 @@ export interface RecordTerminalOptions {
   timeoutMs?: number;
   /** "auto" uses a pty when node-pty is installed. "pipe" never does. "pty" fails if it is not. */
   mode?: "auto" | "pty" | "pipe";
+  /**
+   * Stop recording after this many characters of output, and say so in the cast.
+   *
+   * The memory caps below are a safety net against a runaway process; this is a different
+   * thing, and a real one. A command whose output is genuinely enormous produces a cast
+   * nothing can replay: fetching one real installer for a demo returned 169,000 characters,
+   * which at any watchable typing speed is over an hour of screen time for a seven second
+   * beat. The first screenful is what a demo shows anyway, so bound it deliberately and
+   * mark the cast truncated rather than recording an unusable one or trimming it by hand
+   * afterwards, which would make the video stop matching the recording.
+   */
+  maxOutputChars?: number;
 }
 
 export interface RecordTerminalResult {
@@ -107,16 +119,33 @@ class CastRecorder {
   readonly events: TerminalEvent[] = [];
   truncated = false;
   private totalBytes = 0;
+  private totalChars = 0;
   private readonly started = Date.now();
+
+  constructor(private readonly maxChars?: number) {}
 
   record(stream: "o" | "e", text: string): void {
     if (this.truncated) return;
     this.totalBytes += Buffer.byteLength(text);
+
+    // A deliberate character bound cuts mid-chunk, because a chunk can itself be the whole
+    // file. The memory caps below drop the chunk instead, since by then the goal is only to
+    // stop growing.
+    if (this.maxChars !== undefined && this.totalChars + text.length > this.maxChars) {
+      const room = Math.max(0, this.maxChars - this.totalChars);
+      if (room > 0) this.events.push([this.elapsed(), stream, text.slice(0, room)]);
+      this.totalChars = this.maxChars;
+      this.truncated = true;
+      this.events.push([this.elapsed(), "e", "\n[openvidstudio: output truncated]\n"]);
+      return;
+    }
+
     if (this.events.length >= MAX_EVENTS || this.totalBytes > MAX_TOTAL_BYTES) {
       this.truncated = true;
       this.events.push([this.elapsed(), "e", "\n[openvidstudio: output truncated]\n"]);
       return;
     }
+    this.totalChars += text.length;
     this.events.push([this.elapsed(), stream, text]);
   }
 
@@ -158,7 +187,7 @@ async function recordWithPty(
   rows: number,
   timeoutMs: number,
 ): Promise<{ recorder: CastRecorder; exitCode: number | null }> {
-  const recorder = new CastRecorder();
+  const recorder = new CastRecorder(opts.maxOutputChars);
   const child = pty.spawn(opts.command, opts.args ?? [], {
     name: "xterm-256color",
     cols,
@@ -204,7 +233,7 @@ async function recordWithPipes(
   rows: number,
   timeoutMs: number,
 ): Promise<{ recorder: CastRecorder; exitCode: number | null }> {
-  const recorder = new CastRecorder();
+  const recorder = new CastRecorder(opts.maxOutputChars);
   // shell:false with an argv array, same discipline as every other spawn in this package:
   // `command` and `args` come from a beats.json a human approved, but they are still not
   // concatenated into a command line.

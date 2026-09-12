@@ -5,7 +5,9 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, spawnCapture } from "../util";
 import {
+  DEFAULT_DEVICE_SCALE,
   DEFAULT_VIEWPORT,
+  screenEncodeArgs,
   detectAndCompensateZoom,
   interactionSchema,
   launchChromium,
@@ -21,6 +23,8 @@ export interface CaptureScreenRecordingInput {
   beatId: string;
   url: string;
   viewport?: Viewport;
+  /** Pixels recorded per CSS pixel. Defaults to 2, same reasoning as capture_screenshot. */
+  deviceScaleFactor?: number;
   interactions?: Interaction[];
   outPath?: string;
 }
@@ -40,7 +44,22 @@ export interface CaptureScreenRecordingResult {
  * discipline as render_video/qc_extract_frames.
  */
 export function buildFfmpegTranscodeArgs(inputPath: string, outputPath: string): string[] {
-  return ["-nostdin", "-i", inputPath, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", outputPath, "-y"];
+  // Screen-tuned, not film-tuned. x264's defaults (crf 23, film psy settings) spend bitrate
+  // on grain this footage does not have and starve the hard edges it is entirely made of,
+  // which reads as ringing around text. Shared with the native backends so every capture in
+  // the pipeline is encoded identically.
+  return [
+    "-nostdin",
+    "-i",
+    inputPath,
+    ...screenEncodeArgs(),
+    "-pix_fmt",
+    "yuv420p",
+    "-movflags",
+    "+faststart",
+    outputPath,
+    "-y",
+  ];
 }
 
 /** Pure argv builder for the best-effort ffprobe duration lookup. */
@@ -71,6 +90,7 @@ export async function runCaptureScreenRecording(
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const target = input.viewport ?? DEFAULT_VIEWPORT;
+  const deviceScaleFactor = input.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE;
 
   const outPathRel = input.outPath ?? path.join("public", "video", `${beatId}.mp4`);
   sanitizeRelativeOutPath(projectRoot, outPathRel, "outPath");
@@ -102,9 +122,20 @@ export async function runCaptureScreenRecording(
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-capture-"));
     let webmPath: string;
     try {
+      // recordVideo.size is in real pixels while the viewport is in CSS pixels, so the
+      // recording size has to be scaled by hand. Leaving it at the CSS size would record a
+      // 2x page into a 1x film, throwing the extra resolution away at the exact point it
+      // was supposed to be captured.
       const recordContext = await browser.newContext({
         viewport: compensatedViewport,
-        recordVideo: { dir: tmpDir, size: compensatedViewport },
+        deviceScaleFactor,
+        recordVideo: {
+          dir: tmpDir,
+          size: {
+            width: Math.round(compensatedViewport.width * deviceScaleFactor),
+            height: Math.round(compensatedViewport.height * deviceScaleFactor),
+          },
+        },
       });
       try {
         const page = await recordContext.newPage();
@@ -176,6 +207,11 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         beatId: z.string().min(1),
         url: z.string().min(1),
         viewport: viewportSchema.optional(),
+        deviceScaleFactor: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Pixels recorded per CSS pixel. Defaults to 2, which keeps the footage sharp once the camera pushes in."),
         interactions: z.array(interactionSchema).optional(),
         outPath: z.string().optional(),
       },

@@ -96,6 +96,13 @@ export function buildRenderCommand(
     // Half resolution and a fast x264 preset. Enough to judge framing, motion and
     // timing; not enough to judge final text crispness.
     args.push("--scale=0.5", "--crf=32", "--x264-preset=veryfast");
+  } else {
+    // Remotion serialises every frame before encoding it, and its default for that step is
+    // JPEG at quality 80. On camera footage nobody would notice; on a demo video, which is
+    // text and flat UI and hard edges, it is a visible loss applied to every single frame
+    // before x264 ever sees it. PNG is lossless and costs render time, which is the right
+    // trade for the one pass whose output ships.
+    args.push("--image-format=png", "--crf=16");
   }
   if (opts.concurrency && opts.concurrency > 0) {
     args.push(`--concurrency=${Math.floor(opts.concurrency)}`);

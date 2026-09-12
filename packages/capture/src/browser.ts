@@ -17,6 +17,22 @@ export interface Viewport {
 /** CAPTURE.md's worked example. */
 export const DEFAULT_VIEWPORT: Viewport = { width: 1600, height: 1000 };
 
+/**
+ * Capture at twice the CSS resolution by default.
+ *
+ * This is the single biggest quality lever in the pipeline and it used to be missing.
+ * A capture taken at 1x is exactly as many pixels as the viewport, and the video then
+ * puts it on a 1920x1080 stage and pushes a camera into it. Every one of those steps
+ * is an upscale, so a 1440x900 capture shown at a 1.33 camera scale is being asked for
+ * roughly 1.8x the pixels it has, and the result is the soft, slightly smeared text
+ * that makes a demo look cheap.
+ *
+ * At 2x there are pixels to spare for both the stage and the push-in, so the frame stays
+ * sharp all the way through. The cost is memory and file size during capture, which is
+ * the right trade for an asset that gets rendered once and watched many times.
+ */
+export const DEFAULT_DEVICE_SCALE = 2;
+
 export const viewportSchema = z.object({
   width: z.number().int().positive(),
   height: z.number().int().positive(),

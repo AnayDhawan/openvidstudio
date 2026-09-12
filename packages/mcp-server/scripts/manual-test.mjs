@@ -460,10 +460,17 @@ const sharp = require(path.join(packageRoot, "node_modules", "sharp"));
 const { buildFfmpegTranscodeArgs, buildFfprobeDurationArgs } = require(
   path.join(distDir, "tools", "captureScreenRecording.js"),
 );
+// The encode is now screen-tuned rather than x264-default: crf 18 and -tune stillimage
+// instead of the film-oriented defaults that put ringing around text. Pinned as the exact
+// argv so a future change to the profile is a deliberate edit here, not a silent drift.
 check(
   "buildFfmpegTranscodeArgs returns the expected argv array",
   JSON.stringify(buildFfmpegTranscodeArgs("in.webm", "out.mp4")) ===
-    JSON.stringify(["-nostdin", "-i", "in.webm", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "out.mp4", "-y"]),
+    JSON.stringify([
+      "-nostdin", "-i", "in.webm",
+      "-c:v", "libx264", "-crf", "18", "-preset", "slow", "-tune", "stillimage",
+      "-pix_fmt", "yuv420p", "-movflags", "+faststart", "out.mp4", "-y",
+    ]),
 );
 check(
   "buildFfprobeDurationArgs returns the expected argv array",
@@ -547,7 +554,19 @@ if (browserAvailable) {
       shotResult.width === 400 && shotResult.height === 300,
     );
     const shotMeta = await sharp(shotResult.outPath).metadata();
-    check("capture_screenshot's saved PNG's real pixel dimensions match the reported {width,height}", shotMeta.width === shotResult.width && shotMeta.height === shotResult.height);
+    // width/height are CSS pixels (what the layout was measured in, and what the scene
+    // templates lay out against); the file on disk carries deviceScaleFactor times that,
+    // which is the whole point of capturing at 2x.
+    check(
+      "capture_screenshot's saved PNG is deviceScaleFactor times the reported CSS size",
+      shotMeta.width === shotResult.width * shotResult.deviceScaleFactor &&
+        shotMeta.height === shotResult.height * shotResult.deviceScaleFactor,
+    );
+    check(
+      "...and the reported pixel dimensions match the file exactly",
+      shotMeta.width === shotResult.pixelWidth && shotMeta.height === shotResult.pixelHeight,
+    );
+    check("...at 2x by default", shotResult.deviceScaleFactor === 2);
 
     const ffmpegAvailable = (() => {
       try {
@@ -2105,6 +2124,53 @@ console.log("\n== Part 30: capture_terminal bounds an unshowable output ==");
     mode: "pipe",
   });
   check("no bound means no change in behaviour", unbounded.truncated === false);
+}
+
+console.log("\n== Part 31: capture and render quality ==");
+
+{
+  const cap = require(path.join(packageRoot, "..", "capture", "dist", "browser.js"));
+  const native = require(path.join(packageRoot, "..", "capture", "dist", "native.js"));
+  const { buildFfmpegTranscodeArgs } = require(path.join(distDir, "tools", "captureScreenRecording.js"));
+  const { buildRenderCommand } = require(path.join(distDir, "tools", "renderVideo.js"));
+  const { cropAndUpscale } = require(path.join(distDir, "tools", "captureScreenshot.js"));
+  const sharp = require("sharp");
+
+  // The video puts a capture on a 1920x1080 stage and then pushes a camera into it, so a
+  // 1x capture is upscaled twice over. Measured on a real page, 2x retains ~1.6x the fine
+  // detail at the size the renderer actually shows it.
+  check("captures default to 2x the CSS resolution", cap.DEFAULT_DEVICE_SCALE === 2);
+
+  const enc = native.screenEncodeArgs().join(" ");
+  // x264's defaults are tuned for camera footage: grain, motion, no hard edges. A screen is
+  // the opposite, and the default crf 23 puts visible ringing around text.
+  check("captures encode with a screen-tuned x264 profile", enc.includes("-crf 18") && enc.includes("-tune stillimage"));
+  check("...and the webm transcode uses the identical profile", buildFfmpegTranscodeArgs("i.webm", "o.mp4").join(" ").includes(enc));
+
+  const win = native.buildDesktopCaptureArgs({ platform: "win32", framerate: 30, durationSeconds: 5, outPath: "o.mp4" });
+  check("a desktop capture draws the cursor by default", win.join(" ").includes("-draw_mouse 1"));
+  check("...and can be told not to", native.buildDesktopCaptureArgs({ platform: "win32", framerate: 30, durationSeconds: 5, outPath: "o.mp4", drawMouse: false }).join(" ").includes("-draw_mouse 0"));
+  // gdigrab drops frames at the start of a capture without a queue, which lands as a
+  // stutter in the first second, the second a demo can least afford to lose.
+  check("...and buffers the input queue so the first second is not dropped", win.includes("-thread_queue_size"));
+  check("a linux capture draws the cursor too", native.buildDesktopCaptureArgs({ platform: "linux", framerate: 30, durationSeconds: 5, outPath: "o.mp4" }).join(" ").includes("-draw_mouse 1"));
+  check("a macOS capture captures the cursor too", native.buildDesktopCaptureArgs({ platform: "darwin", framerate: 30, durationSeconds: 5, outPath: "o.mp4" }).join(" ").includes("-capture_cursor 1"));
+
+  // Remotion serialises every frame before encoding, defaulting to JPEG at quality 80. On
+  // text and flat UI that is a visible loss applied to every frame before x264 sees it.
+  const finalArgs = buildRenderCommand("Demo", "out.mp4").args.join(" ");
+  check("a final render serialises frames losslessly", finalArgs.includes("--image-format=png"));
+  check("...and a draft does not pay for that", !buildRenderCommand("Demo", "out.mp4", { draft: true }).args.join(" ").includes("--image-format=png"));
+
+  // The crop path has to keep the extra pixels a 2x capture was taken for. Cropping at full
+  // resolution and then resizing back to CSS size would throw away exactly what was gained.
+  const src = await sharp({ create: { width: 800, height: 600, channels: 3, background: { r: 10, g: 20, b: 30 } } }).png().toBuffer();
+  const cropped = await cropAndUpscale(src, { x: 100, y: 100, width: 200, height: 150 }, 2, 2);
+  const meta = await sharp(cropped).metadata();
+  check("a 2x crop keeps its resolution instead of being resampled back down", meta.width === 400 && meta.height === 300);
+  const cropped1x = await cropAndUpscale(src, { x: 100, y: 100, width: 200, height: 150 }, 1, 1);
+  const meta1x = await sharp(cropped1x).metadata();
+  check("...and a 1x crop is unchanged from before", meta1x.width === 200 && meta1x.height === 150);
 }
 
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);

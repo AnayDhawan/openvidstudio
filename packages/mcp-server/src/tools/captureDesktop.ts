@@ -28,6 +28,8 @@ export interface CaptureDesktopInput {
   displayServer?: LinuxDisplayServer;
   /** Wayland only: a PipeWire node id from a portal session the caller already negotiated. */
   pipewireNode?: number;
+  /** Draw the pointer into the recording. Defaults to true. */
+  drawMouse?: boolean;
 }
 
 export type CaptureBackend = "gdigrab" | "avfoundation" | "x11grab" | "pipewiregrab";
@@ -163,6 +165,7 @@ export async function runCaptureDesktop(input: CaptureDesktopInput): Promise<Cap
 
   const args = buildDesktopCaptureArgs({
     platform,
+    drawMouse: input.drawMouse,
     displayServer,
     pipewire: input.pipewireNode !== undefined ? { node: input.pipewireNode } : undefined,
     window,
@@ -221,6 +224,10 @@ export function registerCaptureDesktop(server: McpServer): void {
         durationSeconds: z.number().positive(),
         framerate: z.number().int().positive().optional(),
         outPath: z.string().optional(),
+        drawMouse: z
+          .boolean()
+          .optional()
+          .describe("Draw the pointer into the recording. Defaults to true; a desktop demo with no cursor is hard to follow."),
         displayServer: z
           .enum(["x11", "wayland"])
           .optional()

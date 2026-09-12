@@ -48,6 +48,13 @@ export interface PipewireOptions {
 export interface DesktopCaptureOptions {
   /** Omit to capture the whole display. On win32 this maps to gdigrab's `title=` selector. */
   window?: string;
+  /**
+   * Draw the pointer into the recording. Defaults to true.
+   *
+   * A desktop demo with no cursor is hard to follow: the viewer cannot tell what is being
+   * clicked, and the UI appears to react to nothing.
+   */
+  drawMouse?: boolean;
   region?: Region;
   /** Display index. win32 ignores this (gdigrab captures the virtual desktop). */
   display?: number;
@@ -97,7 +104,7 @@ export function hasFilter(ffmpegFiltersOutput: string, name: string): boolean {
  */
 export function buildPipewireCaptureArgs(opts: DesktopCaptureOptions): string[] {
   const { framerate, durationSeconds, outPath, region, pipewire } = opts;
-  const filterOpts = [`draw_mouse=${pipewire?.drawMouse === false ? 0 : 1}`];
+  const filterOpts = [`draw_mouse=${pipewire?.drawMouse === false || opts.drawMouse === false ? 0 : 1}`];
   if (pipewire?.fd !== undefined) filterOpts.push(`fd=${pipewire.fd}`);
   if (pipewire?.node !== undefined) filterOpts.push(`node=${pipewire.node}`);
 
@@ -123,10 +130,26 @@ export function buildPipewireCaptureArgs(opts: DesktopCaptureOptions): string[] 
  */
 const EVEN_DIMENSIONS = "scale=trunc(iw/2)*2:trunc(ih/2)*2";
 
+/**
+ * Screen content is not film, and encoding it like film is why screen recordings look bad.
+ *
+ * x264's defaults (crf 23, preset medium, the film-tuned psy settings) are built for
+ * camera footage: grain, motion, no hard edges. A screen is the opposite. It is mostly
+ * static, mostly flat colour, and entirely made of hard edges and small text, which is
+ * exactly what those defaults spend their bitrate anywhere but on. The result is ringing
+ * around glyphs and mush in the flat areas.
+ *
+ * crf 18 is visually lossless for this material, `slow` buys real compression efficiency
+ * on content that is cheap to encode anyway, and `stillimage` turns down the psychovisual
+ * optimisations that assume film grain. yuv444p would be better still for text, but
+ * Remotion's decoder and most browsers want 4:2:0, so that is not on the table.
+ */
+const SCREEN_ENCODE = ["-c:v", "libx264", "-crf", "18", "-preset", "slow", "-tune", "stillimage"];
+
 /** Shared output encoding: matches buildFfmpegTranscodeArgs so Remotion's OffthreadVideo can seek the result. */
 function encodeArgs(outPath: string, extraFilter?: string): string[] {
   const filter = extraFilter ? `${extraFilter},${EVEN_DIMENSIONS}` : EVEN_DIMENSIONS;
-  return ["-vf", filter, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart", outPath, "-y"];
+  return ["-vf", filter, ...SCREEN_ENCODE, "-pix_fmt", "yuv420p", "-movflags", "+faststart", outPath, "-y"];
 }
 
 /**
@@ -141,8 +164,13 @@ export function buildDesktopCaptureArgs(opts: DesktopCaptureOptions): string[] {
   const { platform, framerate, durationSeconds, outPath, region, window, display = 0 } = opts;
   const args = ["-nostdin", "-f"];
 
+  const drawMouse = opts.drawMouse === false ? "0" : "1";
+
   if (platform === "win32") {
-    args.push("gdigrab", "-framerate", String(framerate));
+    // A generous input queue before the device: gdigrab drops frames at the start of a
+    // capture otherwise, which shows up as a visible stutter in the first second, which is
+    // the second a demo can least afford to lose.
+    args.push("gdigrab", "-thread_queue_size", "512", "-draw_mouse", drawMouse, "-framerate", String(framerate));
     if (region && !window) {
       args.push(
         "-offset_x", String(region.x),
@@ -160,7 +188,19 @@ export function buildDesktopCaptureArgs(opts: DesktopCaptureOptions): string[] {
   }
 
   if (platform === "darwin") {
-    args.push("avfoundation", "-framerate", String(framerate), "-i", `${display}:none`, "-t", String(durationSeconds));
+    args.push(
+      "avfoundation",
+      "-thread_queue_size",
+      "512",
+      "-capture_cursor",
+      drawMouse,
+      "-framerate",
+      String(framerate),
+      "-i",
+      `${display}:none`,
+      "-t",
+      String(durationSeconds),
+    );
     return args.concat(
       encodeArgs(outPath, region ? `crop=${region.width}:${region.height}:${region.x}:${region.y}` : undefined),
     );
@@ -168,7 +208,7 @@ export function buildDesktopCaptureArgs(opts: DesktopCaptureOptions): string[] {
 
   if ((opts.displayServer ?? "x11") === "wayland") return buildPipewireCaptureArgs(opts);
 
-  args.push("x11grab", "-framerate", String(framerate));
+  args.push("x11grab", "-thread_queue_size", "512", "-draw_mouse", drawMouse, "-framerate", String(framerate));
   if (region) {
     args.push("-video_size", `${region.width}x${region.height}`, "-i", `:${display}.0+${region.x},${region.y}`);
   } else {
@@ -210,6 +250,11 @@ export function buildSimctlRecordArgs(outPath: string, udid = "booted"): string[
  */
 export function buildRemuxArgs(inputPath: string, outputPath: string): string[] {
   return ["-nostdin", "-i", inputPath, "-c", "copy", "-movflags", "+faststart", outputPath, "-y"];
+}
+
+/** The screen-tuned encode, exported so every other ffmpeg path in the pipeline matches it. */
+export function screenEncodeArgs(): string[] {
+  return [...SCREEN_ENCODE];
 }
 
 /**

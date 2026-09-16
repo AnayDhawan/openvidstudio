@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
 import { loadConfig } from "../config";
+import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 
 /**
@@ -46,6 +47,47 @@ interface BeatLike {
   visual?: { captureMethod?: string; source?: string; assetPath?: string };
   artifacts?: { screenshotPath?: string; recordingPath?: string; terminalPath?: string };
   // (expectedArtifact below resolves these into the one path this beat actually needs.)
+}
+
+/**
+ * Reads the `<asset>.settle.json` sidecar capture_screenshot/capture_screen_recording
+ * write next to their output (see @openvidstudio/capture's writeSettleSidecar) and
+ * reports a timed-out settle loudly: that beat's frame may have been caught mid-
+ * transition, and the only previous evidence was a field in a tool result nobody kept.
+ * No sidecar (settle:false, or an asset captured before this existed) is not an error,
+ * it just means nothing to check.
+ */
+function checkSettleSidecar(
+  assetPathAbs: string,
+  beatId: string,
+  component: string,
+  findings: SceneFinding[],
+): void {
+  const sidecarPath = settleSidecarPath(assetPathAbs);
+  if (!fs.existsSync(sidecarPath)) return;
+
+  let report: SettleReport;
+  try {
+    report = JSON.parse(fs.readFileSync(sidecarPath, "utf8")) as SettleReport;
+  } catch {
+    return; // Malformed sidecar: not this tool's job to diagnose, skip rather than crash validation.
+  }
+
+  if (!report.settled) {
+    const pending: string[] = [];
+    if (!report.fontsReady) pending.push("fonts");
+    if (!report.imagesReady) pending.push("images");
+    if (report.pendingAnimations > 0) pending.push(`${report.pendingAnimations} animation(s)`);
+    findings.push({
+      beatId,
+      scene: `${component}.tsx`,
+      severity: "error",
+      message:
+        `Capture timed out waiting to settle after ${report.waitedMs}ms, still pending: ` +
+        `${pending.join(", ") || "unknown"}. The frame may be caught mid-transition. Re-run the capture tool ` +
+        `with a larger settleTimeoutMs, or fix whatever on the page never finishes loading/animating.`,
+    });
+  }
 }
 
 /** Every numeric `scale:` in the camera array. */
@@ -194,13 +236,20 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
     const method = beat.visual?.captureMethod;
     const source = beat.visual?.source ?? "browser";
     const expected = expectedArtifact(beat, method, source);
-    if (expected && !fs.existsSync(path.join(projectRoot, expected.rel))) {
-      findings.push({
-        beatId: beat.id,
-        scene: `${component}.tsx`,
-        severity: "error",
-        message: `References ${expected.rel}, which does not exist. ${expected.fix}`,
-      });
+    if (expected) {
+      const assetPathAbs = path.join(projectRoot, expected.rel);
+      if (!fs.existsSync(assetPathAbs)) {
+        findings.push({
+          beatId: beat.id,
+          scene: `${component}.tsx`,
+          severity: "error",
+          message: `References ${expected.rel}, which does not exist. ${expected.fix}`,
+        });
+      } else if (source === "browser" && (method === "screenshot" || method === "recording")) {
+        // Settling is a browser-capture concept: capture_desktop/mobile/terminal have no
+        // settlePage call and never write this sidecar.
+        checkSettleSidecar(assetPathAbs, beat.id, component, findings);
+      }
     }
 
     if (/TODO/.test(src)) {
@@ -242,7 +291,9 @@ export function registerValidateScenes(server: McpServer): void {
         "output. Chiefly framing: content is laid out on a 1920x1080 stage but the camera shows stage " +
         "divided by scale, so a panel wider than the visible box is cropped at the frame edge with no " +
         "warning at all. Also flags scenes whose camera never moves (a static frame fails STYLE.md), " +
-        "capture assets a scene references that are not on disk, leftover TODOs, and beats with no " +
+        "capture assets a scene references that are not on disk, a browser capture whose settle sidecar " +
+        "reports a timeout (the frame may be mid-transition -- see capture_screenshot/" +
+        "capture_screen_recording's settle/settleTimeoutMs), leftover TODOs, and beats with no " +
         "narration file, since stitch_composition skips those silently and the beat renders mute. Run it " +
         "after scaffolding and again before rendering.",
       inputSchema: {

@@ -13,6 +13,7 @@ import {
   replayInteractions,
   settlePage,
   viewportSchema,
+  writeSettleSidecar,
   type Interaction,
   type SettleReport,
   type Viewport,
@@ -160,6 +161,10 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
 
       fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
       fs.writeFileSync(outPathAbs, finalBuffer);
+      // Otherwise settleReport is only a field in this return value, which nothing
+      // downstream keeps: a beat that timed out mid-transition has no evidence of it left
+      // once this call returns. The sidecar is what validate_scenes checks statically.
+      if (settleReport) writeSettleSidecar(outPathAbs, settleReport);
 
       return {
         outPath: outPathAbs,
@@ -190,14 +195,23 @@ export function registerCaptureScreenshot(server: McpServer): void {
         "measure window.innerWidth/innerHeight against the requested viewport to detect a per-origin zoom " +
         "desync (never hardcoded, measured live every call), re-request a compensated viewport and re-verify " +
         "once if needed (a real 'protocol didn't converge' case fails with a structured error rather than " +
-        "proceeding with a wrong crop), replay `interactions` in array order, take a full-viewport screenshot " +
-        "(scale: css, no fullPage, no element target -- see CAPTURE.md for why element-scoped screenshots " +
-        "bleed in neighboring content), then if `cropSelector` is given, measure its DOM rect and run a " +
-        "TypeScript/sharp port of vidstudio/scripts/crop-shot.py (crop at rect*zoom, upscale back to rect's " +
-        "own size with Lanczos) so the result is pixel-accurate with no bleed. Default outPath is " +
+        "proceeding with a wrong crop), replay `interactions` in array order, wait for the page to settle " +
+        "(fonts swapped, images decoded, finite animations landed -- an infinite one like a spinner is " +
+        "excluded from the wait rather than polled forever; `settle` default true, `settleTimeoutMs` default " +
+        "5000, settle:false skips it and catches the page mid-transition on purpose; the report is both " +
+        "returned and written to `<outPath>.settle.json` so validate_scenes can flag a timed-out beat " +
+        "without a browser), then take a full-viewport screenshot at `deviceScaleFactor` pixels per CSS " +
+        "pixel (default 2, since the video pushes a camera into this image and a 1x capture would be " +
+        "upscaled twice over; scale: device, not css, no fullPage, no element target -- see CAPTURE.md for " +
+        "why element-scoped screenshots bleed in neighboring content), then if `cropSelector` is given, " +
+        "measure its DOM rect and run a TypeScript/sharp port of vidstudio/scripts/crop-shot.py (crop at " +
+        "rect*zoom*deviceScaleFactor, upscale back to rect's own size at that same scale with Lanczos) so " +
+        "the result is pixel-accurate with no bleed. Default outPath is " +
         "public/images/<beatId>.png under projectRoot, matching scaffold_scene's real-screenshot convention. " +
-        "Returns { outPath, width, height, zoom } -- the saved image's actual pixel dimensions and the " +
-        "measured zoom ratio, for STYLE.md's frame-sizing formula. Requires Chromium to be installed for " +
+        "Returns { outPath, width, height, pixelWidth, pixelHeight, deviceScaleFactor, zoom, settle? } -- " +
+        "width/height are CSS pixels, pixelWidth/pixelHeight the real pixels on disk, zoom the measured " +
+        "desync ratio for STYLE.md's frame-sizing formula, settle the report (omitted when settle:false). " +
+        "Requires Chromium to be installed for " +
         "Playwright first: run \"npx playwright install chromium\" once wherever this package is installed; " +
         "a missing browser fails with a message telling you to do exactly that, not a cryptic native error.",
       inputSchema: {

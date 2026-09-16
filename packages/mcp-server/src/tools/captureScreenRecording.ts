@@ -9,12 +9,14 @@ import {
   DEFAULT_VIEWPORT,
   screenEncodeArgs,
   settlePage,
+  writeSettleSidecar,
   detectAndCompensateZoom,
   interactionSchema,
   launchChromium,
   replayInteractions,
   viewportSchema,
   type Interaction,
+  type SettleReport,
   type Viewport,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
@@ -54,6 +56,7 @@ export interface CaptureScreenRecordingResult {
   height: number;
   zoom: number;
   durationMs?: number;
+  settle?: SettleReport;
 }
 
 /**
@@ -147,6 +150,7 @@ export async function runCaptureScreenRecording(
     // requested) viewport -- same reasoning as capture_screenshot.
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-capture-"));
     let webmPath: string;
+    let settleReport: SettleReport | undefined;
     try {
       // recordVideo.size is in real pixels while the viewport is in CSS pixels, so the
       // recording size has to be scaled by hand. Leaving it at the CSS size would record a
@@ -169,7 +173,9 @@ export async function runCaptureScreenRecording(
         // Settle BEFORE the interactions, not after: the recording is already running, so
         // this is what keeps the opening seconds of the clip from being the page still
         // loading rather than the product working.
-        if (input.settle !== false) await settlePage(page, { timeoutMs: input.settleTimeoutMs });
+        if (input.settle !== false) {
+          settleReport = await settlePage(page, { timeoutMs: input.settleTimeoutMs });
+        }
         await replayInteractions(page, input.interactions);
         const video = page.video();
         if (!video) {
@@ -195,6 +201,10 @@ export async function runCaptureScreenRecording(
       }
 
       const durationMs = await probeDurationMs(outPathAbs, projectRoot);
+      // Otherwise the settle report only ever lived in this local variable: it was measured,
+      // then discarded when the function returned, with no evidence anywhere that a
+      // recording's opening seconds might have started before the page actually settled.
+      if (settleReport) writeSettleSidecar(outPathAbs, settleReport);
 
       return {
         outPath: outPathAbs,
@@ -202,6 +212,7 @@ export async function runCaptureScreenRecording(
         height: compensatedViewport.height,
         zoom,
         ...(durationMs !== undefined ? { durationMs } : {}),
+        ...(settleReport ? { settle: settleReport } : {}),
       };
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -226,9 +237,11 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         "post-hoc DOM-rect cropping of a moving recording, that's future work. Closing the context flushes " +
         "Playwright's webm to disk, which is then transcoded to mp4 via ffmpeg (spawn, argv array, same " +
         "discipline as render_video/qc_extract_frames) since Remotion's OffthreadVideo needs a seekable " +
-        "format; the intermediate webm and temp recording dir are cleaned up after. Default outPath is " +
+        "format; the intermediate webm and temp recording dir are cleaned up after. The settle report (when " +
+        "settle wasn't disabled) is both returned and written to `<outPath>.settle.json`, so validate_scenes " +
+        "can flag a timed-out beat without a browser. Default outPath is " +
         "public/video/<beatId>.mp4 under projectRoot, matching scaffold_scene's real-recording convention. " +
-        "Returns { outPath, width, height, zoom, durationMs? } -- durationMs is a best-effort ffprobe lookup, " +
+        "Returns { outPath, width, height, zoom, durationMs?, settle? } -- durationMs is a best-effort ffprobe lookup, " +
         "omitted (not failed) if ffprobe isn't available. Requires Chromium to be installed for Playwright " +
         "first: run \"npx playwright install chromium\" once wherever this package is installed; a missing " +
         "browser fails with a message telling you to do exactly that, not a cryptic native error.",

@@ -40,6 +40,15 @@ export interface CaptureVisual {
   source?: "browser";
   url: string;
   interactions: Interaction[];
+  /**
+   * Settle before capturing (fonts/images/finite-animations). Default true, matching
+   * capture_screenshot/capture_screen_recording's own default. A beat with a deliberately
+   * long entrance can carry its own budget here instead of it only living in the tool call
+   * that captures it, where nobody reading beats.json would see it.
+   */
+  settle?: boolean;
+  /** Budget for the settle wait above, in ms. Default 5000 (capture package's DEFAULT_SETTLE_TIMEOUT_MS). */
+  settleTimeoutMs?: number;
 }
 
 export interface Region {

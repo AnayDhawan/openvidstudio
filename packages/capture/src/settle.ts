@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import type { Page } from "playwright";
 
 /**
@@ -140,4 +141,21 @@ export async function settlePage(page: Page, opts: SettleOptions = {}): Promise<
   if (quiet > 0) await page.waitForTimeout(quiet);
 
   return { ...report, waitedMs: Date.now() - started };
+}
+
+/** Sidecar path a SettleReport is written to, next to the capture artifact it describes. */
+export function settleSidecarPath(outPathAbs: string): string {
+  return `${outPathAbs}.settle.json`;
+}
+
+/**
+ * Persists a SettleReport next to the artifact it describes. `settlePage`'s return value
+ * is otherwise only a field in a tool call's result, which nothing downstream keeps: a
+ * capture that timed out with animations still pending is a frame caught mid-transition,
+ * and this is what lets validate_scenes catch that statically (it reads scene sources and
+ * beats.json, it never launches a browser) instead of it going unnoticed until someone
+ * watches the render.
+ */
+export function writeSettleSidecar(outPathAbs: string, report: SettleReport): void {
+  fs.writeFileSync(settleSidecarPath(outPathAbs), JSON.stringify(report, null, 2) + "\n", "utf8");
 }

@@ -251,6 +251,12 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       if (typeof v.url !== "string" || v.url.length === 0) {
         errors.push(`${label}: visual.url is required for captureMethod "${captureMethod}"`);
       }
+      if (v.settle !== undefined && typeof v.settle !== "boolean") {
+        errors.push(`${label}: visual.settle must be a boolean if present`);
+      }
+      if (v.settleTimeoutMs !== undefined && (typeof v.settleTimeoutMs !== "number" || v.settleTimeoutMs <= 0)) {
+        errors.push(`${label}: visual.settleTimeoutMs must be a positive number if present`);
+      }
       if (!Array.isArray(v.interactions)) {
         errors.push(
           `${label}: visual.interactions (array, may be empty) is required for captureMethod "${captureMethod}"`,
@@ -337,7 +343,9 @@ export function registerValidateBeats(server: McpServer): void {
         "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +
         "time. Also validates two optional per-beat fields if present: transition (cut/whip/fade, cut assumed " +
         "if omitted) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
-        "paths, each a non-empty string). Returns { valid, errors } with every failure found, never just the " +
+        "paths, each a non-empty string). For browser screenshot/recording beats, settle (boolean) and " +
+        "settleTimeoutMs (positive number) are also type-checked if present -- see capture_screenshot/" +
+        "capture_screen_recording for what they control. Returns { valid, errors } with every failure found, never just the " +
         "first -- this is the tool's normal answer for an invalid draft, not an exceptional case, so it never " +
         "throws for a validation failure.",
       inputSchema: {

@@ -55,7 +55,8 @@ export interface BeatLike {
 const EMPTY = "0".repeat(64);
 
 function sha256(data: crypto.BinaryLike): string {
-  return crypto.createHash("sha256").update(data).digest("hex");
+  const input = typeof data === "string" || ArrayBuffer.isView(data) ? data : Buffer.from(data);
+  return crypto.createHash("sha256").update(input).digest("hex");
 }
 
 /**

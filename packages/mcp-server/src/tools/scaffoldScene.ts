@@ -13,6 +13,7 @@ import {
 } from "../scenes/templates";
 import { pngSize } from "../scenes/pngSize";
 import { castToSteps, serializeSteps, type TerminalCastLike } from "../scenes/castToSteps";
+import { probeVideoDurationFrames } from "../scenes/videoDuration";
 
 export type { SceneKind };
 
@@ -48,21 +49,27 @@ interface BeatLike {
     assetPath?: string;
     attribution?: string;
   };
-  artifacts?: { terminalPath?: string };
+  artifacts?: { terminalPath?: string; recordingPath?: string };
 }
 
 /**
- * Read the beat out of the project's beats.json so the scaffolded scene can carry
- * that beat's own copy and duration. Without this the template has nothing real to
- * put on screen and the first render says nothing.
+ * Read the beat (and the manifest's own fps, default 30 per PLANNING.md/PIPELINE.md) out
+ * of the project's beats.json so the scaffolded scene can carry that beat's own copy and
+ * duration. Without this the template has nothing real to put on screen and the first
+ * render says nothing.
  */
-function readBeat(projectRoot: string, videoName: string, beatId: string): BeatLike | null {
+function readBeat(
+  projectRoot: string,
+  videoName: string,
+  beatId: string,
+): { beat: BeatLike | null; fps: number } {
   const file = path.join(projectRoot, "src", "videos", videoName, "beats.json");
   try {
-    const doc = JSON.parse(fs.readFileSync(file, "utf8")) as { beats?: BeatLike[] };
-    return doc.beats?.find((b) => b.id === beatId) ?? null;
+    const doc = JSON.parse(fs.readFileSync(file, "utf8")) as { fps?: number; beats?: BeatLike[] };
+    const fps = typeof doc.fps === "number" && doc.fps > 0 ? doc.fps : 30;
+    return { beat: doc.beats?.find((b) => b.id === beatId) ?? null, fps };
   } catch {
-    return null;
+    return { beat: null, fps: 30 };
   }
 }
 
@@ -82,7 +89,7 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
     );
   }
 
-  const beat = readBeat(projectRoot, videoName, beatId);
+  const { beat, fps } = readBeat(projectRoot, videoName, beatId);
   if (!beat) {
     notes.push(
       `No beat "${beatId}" found in beats.json, so the scene was scaffolded with placeholder copy. ` +
@@ -111,6 +118,33 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
       notes.push(
         `No capture found at public/images/${beatId}.png, so the frame uses a 1440x900 default. ` +
           `Re-run scaffold_scene after capture_screenshot to size the frame from the real file.`,
+      );
+    }
+  }
+
+  if (input.kind === "real-recording" || input.kind === "higgsfield-clip") {
+    const recordingRel = beat?.artifacts?.recordingPath ?? path.join("public", "video", `${beatId}.mp4`);
+    const recordingPath = path.join(projectRoot, recordingRel);
+    if (fs.existsSync(recordingPath)) {
+      const frames = probeVideoDurationFrames(recordingPath, fps);
+      if (frames !== null) {
+        ctx.recordingDurationFrames = frames;
+        if (frames < ctx.durationFrames) {
+          notes.push(
+            `Real recording is ${frames} frames at ${fps}fps, ${ctx.durationFrames - frames} short of this ` +
+              `beat's ${ctx.durationFrames}. The scene holds the recording's true last frame for the remainder.`,
+          );
+        }
+      } else {
+        notes.push(
+          `Could not probe ${recordingRel}'s duration (ffprobe missing or the file isn't a readable video), ` +
+            `so the scene does not hold a last frame if the recording runs short of the beat's duration.`,
+        );
+      }
+    } else {
+      notes.push(
+        `No recording found at ${recordingRel} yet, so the scene has no real length to hold on. Re-run ` +
+          `scaffold_scene with overwrite: true after capturing it.`,
       );
     }
   }
@@ -192,6 +226,10 @@ export function registerScaffoldScene(server: McpServer): void {
         "beat's description talks about. Templates: browser-capture and recording (for real captures), " +
         "terminal, split-panel, checklist, stat, code, comparison, cta, title. For real-screenshot beats " +
         "the frame is sized from the actual PNG on disk rather than guessed, so the page is not letterboxed. " +
+        "For real-recording/higgsfield-clip beats, the real recording's length is probed with ffprobe and, " +
+        "when it's shorter than the beat's own duration, the scene holds the recording's true last frame for " +
+        "the remainder (Remotion's Freeze pattern) instead of letting OffthreadVideo show whatever frame it " +
+        "happens to have past the source's own end. " +
         "Constructed scenes use a gentle camera push and a safe content width, because the visible area is " +
         "the stage divided by the camera scale and content built at full stage size gets cropped at the " +
         "frame edge. Refuses to overwrite an existing scene unless overwrite: true.",

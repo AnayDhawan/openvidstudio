@@ -58,6 +58,16 @@ export interface SceneContext {
   captureWidth?: number;
   captureHeight?: number;
   /**
+   * The real recording's own length, in frames at the beat's fps, probed from the file on
+   * disk (see scenes/videoDuration.ts). When it's shorter than durationFrames -- almost
+   * every beat, since a beat's duration is planned and a recording's is whatever actually
+   * happened -- the recording template holds the true last frame for the remainder rather
+   * than whatever OffthreadVideo happens to show once asked for a frame past the source's
+   * own end. Absent (ffprobe unavailable, or the beat wasn't captured yet) falls back to
+   * the old unclamped behaviour.
+   */
+  recordingDurationFrames?: number;
+  /**
    * Serialized TermStep[] for the terminal-cast template, built at scaffold time from
    * the real cast on disk. Inlined rather than fetched at render time for the same
    * reason browser-capture reads pngSize at scaffold time: the artifact already exists
@@ -210,12 +220,41 @@ function recording(ctx: SceneContext, higgsfield: boolean): string {
     : `// Composited as a bare Layer and OffthreadVideo, per STYLE.md's convention for
 // recordings. The camera moves over the recording exactly as it would over a still.`;
   const cap = captionWindow(ctx.durationFrames);
+  const holdFrames = ctx.recordingDurationFrames;
+  // A beat's duration is planned; a recording's is whatever the real interaction actually
+  // took. When the two differ (almost always) and OffthreadVideo is simply asked to keep
+  // playing past the source's own end, what lands on screen for the remainder is whatever
+  // frame Remotion happens to have, not deliberately the final one. Freeze pins playback at
+  // the last real frame instead, so a beat that runs long past its recording holds on the
+  // product's actual end state rather than an arbitrary mid-point.
+  const videoTag = holdFrames
+    ? `<Freeze frame={Math.min(useCurrentFrame(), ${holdFrames - 1})}>
+          <OffthreadVideo
+            src={staticFile("video/${ctx.beatId}.mp4")}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        </Freeze>`
+    : `<OffthreadVideo
+          src={staticFile("video/${ctx.beatId}.mp4")}
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />`;
+  const remotionImports = holdFrames
+    ? `import { Freeze, OffthreadVideo, staticFile, useCurrentFrame } from "remotion";`
+    : `import { OffthreadVideo, staticFile } from "remotion";`;
+  const holdNote = holdFrames
+    ? `//
+// The real recording is ${holdFrames} frames; this beat is ${ctx.durationFrames}. Frame is
+// clamped to the recording's own last frame (Remotion's documented pattern for holding a
+// video's end state) rather than left to play past the source, which is whatever frame
+// OffthreadVideo happens to have at that point, not deliberately the final one. Re-run
+// scaffold_scene with overwrite: true if the recording is re-captured at a different length.`
+    : "";
   return `${HEADER(ctx.beatId, "recording", ctx.description)}
 //
 ${note}
-
+${holdFrames ? `${holdNote}\n` : ""}
 import React from "react";
-import { OffthreadVideo, staticFile } from "remotion";
+${remotionImports}
 import { CinematicScene, Layer, Caption, E } from "@openvidstudio/core";
 
 export const ${ctx.componentName}: React.FC = () => {
@@ -228,10 +267,7 @@ export const ${ctx.componentName}: React.FC = () => {
       overlay={<Caption text="${esc(captionLine(ctx.vo))}" at={${cap.at}} out={${cap.out}} fontSize={30} />}
     >
       <Layer depth={0}>
-        <OffthreadVideo
-          src={staticFile("video/${ctx.beatId}.mp4")}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        />
+        ${videoTag}
       </Layer>
     </CinematicScene>
   );

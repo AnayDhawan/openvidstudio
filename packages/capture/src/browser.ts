@@ -44,7 +44,7 @@ export type Interaction =
   | { type: "fill"; selector: string; value: string }
   | { type: "select"; selector: string; value: string }
   | { type: "hover"; selector: string }
-  | { type: "scroll"; selector?: string; x?: number; y?: number }
+  | { type: "scroll"; selector?: string; x?: number; y?: number; durationMs?: number }
   | { type: "wait"; ms?: number; selector?: string }
   | { type: "settle"; ms?: number };
 
@@ -58,6 +58,12 @@ export const interactionSchema = z.discriminatedUnion("type", [
     selector: z.string().optional(),
     x: z.number().optional(),
     y: z.number().optional(),
+    // Undefined/0 keeps the old instant scrollTo -- an unrequested behaviour change would
+    // silently retime every beat that already has a scroll interaction. Positive is an
+    // eased scroll (see easedScrollInPage below) driven by requestAnimationFrame, since
+    // CSS's `behavior: "smooth"` gives no control over duration or curve and browsers are
+    // free to shorten or skip it, neither of which is acceptable for video timing.
+    durationMs: z.number().positive().optional(),
   }),
   z.object({ type: z.literal("wait"), ms: z.number().optional(), selector: z.string().optional() }),
   // Not a timed guess. "settle" drives whatever the previous step started (a modal
@@ -65,6 +71,62 @@ export const interactionSchema = z.discriminatedUnion("type", [
   // runs, which is what stops a capture landing halfway through a fade.
   z.object({ type: z.literal("settle"), ms: z.number().optional() }),
 ]);
+
+/**
+ * Runs in the page against a scrollable element. `behavior: "smooth"` was rejected on
+ * purpose: it has no duration/easing parameters, a page can override its own
+ * scroll-behavior CSS out from under it, and browsers are free to shorten or skip a smooth
+ * scroll under reduced-motion or heavy load -- none of which is acceptable when the
+ * duration has to match the video's timeline exactly. Driven by requestAnimationFrame
+ * instead, resolving its own promise so replayInteractions can await the real end of the
+ * animation rather than a fixed sleep.
+ */
+/* c8 ignore start -- executes in the browser, covered by the real-browser E2E */
+function easedScrollElementInPage(el: Element, args: { x?: number; y?: number; durationMs: number }): Promise<void> {
+  const target = el as Element & { scrollLeft: number; scrollTop: number; scrollTo: (x: number, y: number) => void };
+  const startX = target.scrollLeft;
+  const startY = target.scrollTop;
+  const endX = args.x ?? startX;
+  const endY = args.y ?? startY;
+  const duration = args.durationMs;
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      // Cubic ease-in-out: slow away from the start, fast through the middle, slow into
+      // the landing point -- a linear scroll reads as mechanical on camera in a way an
+      // eased one does not.
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+      target.scrollTo(startX + (endX - startX) * eased, startY + (endY - startY) * eased);
+      if (t < 1) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+}
+/* c8 ignore stop */
+
+/** Same easing as easedScrollElementInPage, against the window instead of an element. */
+/* c8 ignore start -- executes in the browser, covered by the real-browser E2E */
+function easedScrollWindowInPage(args: { x?: number; y?: number; durationMs: number }): Promise<void> {
+  const startX = window.scrollX;
+  const startY = window.scrollY;
+  const endX = args.x ?? startX;
+  const endY = args.y ?? startY;
+  const duration = args.durationMs;
+  return new Promise((resolve) => {
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2;
+      window.scrollTo(startX + (endX - startX) * eased, startY + (endY - startY) * eased);
+      if (t < 1) requestAnimationFrame(step);
+      else resolve();
+    };
+    requestAnimationFrame(step);
+  });
+}
+/* c8 ignore stop */
 
 /**
  * Replays a beat's interactions in array order. Shared verbatim by both capture
@@ -88,7 +150,14 @@ export async function replayInteractions(page: Page, interactions: Interaction[]
         await page.hover(interaction.selector);
         break;
       case "scroll":
-        if (interaction.selector) {
+        if (interaction.durationMs && interaction.durationMs > 0) {
+          const args = { x: interaction.x, y: interaction.y, durationMs: interaction.durationMs };
+          if (interaction.selector) {
+            await page.$eval(interaction.selector, easedScrollElementInPage, args);
+          } else {
+            await page.evaluate(easedScrollWindowInPage, args);
+          }
+        } else if (interaction.selector) {
           await page.$eval(
             interaction.selector,
             (el, coords) => el.scrollTo(coords.x ?? 0, coords.y ?? 0),

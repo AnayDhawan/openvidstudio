@@ -53,6 +53,23 @@ export interface CaptureScreenshotInput {
    * 1x capture is being upscaled twice over and looks it.
    */
   deviceScaleFactor?: number;
+  /**
+   * Emulate a color scheme for this capture. Omit to use the page's own default (almost
+   * always "light" unless the OS/browser default is overridden some other way).
+   *
+   * Set at context creation, not via a later emulateMedia call, so prefers-color-scheme CSS
+   * is already correct on the very first paint the settle/screenshot logic observes -- an
+   * emulateMedia call after navigation would race a page that reads the media query once at
+   * load and caches the result.
+   */
+  colorScheme?: "light" | "dark";
+  /**
+   * Emulate prefers-reduced-motion: reduce. Off by default, since most beats want the
+   * product's real, designed motion. Turn it on for a beat that specifically needs to catch
+   * a page's reduced-motion fallback state (a11y QA, or a page whose entrance transition
+   * would otherwise burn the whole settle budget under prefers-reduced-motion: no-preference).
+   */
+  reducedMotion?: boolean;
 }
 
 export interface CaptureScreenshotResult {
@@ -122,7 +139,11 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
 
   const browser = await launchChromium();
   try {
-    const context = await browser.newContext({ deviceScaleFactor });
+    const context = await browser.newContext({
+      deviceScaleFactor,
+      ...(input.colorScheme ? { colorScheme: input.colorScheme } : {}),
+      ...(input.reducedMotion ? { reducedMotion: "reduce" as const } : {}),
+    });
     try {
       const page = await context.newPage();
       await page.setViewportSize(target);
@@ -220,7 +241,10 @@ export function registerCaptureScreenshot(server: McpServer): void {
         "why element-scoped screenshots bleed in neighboring content), then if `cropSelector` is given, " +
         "measure its DOM rect and run a TypeScript/sharp port of vidstudio/scripts/crop-shot.py (crop at " +
         "rect*zoom*deviceScaleFactor, upscale back to rect's own size at that same scale with Lanczos) so " +
-        "the result is pixel-accurate with no bleed. Default outPath is " +
+        "the result is pixel-accurate with no bleed. colorScheme (\"light\"/\"dark\") and reducedMotion " +
+        "(boolean) are opt-in context-level emulation, set before navigation so prefers-color-scheme/" +
+        "prefers-reduced-motion CSS is correct from the first paint -- omit both for the page's own default. " +
+        "Default outPath is " +
         "public/images/<beatId>.png under projectRoot, matching scaffold_scene's real-screenshot convention. " +
         "Returns { outPath, width, height, pixelWidth, pixelHeight, deviceScaleFactor, zoom, settle? } -- " +
         "width/height are CSS pixels, pixelWidth/pixelHeight the real pixels on disk, zoom the measured " +
@@ -254,6 +278,14 @@ export function registerCaptureScreenshot(server: McpServer): void {
           .positive()
           .optional()
           .describe("Pixels captured per CSS pixel. Defaults to 2, which is what keeps text sharp once the camera pushes in. Pass 1 for the old behaviour."),
+        colorScheme: z
+          .enum(["light", "dark"])
+          .optional()
+          .describe("Emulate a color scheme, set at context creation so prefers-color-scheme CSS is already correct on first paint. Omit for the page's own default."),
+        reducedMotion: z
+          .boolean()
+          .optional()
+          .describe("Emulate prefers-reduced-motion: reduce. Off by default; turn on to catch a page's reduced-motion fallback state."),
       },
     },
     async (input) => runTool("capture_screenshot", () => runCaptureScreenshot(input)),

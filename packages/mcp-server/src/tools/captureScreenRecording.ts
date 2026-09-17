@@ -55,6 +55,14 @@ export interface CaptureScreenRecordingInput {
   speed?: number;
   interactions?: Interaction[];
   outPath?: string;
+  /**
+   * Emulate a color scheme for the recording context. Same reasoning as capture_screenshot's
+   * colorScheme: set at context creation, before the page exists, so prefers-color-scheme CSS
+   * is correct from the first frame rather than racing a page that reads the media query once.
+   */
+  colorScheme?: "light" | "dark";
+  /** Emulate prefers-reduced-motion: reduce for the recording context. Off by default. */
+  reducedMotion?: boolean;
 }
 
 export interface CaptureScreenRecordingResult {
@@ -166,6 +174,8 @@ export async function runCaptureScreenRecording(
       const recordContext = await browser.newContext({
         viewport: compensatedViewport,
         deviceScaleFactor,
+        ...(input.colorScheme ? { colorScheme: input.colorScheme } : {}),
+        ...(input.reducedMotion ? { reducedMotion: "reduce" as const } : {}),
         recordVideo: {
           dir: tmpDir,
           size: {
@@ -246,7 +256,10 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         "post-hoc DOM-rect cropping of a moving recording, that's future work. Closing the context flushes " +
         "Playwright's webm to disk, which is then transcoded to mp4 via ffmpeg (spawn, argv array, same " +
         "discipline as render_video/qc_extract_frames) since Remotion's OffthreadVideo needs a seekable " +
-        "format; the intermediate webm and temp recording dir are cleaned up after. The settle report (when " +
+        "format; the intermediate webm and temp recording dir are cleaned up after. colorScheme " +
+        "(\"light\"/\"dark\") and reducedMotion (boolean) are opt-in, set on the recording context before the " +
+        "page exists so prefers-color-scheme/prefers-reduced-motion CSS is correct from the first frame. The " +
+        "settle report (when " +
         "settle wasn't disabled) is both returned and written to `<outPath>.settle.json`, so validate_scenes " +
         "can flag a timed-out beat without a browser. Default outPath is " +
         "public/video/<beatId>.mp4 under projectRoot, matching scaffold_scene's real-recording convention. " +
@@ -283,6 +296,14 @@ export function registerCaptureScreenRecording(server: McpServer): void {
           .describe("Pixels recorded per CSS pixel. Defaults to 2, which keeps the footage sharp once the camera pushes in."),
         interactions: z.array(interactionSchema).optional(),
         outPath: z.string().optional(),
+        colorScheme: z
+          .enum(["light", "dark"])
+          .optional()
+          .describe("Emulate a color scheme, set at context creation before the page exists. Omit for the page's own default."),
+        reducedMotion: z
+          .boolean()
+          .optional()
+          .describe("Emulate prefers-reduced-motion: reduce for the recording context. Off by default."),
       },
     },
     async (input) => runTool("capture_screen_recording", () => runCaptureScreenRecording(input)),

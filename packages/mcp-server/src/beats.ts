@@ -56,6 +56,13 @@ export interface CaptureVisual {
    * fetch after "load" already fired.
    */
   waitUntil?: "load" | "networkidle";
+  /**
+   * Emulate a color scheme. Omit for the page's own default. Matches
+   * capture_screenshot/capture_screen_recording's own colorScheme, set at context creation.
+   */
+  colorScheme?: "light" | "dark";
+  /** Emulate prefers-reduced-motion: reduce. Off by default. */
+  reducedMotion?: boolean;
 }
 
 export interface Region {

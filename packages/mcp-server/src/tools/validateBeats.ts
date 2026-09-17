@@ -260,6 +260,12 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       if (v.waitUntil !== undefined && v.waitUntil !== "load" && v.waitUntil !== "networkidle") {
         errors.push(`${label}: visual.waitUntil must be "load" or "networkidle" if present`);
       }
+      if (v.colorScheme !== undefined && v.colorScheme !== "light" && v.colorScheme !== "dark") {
+        errors.push(`${label}: visual.colorScheme must be "light" or "dark" if present`);
+      }
+      if (v.reducedMotion !== undefined && typeof v.reducedMotion !== "boolean") {
+        errors.push(`${label}: visual.reducedMotion must be a boolean if present`);
+      }
       if (!Array.isArray(v.interactions)) {
         errors.push(
           `${label}: visual.interactions (array, may be empty) is required for captureMethod "${captureMethod}"`,
@@ -341,8 +347,9 @@ export function registerValidateBeats(server: McpServer): void {
         "word-count vs the 2.3-2.9 words/sec budget checked in both directions (too many words for the " +
         "duration and suspiciously few), every beat has a captureMethod, and method-specific required " +
         "fields (url + interactions for screenshot/recording, higgsfieldPrompt for higgsfield, nothing extra " +
-        "for dom-demo). waitUntil (\"load\" or \"networkidle\") is type-checked if present on a screenshot/" +
-        "recording beat. For screenshot/recording beats, every interactions[] entry is also validated against " +
+        "for dom-demo). waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), and " +
+        "reducedMotion (boolean) are type-checked if present on a screenshot/recording beat. For screenshot/" +
+        "recording beats, every interactions[] entry is also validated against " +
         "the exact schema capture_screenshot/capture_screen_recording enforce at replay time (click, fill, " +
         "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +
         "time. Also validates two optional per-beat fields if present: transition (cut/whip/fade, cut assumed " +

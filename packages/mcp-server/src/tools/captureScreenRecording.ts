@@ -38,6 +38,13 @@ export interface CaptureScreenRecordingInput {
   settle?: boolean;
   settleTimeoutMs?: number;
   /**
+   * Navigation wait condition. Defaults to "load", same reasoning as capture_screenshot's
+   * own waitUntil: a dev server with an open websocket never reaches "networkidle", so that
+   * cannot be the default. Opt into "networkidle" only for a beat whose real content arrives
+   * from a delayed fetch after "load" already fired.
+   */
+  waitUntil?: "load" | "networkidle";
+  /**
    * Replay rate. 2 is twice as fast, 0.5 is half speed. Defaults to 1.
    *
    * Real interaction is often too slow to watch and occasionally too fast to follow. A
@@ -138,7 +145,7 @@ export async function runCaptureScreenRecording(
     try {
       const probePage = await probeContext.newPage();
       await probePage.setViewportSize(target);
-      await probePage.goto(input.url, { waitUntil: "load" });
+      await probePage.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
       const compensation = await detectAndCompensateZoom(probePage, target);
       zoom = compensation.zoom;
       compensatedViewport = compensation.viewport;
@@ -169,7 +176,7 @@ export async function runCaptureScreenRecording(
       });
       try {
         const page = await recordContext.newPage();
-        await page.goto(input.url, { waitUntil: "load" });
+        await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
         // Settle BEFORE the interactions, not after: the recording is already running, so
         // this is what keeps the opening seconds of the clip from being the page still
         // loading rather than the product working.
@@ -232,7 +239,9 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         "directly via the `playwright` package (not a separate Playwright MCP server). Runs the same " +
         "zoom-desync detection/compensation as capture_screenshot on a throwaway probe page first (Playwright's " +
         "recordVideo.size can only be set when the context is created, so the compensated size must be known " +
-        "before recording starts), then opens the real recording context at that compensated size, navigates, " +
+        "before recording starts), then opens the real recording context at that compensated size, navigates " +
+        "(waitUntil: \"load\" by default, same reasoning as capture_screenshot; pass \"networkidle\" only for " +
+        "a beat whose real content arrives from a delayed fetch after load), " +
         "and replays `interactions` in array order. v1 scope is fixed full-viewport recordings only -- no " +
         "post-hoc DOM-rect cropping of a moving recording, that's future work. Closing the context flushes " +
         "Playwright's webm to disk, which is then transcoded to mp4 via ffmpeg (spawn, argv array, same " +
@@ -255,6 +264,13 @@ export function registerCaptureScreenRecording(server: McpServer): void {
           .optional()
           .describe("Settle the page before recording starts, so the opening second is the product working rather than the page still loading. Defaults to true."),
         settleTimeoutMs: z.number().int().positive().optional(),
+        waitUntil: z
+          .enum(["load", "networkidle"])
+          .optional()
+          .describe(
+            "Navigation wait condition. Defaults to \"load\" (a dev server's open websocket would never hit " +
+              "networkidle). Pass \"networkidle\" for a beat whose real content arrives from a delayed fetch.",
+          ),
         speed: z
           .number()
           .positive()

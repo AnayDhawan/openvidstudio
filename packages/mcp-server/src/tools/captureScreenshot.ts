@@ -37,6 +37,16 @@ export interface CaptureScreenshotInput {
   /** How long to allow for that, in ms. Defaults to 5000. */
   settleTimeoutMs?: number;
   /**
+   * Navigation wait condition. Defaults to "load".
+   *
+   * "load" has to stay the default: a dev server with an open websocket (HMR, a live
+   * status poll) never reaches "networkidle" at all, and a beat pointed at one would hang
+   * for the full navigation timeout. Pass "networkidle" only for the beat that specifically
+   * needs it, e.g. a page whose real content arrives from a delayed fetch after "load" has
+   * already fired and would otherwise settlePage() against a still-loading skeleton.
+   */
+  waitUntil?: "load" | "networkidle";
+  /**
    * Pixels captured per CSS pixel. Defaults to 2; 1 restores the old behaviour.
    *
    * The video puts this image on a 1920x1080 stage and then pushes a camera into it, so a
@@ -116,10 +126,11 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
     try {
       const page = await context.newPage();
       await page.setViewportSize(target);
-      // "load" (not "networkidle"): CAPTURE.md's protocol is resize -> navigate -> measure,
-      // and this package targets arbitrary dev-server pages, some of which poll/keep a
-      // websocket open and would never hit networkidle at all.
-      await page.goto(input.url, { waitUntil: "load" });
+      // "load" (not "networkidle") by default: CAPTURE.md's protocol is resize -> navigate
+      // -> measure, and this package targets arbitrary dev-server pages, some of which
+      // poll/keep a websocket open and would never hit networkidle at all. waitUntil is an
+      // explicit opt-in override for the beat that actually needs it.
+      await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
 
       const { zoom, viewport: compensatedViewport } = await detectAndCompensateZoom(page, target);
 
@@ -191,7 +202,10 @@ export function registerCaptureScreenshot(server: McpServer): void {
       title: "Capture a zoom-compensated, DOM-rect-cropped screenshot",
       description:
         "Internalizes CAPTURE.md's full screenshot protocol as one atomic call, driving a real headless " +
-        "Chromium directly via the `playwright` package (not a separate Playwright MCP server): navigate, " +
+        "Chromium directly via the `playwright` package (not a separate Playwright MCP server): navigate " +
+        "(waitUntil: \"load\" by default, since a dev server with an open websocket never reaches " +
+        "networkidle; pass waitUntil: \"networkidle\" for a beat whose real content arrives from a delayed " +
+        "fetch after load), " +
         "measure window.innerWidth/innerHeight against the requested viewport to detect a per-origin zoom " +
         "desync (never hardcoded, measured live every call), re-request a compensated viewport and re-verify " +
         "once if needed (a real 'protocol didn't converge' case fails with a structured error rather than " +
@@ -227,6 +241,14 @@ export function registerCaptureScreenshot(server: McpServer): void {
           .optional()
           .describe("Wait for fonts, images and finite animations before the shot. Defaults to true. Turn it off only to catch a page mid-transition on purpose."),
         settleTimeoutMs: z.number().int().positive().optional(),
+        waitUntil: z
+          .enum(["load", "networkidle"])
+          .optional()
+          .describe(
+            "Navigation wait condition. Defaults to \"load\", which has to stay the default since a dev " +
+              "server with an open websocket never reaches networkidle. Pass \"networkidle\" only for a beat " +
+              "whose real content arrives from a delayed fetch after load already fired.",
+          ),
         deviceScaleFactor: z
           .number()
           .positive()

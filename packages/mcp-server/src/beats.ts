@@ -49,6 +49,13 @@ export interface CaptureVisual {
   settle?: boolean;
   /** Budget for the settle wait above, in ms. Default 5000 (capture package's DEFAULT_SETTLE_TIMEOUT_MS). */
   settleTimeoutMs?: number;
+  /**
+   * Navigation wait condition. Default "load", matching capture_screenshot/
+   * capture_screen_recording's own default (a dev server's open websocket never reaches
+   * "networkidle"). Set "networkidle" on a beat whose real content arrives from a delayed
+   * fetch after "load" already fired.
+   */
+  waitUntil?: "load" | "networkidle";
 }
 
 export interface Region {

@@ -14,6 +14,7 @@ import { registerGenerateNarration } from "./generateNarration";
 import { registerPreflight } from "./preflight";
 import { registerPlanBeats } from "./planBeats";
 import { registerValidateScenes } from "./validateScenes";
+import { registerQcCapture } from "./qcCapture";
 import { registerContactSheet } from "./contactSheet";
 import { registerSoundEffects } from "./soundEffects";
 import { registerExtractBrand } from "./extractBrand";
@@ -52,6 +53,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerPreflight(server);
   registerPlanBeats(server);
   registerValidateScenes(server);
+  registerQcCapture(server);
   registerContactSheet(server);
   registerSoundEffects(server);
   registerExtractBrand(server);

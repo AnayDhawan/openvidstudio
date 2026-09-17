@@ -55,6 +55,15 @@ export interface CaptureScreenRecordingInput {
    * duration in the manifest is the duration after the change.
    */
   speed?: number;
+  /**
+   * Piecewise alternative to `speed`: a list of non-overlapping { startMs, endMs, speed }
+   * ranges (against the RAW recording's own timeline, before retiming) so one clip can have
+   * one slow stretch and one fast stretch instead of a single flat multiplier for the whole
+   * thing. Gaps between/around the given ranges play at speed 1 automatically -- nothing
+   * outside the ranges you name is ever dropped. Mutually exclusive with `speed`: pass one
+   * or the other, never both.
+   */
+  segments?: RetimeSegment[];
   interactions?: Interaction[];
   outPath?: string;
   /**
@@ -119,6 +128,115 @@ export function buildFfprobeDurationArgs(filePath: string): string[] {
   return ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", filePath];
 }
 
+export interface RetimeSegment {
+  startMs: number;
+  endMs: number;
+  /** 2 is twice as fast, 0.5 is half speed, same convention as the flat `speed` field. */
+  speed: number;
+}
+
+/**
+ * Throws on anything that would make the ffmpeg filter graph below ambiguous or wrong:
+ * out-of-range bounds, a zero-width or backwards range, a non-positive speed, or two
+ * ranges that overlap (which would ask the same span of footage to play at two different
+ * speeds at once, with no defined answer for which one wins).
+ */
+export function validateRetimeSegments(segments: RetimeSegment[], totalDurationMs: number): void {
+  const sorted = [...segments].sort((a, b) => a.startMs - b.startMs);
+  let prevEnd = 0;
+  for (const seg of sorted) {
+    if (!(seg.startMs >= 0) || !(seg.endMs > seg.startMs)) {
+      throw new Error(`segments: invalid range { startMs: ${seg.startMs}, endMs: ${seg.endMs} } -- endMs must be greater than startMs, both non-negative.`);
+    }
+    if (seg.endMs > totalDurationMs) {
+      throw new Error(`segments: range endMs ${seg.endMs} is past the recording's real duration (${totalDurationMs}ms).`);
+    }
+    if (!(seg.speed > 0)) {
+      throw new Error(`segments: speed ${seg.speed} must be greater than 0.`);
+    }
+    if (seg.startMs < prevEnd) {
+      throw new Error(`segments: range starting at ${seg.startMs}ms overlaps the previous one, which ends at ${prevEnd}ms -- ranges must be non-overlapping.`);
+    }
+    prevEnd = seg.endMs;
+  }
+}
+
+/**
+ * Fills the gaps between/around the caller's explicit ranges with speed: 1, so retiming
+ * never silently drops the footage outside the ranges someone actually named -- a beat
+ * that only wants to speed up its middle third still needs its first and last thirds in
+ * the output. Assumes segments is already validated (validateRetimeSegments) and sorted.
+ */
+export function fillRetimeGaps(segments: RetimeSegment[], totalDurationMs: number): RetimeSegment[] {
+  const sorted = [...segments].sort((a, b) => a.startMs - b.startMs);
+  const filled: RetimeSegment[] = [];
+  let cursor = 0;
+  for (const seg of sorted) {
+    if (seg.startMs > cursor) filled.push({ startMs: cursor, endMs: seg.startMs, speed: 1 });
+    filled.push(seg);
+    cursor = seg.endMs;
+  }
+  if (cursor < totalDurationMs) filled.push({ startMs: cursor, endMs: totalDurationMs, speed: 1 });
+  return filled;
+}
+
+/**
+ * Piecewise version of buildFfmpegTranscodeArgs's single flat setpts: trims the input into
+ * each (gap-filled, non-overlapping, ordered) segment, rebases each to its own zero
+ * (setpts=PTS-STARTPTS) then scales by that segment's own speed, and concatenates them
+ * back together in order via ffmpeg's filter_complex concat -- the documented,
+ * well-verified pattern for variable-speed video, and considerably easier to reason about
+ * and test than one conditional setpts expression trying to cover the whole timeline.
+ * `segments` must already cover [0, the real duration] with no gaps (fillRetimeGaps) --
+ * this function does not check that; a gap here would silently drop that span of footage.
+ */
+export function buildPiecewiseRetimeArgs(inputPath: string, outputPath: string, segments: RetimeSegment[]): string[] {
+  const labels = segments.map((_, i) => `v${i}`);
+  const chains = segments.map((seg, i) => {
+    const start = (seg.startMs / 1000).toFixed(6);
+    const end = (seg.endMs / 1000).toFixed(6);
+    const factor = (1 / seg.speed).toFixed(6);
+    return `[0:v]trim=start=${start}:end=${end},setpts=PTS-STARTPTS,setpts=${factor}*PTS[${labels[i]}]`;
+  });
+  const concat = `${labels.map((l) => `[${l}]`).join("")}concat=n=${labels.length}:v=1:a=0[outv]`;
+  return [
+    "-nostdin",
+    "-i",
+    inputPath,
+    "-filter_complex",
+    `${chains.join(";")};${concat}`,
+    "-map",
+    "[outv]",
+    ...screenEncodeArgs(),
+    "-pix_fmt",
+    "yuv420p",
+    "-movflags",
+    "+faststart",
+    outputPath,
+    "-y",
+  ];
+}
+
+/**
+ * Maps a real, pre-retiming timestamp (a cursor point's atMs, measured against the raw
+ * recording) through the same piecewise time-warp buildPiecewiseRetimeArgs applies to the
+ * video, so a cursor overlay built from the result lands on the same moment in the FINAL
+ * retimed clip that it did in reality -- the piecewise equivalent of item 3's flat
+ * `atMs / speed` rebase. `segments` must be gap-filled (fillRetimeGaps) and sorted.
+ */
+export function remapAtMsThroughSegments(atMs: number, segments: RetimeSegment[]): number {
+  let acc = 0;
+  for (const seg of segments) {
+    const spanInThisSegment = Math.min(atMs, seg.endMs) - seg.startMs;
+    if (spanInThisSegment <= 0) continue;
+    if (atMs <= seg.endMs) {
+      return acc + spanInThisSegment / seg.speed;
+    }
+    acc += spanInThisSegment / seg.speed;
+  }
+  return acc;
+}
+
 /**
  * Best-effort duration via ffprobe. Not a new dependency (ffprobe ships
  * alongside the ffmpeg this tool already requires for the transcode); if it's
@@ -143,6 +261,11 @@ export async function runCaptureScreenRecording(
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const target = input.viewport ?? DEFAULT_VIEWPORT;
   const deviceScaleFactor = input.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE;
+  if (input.segments && input.segments.length > 0 && input.speed !== undefined) {
+    throw new Error(
+      "Pass either speed or segments, not both -- combining a flat multiplier with piecewise retiming ranges is ambiguous.",
+    );
+  }
   const speed = input.speed ?? 1;
   if (!(speed > 0)) throw new Error("speed must be greater than 0. 2 is twice as fast, 0.5 is half speed.");
 
@@ -210,13 +333,13 @@ export async function runCaptureScreenRecording(
         const preReplayAt = Date.now();
         const rawCursorPoints = await replayInteractions(page, input.interactions);
         // replayInteractions' own atMs is relative to when IT started, not to the
-        // recording. Rebasing onto recordingStartedAt (and compressing by `speed`, since
-        // buildFfmpegTranscodeArgs retimes the whole clip's presentation timestamps at
-        // transcode) is what makes atMs directly convertible to a frame in the FINAL mp4
-        // via fps, without the consumer having to know navigation/settle timing or speed.
+        // recording. Rebased onto recordingStartedAt here; the retiming-specific part
+        // (flat /speed, or the piecewise equivalent) is applied below, once it's known
+        // which one this call is actually using -- either way the result is directly
+        // convertible to a frame in the FINAL retimed mp4 via fps.
         cursorPoints = rawCursorPoints.map((p) => ({
           ...p,
-          atMs: (preReplayAt - recordingStartedAt + p.atMs) / speed,
+          atMs: preReplayAt - recordingStartedAt + p.atMs,
         }));
         const video = page.video();
         if (!video) {
@@ -232,11 +355,30 @@ export async function runCaptureScreenRecording(
       }
 
       fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
-      const transcodeResult = await spawnCapture(
-        "ffmpeg",
-        buildFfmpegTranscodeArgs(webmPath, outPathAbs, speed),
-        projectRoot,
-      );
+
+      let transcodeArgs: string[];
+      if (input.segments && input.segments.length > 0) {
+        // Piecewise retiming needs the RAW recording's real duration to fill the gaps
+        // around the caller's ranges (fillRetimeGaps) -- probed from the webm before any
+        // transcode has happened, not guessed from the beat's planned duration.
+        const rawDurationMs = await probeDurationMs(webmPath, projectRoot);
+        if (rawDurationMs === undefined) {
+          throw new Error(
+            "segments requires probing the raw recording's real duration via ffprobe, which is unavailable " +
+              "(ffprobe missing, or the webm couldn't be probed). Install ffprobe, or use the flat speed " +
+              "parameter instead.",
+          );
+        }
+        validateRetimeSegments(input.segments, rawDurationMs);
+        const filled = fillRetimeGaps(input.segments, rawDurationMs);
+        transcodeArgs = buildPiecewiseRetimeArgs(webmPath, outPathAbs, filled);
+        cursorPoints = cursorPoints.map((p) => ({ ...p, atMs: remapAtMsThroughSegments(p.atMs, filled) }));
+      } else {
+        transcodeArgs = buildFfmpegTranscodeArgs(webmPath, outPathAbs, speed);
+        cursorPoints = cursorPoints.map((p) => ({ ...p, atMs: p.atMs / speed }));
+      }
+
+      const transcodeResult = await spawnCapture("ffmpeg", transcodeArgs, projectRoot);
       if (transcodeResult.code !== 0) {
         throw new Error(`ffmpeg webm->mp4 transcode failed (exit ${transcodeResult.code}): ${transcodeResult.stderr.slice(-1000)}`);
       }
@@ -284,7 +426,12 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         "post-hoc DOM-rect cropping of a moving recording, that's future work. Closing the context flushes " +
         "Playwright's webm to disk, which is then transcoded to mp4 via ffmpeg (spawn, argv array, same " +
         "discipline as render_video/qc_extract_frames) since Remotion's OffthreadVideo needs a seekable " +
-        "format; the intermediate webm and temp recording dir are cleaned up after. colorScheme " +
+        "format -- retimed either by `speed` (one flat setpts multiplier for the whole clip) or, if `segments` " +
+        "is given instead, piecewise (trim each range to its own setpts, concat them back together via " +
+        "filter_complex, with any gap between/around your ranges auto-filled at speed 1 so nothing outside " +
+        "them is ever dropped); pass one or the other, never both. Cursor points (see below) are retimed the " +
+        "same way, so the overlay stays in sync either way. The intermediate webm and temp recording dir are " +
+        "cleaned up after. colorScheme " +
         "(\"light\"/\"dark\") and reducedMotion (boolean) are opt-in, set on the recording context before the " +
         "page exists so prefers-color-scheme/prefers-reduced-motion CSS is correct from the first frame. The " +
         "settle report (when " +
@@ -323,7 +470,21 @@ export function registerCaptureScreenRecording(server: McpServer): void {
           .number()
           .positive()
           .optional()
-          .describe("Replay rate. 2 is twice as fast, 0.5 is half speed. Defaults to 1. Use it when real interaction is too slow to watch or too quick to follow."),
+          .describe("Replay rate. 2 is twice as fast, 0.5 is half speed. Defaults to 1. Use it when real interaction is too slow to watch or too quick to follow. Mutually exclusive with segments."),
+        segments: z
+          .array(
+            z.object({
+              startMs: z.number().nonnegative(),
+              endMs: z.number().positive(),
+              speed: z.number().positive(),
+            }),
+          )
+          .optional()
+          .describe(
+            "Piecewise alternative to speed: non-overlapping { startMs, endMs, speed } ranges against the raw " +
+              "recording's own timeline, for one clip with one slow stretch and one fast stretch. Gaps " +
+              "between/around the ranges play at speed 1 automatically. Mutually exclusive with speed.",
+          ),
         deviceScaleFactor: z
           .number()
           .positive()

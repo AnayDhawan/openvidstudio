@@ -1,6 +1,7 @@
 import type { Browser, Page } from "playwright";
 import { chromium } from "playwright";
 import { settlePage } from "./settle";
+import type { CursorPoint, CursorPointType } from "./cursor";
 import { z } from "zod";
 
 /**
@@ -129,24 +130,70 @@ function easedScrollWindowInPage(args: { x?: number; y?: number; durationMs: num
 /* c8 ignore stop */
 
 /**
+ * Measures a click/hover/fill/select target's real on-screen center right before the
+ * action runs -- same rect-measurement style as captureScreenshot.ts's cropSelector code.
+ * Scrolls the target into view first, matching the auto-scroll every one of these
+ * Playwright actions already does internally, so the coordinate lands in the same
+ * effective viewport space the final screenshot/recording is captured in rather than
+ * wherever the element happened to sit before the action's own scroll would have moved it.
+ *
+ * Best-effort and silent on failure: a selector that doesn't resolve here is about to make
+ * the action itself throw a real, clearer error a moment later, and this is not the call
+ * that should report it first.
+ */
+/* c8 ignore start -- executes in the browser, covered by the real-browser E2E */
+async function recordCursorPoint(
+  page: Page,
+  points: CursorPoint[],
+  index: number,
+  type: CursorPointType,
+  selector: string,
+  replayStartedAt: number,
+): Promise<void> {
+  try {
+    const center = await page.$eval(selector, (el) => {
+      el.scrollIntoView({ block: "center", inline: "center" });
+      const r = el.getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    });
+    points.push({ index, type, selector, x: center.x, y: center.y, atMs: Date.now() - replayStartedAt });
+  } catch {
+    // Selector didn't resolve or wasn't measurable -- not this function's job to report.
+  }
+}
+/* c8 ignore stop */
+
+/**
  * Replays a beat's interactions in array order. Shared verbatim by both capture
  * tools so their replay semantics never drift apart -- called after navigation
  * and (for both tools) after the zoom-desync compensation below, in the same
  * effective CSS-pixel viewport CAPTURE.md measured.
+ *
+ * Returns every click/hover/fill/select target's real measured center, in replay order,
+ * for capture_screenshot/capture_screen_recording to persist as a cursor sidecar (see
+ * cursor.ts) -- this is what lets scaffold_scene's cursor overlay land on real coordinates
+ * instead of a hand-authored guess.
  */
-export async function replayInteractions(page: Page, interactions: Interaction[] | undefined): Promise<void> {
+export async function replayInteractions(page: Page, interactions: Interaction[] | undefined): Promise<CursorPoint[]> {
+  const points: CursorPoint[] = [];
+  const replayStartedAt = Date.now();
+  let index = 0;
   for (const interaction of interactions ?? []) {
     switch (interaction.type) {
       case "click":
+        await recordCursorPoint(page, points, index, "click", interaction.selector, replayStartedAt);
         await page.click(interaction.selector);
         break;
       case "fill":
+        await recordCursorPoint(page, points, index, "fill", interaction.selector, replayStartedAt);
         await page.fill(interaction.selector, interaction.value);
         break;
       case "select":
+        await recordCursorPoint(page, points, index, "select", interaction.selector, replayStartedAt);
         await page.selectOption(interaction.selector, interaction.value);
         break;
       case "hover":
+        await recordCursorPoint(page, points, index, "hover", interaction.selector, replayStartedAt);
         await page.hover(interaction.selector);
         break;
       case "scroll":
@@ -181,7 +228,9 @@ export async function replayInteractions(page: Page, interactions: Interaction[]
         await settlePage(page, { timeoutMs: interaction.ms });
         break;
     }
+    index++;
   }
+  return points;
 }
 
 export const ZOOM_EPSILON = 0.01;

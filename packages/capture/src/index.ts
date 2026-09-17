@@ -12,5 +12,6 @@
 export * from "./process";
 export * from "./browser";
 export * from "./settle";
+export * from "./cursor";
 export * from "./native";
 export * from "./terminal";

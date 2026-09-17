@@ -14,6 +14,7 @@ import {
 import { pngSize } from "../scenes/pngSize";
 import { castToSteps, serializeSteps, type TerminalCastLike } from "../scenes/castToSteps";
 import { probeVideoDurationFrames } from "../scenes/videoDuration";
+import { readCursorPoints } from "../scenes/cursorPoints";
 
 export type { SceneKind };
 
@@ -120,6 +121,16 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
           `Re-run scaffold_scene after capture_screenshot to size the frame from the real file.`,
       );
     }
+
+    const cursor = readCursorPoints(png, { kind: "even-spread", durationFrames: ctx.durationFrames });
+    if (cursor) {
+      ctx.cursorPoints = cursor.points;
+      ctx.cursorViewport = cursor.viewport;
+      notes.push(
+        `Cursor path recorded from ${cursor.pointCount} real interaction(s) during capture, spread evenly ` +
+          `across the beat (a still has no video timeline for real timing to be relative to).`,
+      );
+    }
   }
 
   if (input.kind === "real-recording" || input.kind === "higgsfield-clip") {
@@ -139,6 +150,16 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
         notes.push(
           `Could not probe ${recordingRel}'s duration (ffprobe missing or the file isn't a readable video), ` +
             `so the scene does not hold a last frame if the recording runs short of the beat's duration.`,
+        );
+      }
+
+      const cursor = readCursorPoints(recordingPath, { kind: "real-time", durationFrames: ctx.durationFrames, fps });
+      if (cursor) {
+        ctx.cursorPoints = cursor.points;
+        ctx.cursorViewport = cursor.viewport;
+        notes.push(
+          `Cursor path recorded from ${cursor.pointCount} real interaction(s), timed to when they actually ` +
+            `happened in the recording, so the overlay stays in sync with the video.`,
         );
       }
     } else {
@@ -229,7 +250,12 @@ export function registerScaffoldScene(server: McpServer): void {
         "For real-recording/higgsfield-clip beats, the real recording's length is probed with ffprobe and, " +
         "when it's shorter than the beat's own duration, the scene holds the recording's true last frame for " +
         "the remainder (Remotion's Freeze pattern) instead of letting OffthreadVideo show whatever frame it " +
-        "happens to have past the source's own end. " +
+        "happens to have past the source's own end. For real-screenshot/real-recording/higgsfield-clip beats, " +
+        "a `<asset>.cursor.json` sidecar left by capture_screenshot/capture_screen_recording (real " +
+        "click/hover/fill/select target coordinates) is also read if present and rendered as a CursorActor: " +
+        "evenly spread across the beat's duration for a still (a capture has no video timeline for real " +
+        "timing to be relative to), or timed to when each interaction actually happened for a recording, so " +
+        "the overlay stays in sync with the video. No sidecar, no cursor -- nothing is invented. " +
         "Constructed scenes use a gentle camera push and a safe content width, because the visible area is " +
         "the stage divided by the camera scale and content built at full stage size gets cropped at the " +
         "frame edge. Refuses to overwrite an existing scene unless overwrite: true.",

@@ -13,7 +13,9 @@ import {
   replayInteractions,
   settlePage,
   viewportSchema,
+  writeCursorSidecar,
   writeSettleSidecar,
+  type CursorPoint,
   type Interaction,
   type SettleReport,
   type Viewport,
@@ -84,6 +86,13 @@ export interface CaptureScreenshotResult {
   zoom: number;
   /** What the pre-capture wait actually waited for. Absent when settling was disabled. */
   settle?: SettleReport;
+  /**
+   * Real click/hover/fill/select target centers measured during interaction replay, in
+   * replay order. Empty/absent when there were no such interactions. Also written to
+   * `<outPath>.cursor.json` (see @openvidstudio/capture's writeCursorSidecar) so
+   * scaffold_scene can build a cursor overlay from real coordinates instead of a guess.
+   */
+  cursorPoints?: CursorPoint[];
 }
 
 export interface CropRect {
@@ -155,7 +164,7 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
 
       const { zoom, viewport: compensatedViewport } = await detectAndCompensateZoom(page, target);
 
-      await replayInteractions(page, input.interactions);
+      const cursorPoints = await replayInteractions(page, input.interactions);
 
       // Nothing is captured until the page has finished becoming itself: webfonts swapped
       // in, images decoded, entrance transitions driven to their end. Capturing before that
@@ -197,6 +206,11 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
       // downstream keeps: a beat that timed out mid-transition has no evidence of it left
       // once this call returns. The sidecar is what validate_scenes checks statically.
       if (settleReport) writeSettleSidecar(outPathAbs, settleReport);
+      // Same reasoning as the settle sidecar: without this, the real coordinates measured
+      // during replay only ever live in this call's return value, and scaffold_scene (run
+      // afterwards, in a separate tool call) would have no real coordinates to build a
+      // cursor overlay from.
+      writeCursorSidecar(outPathAbs, compensatedViewport, cursorPoints);
 
       return {
         outPath: outPathAbs,
@@ -207,6 +221,7 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
         deviceScaleFactor,
         zoom,
         ...(settleReport ? { settle: settleReport } : {}),
+        ...(cursorPoints.length ? { cursorPoints } : {}),
       };
     } finally {
       await context.close();
@@ -246,9 +261,14 @@ export function registerCaptureScreenshot(server: McpServer): void {
         "prefers-reduced-motion CSS is correct from the first paint -- omit both for the page's own default. " +
         "Default outPath is " +
         "public/images/<beatId>.png under projectRoot, matching scaffold_scene's real-screenshot convention. " +
-        "Returns { outPath, width, height, pixelWidth, pixelHeight, deviceScaleFactor, zoom, settle? } -- " +
+        "Every click/hover/fill/select interaction's real target center is also measured (scrolled into view " +
+        "first, same rect-measurement style as cropSelector) and written to `<outPath>.cursor.json`, so " +
+        "scaffold_scene can build a cursor overlay from real coordinates instead of a hand-drawn guess. " +
+        "Returns { outPath, width, height, pixelWidth, pixelHeight, deviceScaleFactor, zoom, settle?, " +
+        "cursorPoints? } -- " +
         "width/height are CSS pixels, pixelWidth/pixelHeight the real pixels on disk, zoom the measured " +
-        "desync ratio for STYLE.md's frame-sizing formula, settle the report (omitted when settle:false). " +
+        "desync ratio for STYLE.md's frame-sizing formula, settle the report (omitted when settle:false), " +
+        "cursorPoints the same real coordinates written to the sidecar (omitted when there were none). " +
         "Requires Chromium to be installed for " +
         "Playwright first: run \"npx playwright install chromium\" once wherever this package is installed; " +
         "a missing browser fails with a message telling you to do exactly that, not a cryptic native error.",

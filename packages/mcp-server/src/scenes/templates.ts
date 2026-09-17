@@ -68,6 +68,19 @@ export interface SceneContext {
    */
   recordingDurationFrames?: number;
   /**
+   * Real click/hover/fill/select target centers from capture_screenshot/
+   * capture_screen_recording's cursor sidecar, already assigned a frame number by
+   * scaffold_scene (order-spread across the beat for a still; the sidecar's own real
+   * elapsed-time-based atMs for a recording, so the overlay stays in sync with what the
+   * video is actually doing). Coordinates are in the CSS-pixel space cursorViewport
+   * describes -- the template converts them into its own stage geometry, since only the
+   * template knows its own frame/crop math (BrowserFrame's content area for a still,
+   * object-fit: cover for a full-bleed recording).
+   */
+  cursorPoints?: { frame: number; x: number; y: number; click: boolean }[];
+  /** The CSS-pixel viewport cursorPoints' x/y were measured in. */
+  cursorViewport?: { width: number; height: number };
+  /**
    * Serialized TermStep[] for the terminal-cast template, built at scaffold time from
    * the real cast on disk. Inlined rather than fetched at render time for the same
    * reason browser-capture reads pngSize at scaffold time: the artifact already exists
@@ -147,6 +160,29 @@ function captionWindow(frames: number): { at: number; out: number } {
   return { at: Math.round(frames * 0.18), out: Math.max(24, Math.round(frames * 0.82)) };
 }
 
+/**
+ * Builds a <CursorActor> element from real cursor points, already frame-assigned by
+ * scaffold_scene, transformed from the CSS-pixel capture viewport into whatever stage
+ * coordinate space `toStage` describes. Null when there's nothing to draw, so callers can
+ * splice the result straight into a template without an extra existence check at every
+ * call site.
+ */
+function cursorActorJsx(
+  points: SceneContext["cursorPoints"],
+  viewport: SceneContext["cursorViewport"],
+  toStage: (x: number, y: number) => { x: number; y: number },
+): string | null {
+  if (!points || points.length === 0 || !viewport) return null;
+  const path = points
+    .map((p) => {
+      const s = toStage(p.x, p.y);
+      return `{ frame: ${p.frame}, x: ${Math.round(s.x)}, y: ${Math.round(s.y)} }`;
+    })
+    .join(", ");
+  const clicks = points.filter((p) => p.click).map((p) => p.frame);
+  return `<CursorActor path={[${path}]} clicks={[${clicks.join(", ")}]} />`;
+}
+
 /* ------------------------------------------------------------------ capture */
 
 function browserCapture(ctx: SceneContext): string {
@@ -172,14 +208,33 @@ function browserCapture(ctx: SceneContext): string {
   const midScale = floor2((startScale + maxScale) / 2);
   const mid = Math.round(ctx.durationFrames * 0.55);
   const cap = captionWindow(ctx.durationFrames);
+
+  // Cursor overlay, in the same stage-space math LEFT/TOP below use, computed here (not in
+  // the generated source) because only Node has the real numbers to transform with -- the
+  // generated file gets the already-computed pixel positions baked in as literals, same as
+  // FRAME_W/FRAME_H themselves. Scale is against cursorViewport (the CSS-pixel viewport the
+  // points were measured in), never against w/h (the capture PNG's raw pixel dimensions,
+  // which are deviceScaleFactor times larger) -- using the PNG's pixel size here would
+  // silently misplace every point by exactly deviceScaleFactor.
+  const left = (1920 - frameW) / 2;
+  const top = (1080 - frameH) / 2;
+  const cursorJsx = ctx.cursorViewport
+    ? cursorActorJsx(ctx.cursorPoints, ctx.cursorViewport, (x, y) => ({
+        x: left + x * (frameW / ctx.cursorViewport!.width),
+        y: top + 56 + y * ((frameH - 56) / ctx.cursorViewport!.height),
+      }))
+    : null;
+  const coreImports = ["CinematicScene", "Layer", "BrowserFrame", "Caption", "E"];
+  if (cursorJsx) coreImports.push("CursorActor");
+
   return `${HEADER(ctx.beatId, "browser-capture", ctx.description)}
 //
 // Frame size comes from the real capture on disk (${w}x${h}), not a guess, so the
 // page is not letterboxed or stretched. Camera sits inside the UI and keeps moving.
-
+${cursorJsx ? "//\n// Cursor path is real: measured from each interaction's DOM target during capture, not\n// hand-picked. Re-run scaffold_scene with overwrite: true after re-capturing to refresh it.\n" : ""}
 import React from "react";
 import { Img, staticFile } from "remotion";
-import { CinematicScene, Layer, BrowserFrame, Caption, E } from "@openvidstudio/core";
+import { ${coreImports.join(", ")} } from "@openvidstudio/core";
 
 const FRAME_W = ${frameW};
 const FRAME_H = ${frameH};
@@ -205,6 +260,7 @@ export const ${ctx.componentName}: React.FC = () => {
             />
           </BrowserFrame>
         </div>
+        ${cursorJsx ?? ""}
       </Layer>
     </CinematicScene>
   );
@@ -249,13 +305,40 @@ function recording(ctx: SceneContext, higgsfield: boolean): string {
 // OffthreadVideo happens to have at that point, not deliberately the final one. Re-run
 // scaffold_scene with overwrite: true if the recording is re-captured at a different length.`
     : "";
+
+  // The video fills the full 1920x1080 stage at objectFit: cover (Layer depth={0} is
+  // position: absolute, inset: 0 over the whole stage), so the cursor transform is
+  // standard CSS object-fit: cover math -- scale to cover both axes, then center-crop --
+  // against cursorViewport (the CSS-pixel viewport the points were measured in), not
+  // against any pixel dimension of the encoded mp4 itself.
+  const cursorJsx = ctx.cursorViewport
+    ? (() => {
+        const vw = ctx.cursorViewport!.width;
+        const vh = ctx.cursorViewport!.height;
+        const scale = Math.max(1920 / vw, 1080 / vh);
+        const offsetX = (1920 - vw * scale) / 2;
+        const offsetY = (1080 - vh * scale) / 2;
+        return cursorActorJsx(ctx.cursorPoints, ctx.cursorViewport, (x, y) => ({
+          x: offsetX + x * scale,
+          y: offsetY + y * scale,
+        }));
+      })()
+    : null;
+  const coreImports = ["CinematicScene", "Layer", "Caption", "E"];
+  if (cursorJsx) coreImports.push("CursorActor");
+  const cursorNote = cursorJsx
+    ? "//\n// Cursor path is real: measured from each interaction's DOM target during capture, timed\n" +
+      "// to when it actually happened in this recording (not evenly spread), so it stays in sync\n" +
+      "// with the video. Re-run scaffold_scene with overwrite: true after re-capturing to refresh it.\n"
+    : "";
+
   return `${HEADER(ctx.beatId, "recording", ctx.description)}
 //
 ${note}
-${holdFrames ? `${holdNote}\n` : ""}
+${holdFrames ? `${holdNote}\n` : ""}${cursorNote}
 import React from "react";
 ${remotionImports}
-import { CinematicScene, Layer, Caption, E } from "@openvidstudio/core";
+import { ${coreImports.join(", ")} } from "@openvidstudio/core";
 
 export const ${ctx.componentName}: React.FC = () => {
   return (
@@ -268,6 +351,7 @@ export const ${ctx.componentName}: React.FC = () => {
     >
       <Layer depth={0}>
         ${videoTag}
+        ${cursorJsx ?? ""}
       </Layer>
     </CinematicScene>
   );

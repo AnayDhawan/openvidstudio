@@ -9,12 +9,14 @@ import {
   DEFAULT_VIEWPORT,
   screenEncodeArgs,
   settlePage,
+  writeCursorSidecar,
   writeSettleSidecar,
   detectAndCompensateZoom,
   interactionSchema,
   launchChromium,
   replayInteractions,
   viewportSchema,
+  type CursorPoint,
   type Interaction,
   type SettleReport,
   type Viewport,
@@ -72,6 +74,14 @@ export interface CaptureScreenRecordingResult {
   zoom: number;
   durationMs?: number;
   settle?: SettleReport;
+  /**
+   * Real click/hover/fill/select target centers measured during interaction replay, with
+   * atMs rewritten to be relative to the RECORDING's own start (navigation+settle time
+   * added back in) rather than replay-relative, so a consumer can turn a point into a video
+   * frame directly via fps. Also written to `<outPath>.cursor.json`. Empty/absent when
+   * there were no such interactions.
+   */
+  cursorPoints?: CursorPoint[];
 }
 
 /**
@@ -184,8 +194,12 @@ export async function runCaptureScreenRecording(
           },
         },
       });
+      let cursorPoints: CursorPoint[] = [];
       try {
         const page = await recordContext.newPage();
+        // Playwright's video starts recording as soon as this page exists, so this is the
+        // real zero point every cursor point's atMs gets rebased against below.
+        const recordingStartedAt = Date.now();
         await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
         // Settle BEFORE the interactions, not after: the recording is already running, so
         // this is what keeps the opening seconds of the clip from being the page still
@@ -193,7 +207,17 @@ export async function runCaptureScreenRecording(
         if (input.settle !== false) {
           settleReport = await settlePage(page, { timeoutMs: input.settleTimeoutMs });
         }
-        await replayInteractions(page, input.interactions);
+        const preReplayAt = Date.now();
+        const rawCursorPoints = await replayInteractions(page, input.interactions);
+        // replayInteractions' own atMs is relative to when IT started, not to the
+        // recording. Rebasing onto recordingStartedAt (and compressing by `speed`, since
+        // buildFfmpegTranscodeArgs retimes the whole clip's presentation timestamps at
+        // transcode) is what makes atMs directly convertible to a frame in the FINAL mp4
+        // via fps, without the consumer having to know navigation/settle timing or speed.
+        cursorPoints = rawCursorPoints.map((p) => ({
+          ...p,
+          atMs: (preReplayAt - recordingStartedAt + p.atMs) / speed,
+        }));
         const video = page.video();
         if (!video) {
           throw new Error("Playwright did not attach a Video to this page -- recordVideo may not be active.");
@@ -222,6 +246,9 @@ export async function runCaptureScreenRecording(
       // then discarded when the function returned, with no evidence anywhere that a
       // recording's opening seconds might have started before the page actually settled.
       if (settleReport) writeSettleSidecar(outPathAbs, settleReport);
+      // Same reasoning: without this, scaffold_scene (a separate later tool call) has no
+      // real coordinates or timing to build a cursor overlay from.
+      writeCursorSidecar(outPathAbs, compensatedViewport, cursorPoints);
 
       return {
         outPath: outPathAbs,
@@ -230,6 +257,7 @@ export async function runCaptureScreenRecording(
         zoom,
         ...(durationMs !== undefined ? { durationMs } : {}),
         ...(settleReport ? { settle: settleReport } : {}),
+        ...(cursorPoints.length ? { cursorPoints } : {}),
       };
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -261,10 +289,17 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         "page exists so prefers-color-scheme/prefers-reduced-motion CSS is correct from the first frame. The " +
         "settle report (when " +
         "settle wasn't disabled) is both returned and written to `<outPath>.settle.json`, so validate_scenes " +
-        "can flag a timed-out beat without a browser. Default outPath is " +
+        "can flag a timed-out beat without a browser. Every click/hover/fill/select interaction's real target " +
+        "center is also measured during replay and written to `<outPath>.cursor.json`, with its timing " +
+        "rebased onto the recording's own start (navigation+settle time added back in) and compressed by " +
+        "`speed`, so it lands on the right frame of the FINAL retimed mp4 -- this is what lets scaffold_scene " +
+        "sync a cursor overlay to what the video is actually doing at that moment, instead of a hand-drawn " +
+        "guess. Default outPath is " +
         "public/video/<beatId>.mp4 under projectRoot, matching scaffold_scene's real-recording convention. " +
-        "Returns { outPath, width, height, zoom, durationMs?, settle? } -- durationMs is a best-effort ffprobe lookup, " +
-        "omitted (not failed) if ffprobe isn't available. Requires Chromium to be installed for Playwright " +
+        "Returns { outPath, width, height, zoom, durationMs?, settle?, cursorPoints? } -- durationMs is a " +
+        "best-effort ffprobe lookup, " +
+        "omitted (not failed) if ffprobe isn't available; cursorPoints the same real, retimed coordinates " +
+        "written to the sidecar (omitted when there were none). Requires Chromium to be installed for Playwright " +
         "first: run \"npx playwright install chromium\" once wherever this package is installed; a missing " +
         "browser fails with a message telling you to do exactly that, not a cryptic native error.",
       inputSchema: {

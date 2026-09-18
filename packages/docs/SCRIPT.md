@@ -44,6 +44,24 @@ whether it needs a real capture or an honest `dom-demo`. Don't write a
 claim the decision tree can't resolve to something real or
 explicitly-labeled-constructed.
 
+## Tone
+
+The claim-obligates-visual rule and the direct, confident voice above are non-negotiable
+in every tone. Tone changes energy and pacing, never honesty.
+
+- **default.** Direct, confident, plain. The baseline above with nothing added.
+- **release.** Terser still. Built for a changelog/what's-new cut: lead with the change,
+  name the beat that shows it, skip framing sentences like "here's what's new."
+- **walkthrough.** Slower, more explanatory. Full sentences, a beat's VO may explain why a
+  step matters, not just name it. For a docs/tutorial video where the viewer is following
+  along, not skimming.
+- **quiet.** Understated, almost dry. Short sentences, no adjectives doing marketing work
+  ("powerful", "seamless"), let the visual carry the excitement. Fits an audience that
+  already trusts the product and wants the facts.
+
+State the tone once at the top of a video's brief if it isn't `default`, so every beat's
+VO is written in the same register rather than drifting line to line.
+
 ## No em dashes
 
 No em dashes in any VO line, ever, same writing rule as every other doc in

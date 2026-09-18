@@ -170,5 +170,12 @@ export interface BeatsFile {
   /** 30fps assumed if omitted, per PLANNING.md / PIPELINE.md. */
   fps?: number;
   title: string;
+  /**
+   * "default" assumed if omitted. One of SCRIPT.md's Tone section presets (default,
+   * release, walkthrough, quiet) or a project-specific label; not enforced by any tool,
+   * it exists so every beat's VO gets written in the same register instead of drifting
+   * line to line across a multi-session video. See PLANNING.md §7.
+   */
+  tone?: string;
   beats: Beat[];
 }

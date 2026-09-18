@@ -20,7 +20,7 @@ import { runTool } from "./mcp";
  * release or two, which is the whole problem with hand-made docs images.
  */
 
-export type Rendition = "gif" | "screenshots" | "store-frames";
+export type Rendition = "gif" | "screenshots" | "store-frames" | "poster";
 
 export interface RenditionBeat {
   id: string;
@@ -44,12 +44,26 @@ export interface ExportRenditionInput {
   device?: StoreDevice;
   /** store-frames only: beats to export. Defaults to every beat. */
   beatIds?: string[];
+  /** poster only. Which beat's midpoint to use as the poster frame. Defaults to the last beat. */
+  posterBeatId?: string;
+  /** poster only. Exact timestamp in seconds, overriding posterBeatId. */
+  posterAt?: number;
+  /**
+   * poster only. Also write a copy of the render with the poster baked in as the file's
+   * embedded thumbnail (an attached_pic stream, the same mechanism a podcast mp3's cover
+   * art uses), so players and file browsers show it instead of a black or mid-motion first
+   * frame. Defaults to true. The picture itself is untouched frame-for-frame; only a
+   * thumbnail stream is added.
+   */
+  bake?: boolean;
 }
 
 export interface ExportRenditionResult {
   format: Rendition;
   files: string[];
   indexPath?: string;
+  /** poster only, when bake was not disabled: the render with the poster baked in as its thumbnail. */
+  bakedPath?: string;
   notes: string[];
 }
 
@@ -143,6 +157,35 @@ export function buildStoreFrameArgs(
     "-vf",
     `scale=${innerW}:${innerH}:force_original_aspect_ratio=decrease,` +
       `pad=${device.width}:${device.height}:(ow-iw)/2:(oh-ih)/2:0x101014`,
+    outPath,
+    "-y",
+  ];
+}
+
+/**
+ * Attaches a still image to a video as its embedded thumbnail, the mechanism a podcast
+ * mp3's cover art uses (an `attached_pic`-disposed stream), rather than by re-encoding the
+ * first frame. `-c copy` on the picture stream means the original video and audio are
+ * copied byte-for-byte, not re-encoded, so a poster bake never touches the render's actual
+ * quality: only a thumbnail stream is added.
+ */
+export function buildAttachPosterArgs(inPath: string, posterPath: string, outPath: string): string[] {
+  return [
+    "-nostdin",
+    "-i",
+    inPath,
+    "-i",
+    posterPath,
+    "-map",
+    "0",
+    "-map",
+    "1",
+    "-c",
+    "copy",
+    "-c:v:1",
+    "mjpeg",
+    "-disposition:v:1",
+    "attached_pic",
     outPath,
     "-y",
   ];
@@ -249,6 +292,49 @@ export async function runExportRendition(input: ExportRenditionInput): Promise<E
     return { format: "screenshots", files, indexPath: indexRel, notes };
   }
 
+  if (input.format === "poster") {
+    let atSeconds: number;
+    if (typeof input.posterAt === "number") {
+      atSeconds = input.posterAt;
+    } else {
+      const beatId = input.posterBeatId ?? beats[beats.length - 1].id;
+      const beat = beats.find((b) => b.id === beatId);
+      if (!beat) throw new Error(`No beat "${beatId}" in this video's manifest.`);
+      atSeconds = beatMidpointSeconds(beat, fps);
+    }
+
+    const posterRel = input.outPath ?? path.join("output", `${videoName}-poster.jpg`);
+    sanitizeRelativeOutPath(projectRoot, posterRel, "outPath");
+    fs.mkdirSync(path.dirname(path.join(projectRoot, posterRel)), { recursive: true });
+    const frame = await spawnCapture(
+      "ffmpeg",
+      buildFrameArgs(inPathRel, atSeconds, posterRel),
+      projectRoot,
+    );
+    if (frame.code !== 0) throw new Error(`poster frame extraction failed:\n${frame.stderr.slice(-800)}`);
+    files.push(posterRel);
+    notes.push(`Poster taken at ${atSeconds.toFixed(2)}s.`);
+
+    let bakedPath: string | undefined;
+    if (input.bake !== false) {
+      const bakedRel = path.join(path.dirname(inPathRel), `${videoName}-poster.mp4`);
+      const bake = await spawnCapture(
+        "ffmpeg",
+        buildAttachPosterArgs(inPathRel, posterRel, bakedRel),
+        projectRoot,
+      );
+      if (bake.code !== 0) throw new Error(`baking the poster into the video failed:\n${bake.stderr.slice(-800)}`);
+      files.push(bakedRel);
+      bakedPath = bakedRel;
+      notes.push(
+        `${bakedRel} is the same render with the poster baked in as its embedded thumbnail, video and ` +
+          `audio copied unchanged. Swap it in for ${inPathRel} once you are happy with the frame.`,
+      );
+    }
+
+    return { format: "poster", files, notes, ...(bakedPath ? { bakedPath } : {}) };
+  }
+
   const deviceKey = input.device ?? "iphone-6.9";
   const device = STORE_DEVICES[deviceKey];
   if (!device) throw new Error(`Unknown device "${deviceKey}". Known: ${Object.keys(STORE_DEVICES).join(", ")}.`);
@@ -298,15 +384,21 @@ export function registerExportRendition(server: McpServer): void {
         "cannot drift from it. format: \"store-frames\" produces App Store and Play Store images at the exact " +
         "pixel dimensions each store demands (6.9 and 6.5 inch iPhone, 13 inch iPad, Play Store phone and " +
         "tablet), fitting the shot inside the canvas rather than filling it, because filling crops away the " +
-        "UI the screenshot exists to show. All three read the finished render plus beats.json rather than " +
-        "re-capturing, so run render_video first.",
+        "UI the screenshot exists to show. format: \"poster\" picks one frame (a beat's midpoint, defaulting " +
+        "to the last beat, or an exact posterAt timestamp) and writes it as <videoName>-poster.jpg, then, " +
+        "unless bake is set to false, also writes <videoName>-poster.mp4: the same render with that frame " +
+        "baked in as the file's embedded thumbnail (an attached_pic stream, the same mechanism a podcast " +
+        "mp3's cover art uses), copied not re-encoded, so video and audio quality are untouched. Skipping " +
+        "this step is why a shared video's idle thumbnail is so often a black frame or a mid-motion blur " +
+        "instead of the frame that was actually chosen to represent it. All four formats read the finished " +
+        "render plus beats.json rather than re-capturing, so run render_video first.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
-        format: z.enum(["gif", "screenshots", "store-frames"]),
+        format: z.enum(["gif", "screenshots", "store-frames", "poster"]),
         inPath: z.string().optional().describe("The finished render. Defaults to output/<videoName>.mp4."),
         outDir: z.string().optional(),
-        outPath: z.string().optional().describe("gif only."),
+        outPath: z.string().optional().describe("gif and poster only."),
         fps: z.number().int().positive().optional().describe("gif only. Defaults to 12."),
         width: z.number().int().positive().optional().describe("gif only. Defaults to 720."),
         device: z
@@ -314,6 +406,9 @@ export function registerExportRendition(server: McpServer): void {
           .optional()
           .describe("store-frames only. Defaults to iphone-6.9."),
         beatIds: z.array(z.string()).optional().describe("store-frames only. Defaults to every beat."),
+        posterBeatId: z.string().optional().describe("poster only. Defaults to the last beat."),
+        posterAt: z.number().optional().describe("poster only. Exact seconds, overriding posterBeatId."),
+        bake: z.boolean().optional().describe("poster only. Defaults to true."),
       },
     },
     async (input) => runTool("export_rendition", () => runExportRendition(input)),

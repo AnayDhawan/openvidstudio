@@ -358,3 +358,21 @@ explicitly, and `artifacts.recordingPath` records where its capture landed
 (here just the convention path spelled out, not overridden). Every other
 beat in this example omits both fields on purpose: `"cut"` and the
 convention paths are assumed.
+
+## 7. Tone (added 2026-09-18)
+
+`beats.json` can carry a top-level `tone`:
+
+```json
+{ "title": "Loomcard", "tone": "release", "beats": [ ... ] }
+```
+
+Omit it and `"default"` is assumed, matching every `beats.json` written before this
+existed. `SCRIPT.md`'s Tone section defines the preset vocabulary (`default`, `release`,
+`walkthrough`, `quiet`) and what each one changes about pacing and register; nothing here
+enforces the value, it exists so a video with several beats, written across more than one
+session, reads like one person wrote all of it instead of drifting line to line.
+
+Ask about tone at intake alongside target length (§1.3) when it isn't obviously the
+default: a release/changelog video and a full walkthrough want different registers from
+the same product.

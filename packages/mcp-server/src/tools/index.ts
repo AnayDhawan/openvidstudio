@@ -28,6 +28,7 @@ import { registerVisualRegression } from "./visualRegression";
 import { registerDocsDrift } from "./docsDrift";
 import { registerPlanShots } from "./planShots";
 import { registerReleaseDiff } from "./releaseDiff";
+import { registerMusicCues } from "./musicCues";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -67,6 +68,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerDocsDrift(server);
   registerPlanShots(server);
   registerReleaseDiff(server);
+  registerMusicCues(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

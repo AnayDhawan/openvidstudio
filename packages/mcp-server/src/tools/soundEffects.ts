@@ -44,6 +44,7 @@ const BUILT_IN: Record<string, string> = {
   success: "positive confirmation tone",
   whoosh: "transition sweep",
   "music-bed": "ambient background bed, detuned sines plus pink noise",
+  "pulse-bed": "rhythmic background bed, kick and offbeat hat at a fixed 112bpm with an exact cue grid",
 };
 
 /**
@@ -58,6 +59,7 @@ const SYNONYMS: [RegExp, string][] = [
   [/\b(whoosh|swoosh|transition|sweep|swipe)\b/i, "whoosh"],
   [/\b(bell|chime|notification|ding|alert)\b/i, "bell"],
   [/\b(blip|beep|bloop|tick)\b/i, "blip"],
+  [/\b(rhythmic|pulse|beat-?locked|drum|percussive|bpm)\b/i, "pulse-bed"],
   [/\b(music|bed|ambient|background|underscore|track)\b/i, "music-bed"],
 ];
 
@@ -306,7 +308,7 @@ export async function runSoundEffects(input: SoundEffectsInput): Promise<SoundEf
         description: need.description,
         status: "already-built-in",
         builtInName: builtIn,
-        file: `sfx/${builtIn}${builtIn === "music-bed" ? ".mp3" : ".wav"}`,
+        file: `sfx/${builtIn}${builtIn === "music-bed" || builtIn === "pulse-bed" ? ".mp3" : ".wav"}`,
       });
       continue;
     }
@@ -413,7 +415,9 @@ export function registerSoundEffects(server: McpServer): void {
       description:
         "Ask the user what sounds the video needs, then call this with one entry per sound. It first " +
         "checks the synthesized pack that ships with the project, which already covers clicks, " +
-        "keystrokes, a bell, a blip, a success tone, a whoosh and a music bed, so people are not sent " +
+        "keystrokes, a bell, a blip, a success tone, a whoosh, an ambient music bed and a beat-locked " +
+        "pulse bed (112bpm, exact cue grid in public/sfx/pulse-bed.cues.json, see plan_music_cues and " +
+        "STYLE.md's beat-locked cuts section), so people are not sent " +
         "off to download a click sound that is already in the box. For anything genuinely missing it " +
         "returns an 'instructions' list: one Pixabay search link per sound and the exact filename to " +
         "save it as, all going into public/imported_audios/, kept separate from the built-in pack in " +

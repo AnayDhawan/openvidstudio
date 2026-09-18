@@ -43,6 +43,13 @@ export interface StitchCompositionResult {
   /** Beats that will render silent. Previously knowable only by diffing two lists by hand. */
   voBeatsMissing: string[];
   musicBedFound: boolean;
+  /**
+   * Which bed actually got used, when one did: "music-bed.mp3" (the ambient drone) or
+   * "pulse-bed.mp3" (the beat-locked rhythmic bed, see STYLE.md's "Beat-locked cuts").
+   * pulse-bed.mp3 wins if a project has copied in both, since a project that went to the
+   * trouble of adding the rhythmic bed almost always means to use it.
+   */
+  musicBedFile: string | null;
   /** Plain-language notices for things that succeeded but probably are not what was wanted. */
   warnings: string[];
   /** One entry per language, including the base. */
@@ -132,9 +139,9 @@ function renderDemoTsx(opts: {
   /** language -> beatId -> public-relative mp3 path. */
   voByLanguage: Record<string, Record<string, string>>;
   baseLanguage: string;
-  musicBedFound: boolean;
+  musicBedFile: string | null;
 }): string {
-  const { componentName, beats, voByLanguage, baseLanguage, musicBedFound } = opts;
+  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile } = opts;
   const sceneImports = beats
     .map((b) => `import { ${pascalCase(b.id)} } from "./scenes/${pascalCase(b.id)}";`)
     .join("\n");
@@ -149,9 +156,9 @@ function renderDemoTsx(opts: {
     })
     .join("\n");
 
-  const musicBedBlock = musicBedFound
+  const musicBedBlock = musicBedFile
     ? `      <Sequence from={0} durationInFrames={DURATION_IN_FRAMES} layout="none">
-        <Audio src={staticFile("audio/music-bed.mp3")} volume={0.18} loop />
+        <Audio src={staticFile(${JSON.stringify(`audio/${musicBedFile}`)})} volume={0.18} loop />
       </Sequence>
 `
     : "";
@@ -306,9 +313,12 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
 
   const voMap = voByLanguage[baseLanguage];
   const voBeatsMissing = languageReports.find((r) => r.language === baseLanguage)!.voBeatsMissing;
-  const musicBedFound = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
+  const pulseBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "pulse-bed.mp3"));
+  const musicBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
+  const musicBedFile = pulseBedPresent ? "pulse-bed.mp3" : musicBedPresent ? "music-bed.mp3" : null;
+  const musicBedFound = musicBedFile !== null;
 
-  const demoTsx = renderDemoTsx({ componentName, beats, voByLanguage, baseLanguage, musicBedFound });
+  const demoTsx = renderDemoTsx({ componentName, beats, voByLanguage, baseLanguage, musicBedFile });
   const demoPath = path.join(videoDir, `${componentName}.tsx`);
   fs.writeFileSync(demoPath, demoTsx, "utf8");
 
@@ -343,6 +353,7 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
     voBeatsFound: Object.keys(voMap),
     voBeatsMissing,
     musicBedFound,
+    musicBedFile,
     warnings,
     languages: languageReports,
   };
@@ -359,7 +370,11 @@ export function registerStitchComposition(server: McpServer): void {
         "PascalCase convention scaffold_scene uses -- beats without a scaffolded scene file will fail to " +
         "type-check, scaffold every beat first), a <Series> of <Series.Sequence> per beat, a VO Audio layer " +
         "per beat only where public/audio/vo/<beatId>.mp3 actually exists on disk, and a looping " +
-        "full-duration music bed layer if public/audio/music-bed.mp3 exists. Also (re)registers the " +
+        "full-duration music bed layer if public/audio/pulse-bed.mp3 or public/audio/music-bed.mp3 exists " +
+        "(pulse-bed wins if both are present). pulse-bed.mp3 is the beat-locked rhythmic bed from the " +
+        "built-in pack, generated at a known 112bpm with an exact cue grid in public/sfx/pulse-bed.cues.json " +
+        "(or plan_music_cues for any other track), so scene cuts can land on a beat instead of an arbitrary " +
+        "second. music-bed.mp3 is the older ambient drone with no pulse to cut against. Also (re)registers the " +
         "composition in src/Root.tsx (via an internal src/videos/.registry.json this tool owns), without " +
         "clobbering compositions a prior stitch_composition call registered for a different video in the " +
         "same project. Pass languages to emit one composition per language: the picture is shared and only the "

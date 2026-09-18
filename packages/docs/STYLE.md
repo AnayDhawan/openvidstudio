@@ -76,6 +76,36 @@ a rule here, it fails QC.
 - Grain: 4-6% opacity, animated (re-seeded translate per frame). Vignette:
   25-40% edge darkening.
 
+## The hook
+
+The first 2 seconds decide whether anyone watches the rest. Plan the hook beat before any
+other beat, not last. It must be built from a real capture or a labeled `dom-demo`, same
+as every other beat: an exciting hook that overclaims fails the claim-obligates-visual
+rule (`SCRIPT.md`) just as much as a boring one would.
+
+No generic SaaS language anywhere in VO or on-screen text: "streamline your workflow,"
+"powerful," "seamless," "unlock." Use the product's own copy and claims instead. If the
+product's README doesn't say it that way, the video shouldn't either.
+
+## Beat-locked cuts
+
+When a video's music bed is `pulse-bed.mp3` (or any other track `plan_music_cues` has a
+grid for), scene cuts can land on the beat instead of at an arbitrary second. Read
+`public/sfx/pulse-bed.cues.json` for the built-in bed, or call `plan_music_cues` for any
+other track, before writing `beats.json`'s `start` values.
+
+- `strongCues` are the sparse, strong moments (bar downbeats for pulse-bed). Snap a
+  handful of major reveals here: a hard cut into a new scene, a hero reveal, the outro
+  logo landing. Shift the reveal's start to within about 0.15s of the nearest strong cue.
+- `beats` is the full beat grid. Snap sequential reveals here: cards or stats arriving one
+  after another, a list filling in. Snap each to within about 0.10s of a consecutive beat.
+- Lock at most a handful of moments per video, not every cut. A video where everything
+  is beat-locked reads as rigid, not musical.
+- Readability outranks the grid. If snapping to a cue would cut off a line of text before
+  it's readable, use the natural timing instead and skip that lock.
+- Mark a locked cut in the brief so a later edit doesn't silently drift off the beat:
+  `// beat-locked: 12.86s`.
+
 ## Deferred (do not attempt in pure Remotion)
 
 - Live-action beats (desk/keyboard shots, ambient texture): text-free, so

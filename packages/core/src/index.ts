@@ -11,14 +11,12 @@ export { E, SPRING, tween, pop, jitter, staggerDelay } from "./motion";
 
 // SFX
 export {
-  KeySound,
   TypingSfx,
   Click,
   Whoosh,
   Blip,
   SuccessChime,
   Bell,
-  EnterKey,
   MusicBed,
 } from "./sfx";
 

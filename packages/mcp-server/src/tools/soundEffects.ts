@@ -32,15 +32,12 @@ import { runTool } from "./mcp";
  * and attribution for every clip it fetches.
  */
 
-/** The synthesized pack that ships with @openvidstudio/core. No rights attached. */
+/** The pack that ships with @openvidstudio/core: synthesized, plus one copyright-free typing recording. No rights attached. */
 const BUILT_IN: Record<string, string> = {
   bell: "soft notification chime, harmonic stack",
   blip: "short UI beep",
   click: "mouse or UI click",
-  key_a: "keystroke variant a",
-  key_b: "keystroke variant b",
-  key_c: "keystroke variant c",
-  key_enter: "return key, heavier than a keystroke",
+  "typing-effect": "continuous typing, one 8s copyright-free recording that plays across a typed run",
   success: "positive confirmation tone",
   whoosh: "transition sweep",
   "music-bed": "ambient background bed, detuned sines plus pink noise",
@@ -53,8 +50,7 @@ const BUILT_IN: Record<string, string> = {
  */
 const SYNONYMS: [RegExp, string][] = [
   [/\b(click|tap|press|button)\b/i, "click"],
-  [/\b(key|keystroke|typing|type|keyboard)\b/i, "key_a"],
-  [/\b(enter|return|submit)\b/i, "key_enter"],
+  [/\b(key|keystroke|typing|type|keyboard|enter|return|submit)\b/i, "typing-effect"],
   [/\b(success|complete|done|confirm|finish)\b/i, "success"],
   [/\b(whoosh|swoosh|transition|sweep|swipe)\b/i, "whoosh"],
   [/\b(bell|chime|notification|ding|alert)\b/i, "bell"],

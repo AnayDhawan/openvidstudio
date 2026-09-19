@@ -1,20 +1,10 @@
 #!/bin/bash
 # Generate synthesized UI SFX into public/sfx/ (no licensing, fully reproducible).
 # Swap any file for a real recorded pack later, sfx.tsx API stays identical.
+# typing-effect.mp3 is not generated here: it is a copyright-free recording committed as-is.
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p public/sfx
-
-# Mechanical key thocks: filtered brown-noise bursts, 3 pitch variations
-ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.06:c=brown:a=0.9" \
-  -af "highpass=f=180,lowpass=f=2400,afade=t=in:d=0.004,afade=t=out:st=0.025:d=0.035,volume=3.2" \
-  public/sfx/key_a.wav
-ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.055:c=brown:a=0.9:seed=7" \
-  -af "highpass=f=200,lowpass=f=1900,afade=t=in:d=0.004,afade=t=out:st=0.022:d=0.033,volume=3.4" \
-  public/sfx/key_b.wav
-ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.065:c=brown:a=0.9:seed=23" \
-  -af "highpass=f=160,lowpass=f=2900,afade=t=in:d=0.004,afade=t=out:st=0.028:d=0.037,volume=3.0" \
-  public/sfx/key_c.wav
 
 # Click: sharp short tick
 ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.03:c=white:a=0.8" \
@@ -48,11 +38,6 @@ ffmpeg -v error -y \
   -f lavfi -i "sine=frequency=3136:duration=1.6" \
   -filter_complex "[0]volume=1.0[a];[1]volume=0.45[b];[2]volume=0.22[c];[a][b][c]amix=inputs=3:normalize=0,afade=t=in:d=0.004,afade=t=out:st=0.12:d=1.45,volume=1.2" \
   public/sfx/bell.wav
-
-# Enter key: deeper, heavier thock than a letter key
-ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.085:c=brown:a=0.95:seed=41" \
-  -af "highpass=f=110,lowpass=f=1500,afade=t=in:d=0.004,afade=t=out:st=0.03:d=0.05,volume=3.6" \
-  public/sfx/key_enter.wav
 
 # Music bed: slow ambient pad, two detuned sines under a filtered noise wash.
 # Synthesized rather than licensed, so a generated video carries no third-party

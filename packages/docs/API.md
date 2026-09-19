@@ -258,14 +258,13 @@ No star action by default.
 
 ## Sound
 
-All synthesized by `scripts/gen-sfx.sh` with ffmpeg, so a rendered video carries no
-third-party audio rights. Regenerate with `bash scripts/gen-sfx.sh`.
+Synthesized by `scripts/gen-sfx.sh` with ffmpeg, except `typing-effect.mp3`, a
+copyright-free recording, so a rendered video carries no third-party audio rights.
+Regenerate the synthesized files with `bash scripts/gen-sfx.sh`.
 
 | Component | Props | Use |
 |---|---|---|
-| `KeySound` | `at`, `seed?`, `volume?` (0.16) | One keystroke |
-| `TypingSfx` | `charFrames`, `volume?` | One key per typed character |
-| `EnterKey` | `at`, `volume?` (0.2) | End of a typed command |
+| `TypingSfx` | `charFrames`, `volume?` (1) | The typing recording, played across each typed run |
 | `Click` | `at`, `volume?` | Cursor click |
 | `Whoosh` | `at`, `volume?` | Camera move or cut |
 | `Blip` | `at`, `volume?` (0.3) | UI reveal |

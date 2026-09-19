@@ -7,6 +7,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Typing sound is now one recording.** `typing-effect.mp3`, a copyright-free typing
+  recording, replaces the four synthesized key sounds. `TypingSfx` plays it across each
+  typed run instead of firing one sample per character, and loops it for long runs. The
+  rest of the built-in pack is still synthesized, so a rendered video still carries no
+  third-party audio rights.
+
+### Removed
+
+- `key_a.wav`, `key_b.wav`, `key_c.wav` and `key_enter.wav`, with the `KeySound` and
+  `EnterKey` components that played them. Use `TypingSfx` for typed text.
+
 ### Added
 
 - **`pulse-bed.mp3`, a beat-locked music bed.** A synthesized kick-and-hat bed at a fixed

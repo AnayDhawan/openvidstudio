@@ -300,10 +300,11 @@ export async function runCaptureScreenRecording(
     let webmPath: string;
     let settleReport: SettleReport | undefined;
     try {
-      // recordVideo.size is in real pixels while the viewport is in CSS pixels, so the
-      // recording size has to be scaled by hand. Leaving it at the CSS size would record a
-      // 2x page into a 1x film, throwing the extra resolution away at the exact point it
-      // was supposed to be captured.
+      // recordVideo.size is in the same CSS-pixel units as viewport, not physical pixels --
+      // Playwright only ever scales a painted frame DOWN to fit the requested size, never up.
+      // Pre-multiplying this by deviceScaleFactor asks for a canvas larger than the page ever
+      // paints into, so the extra area is never filled and stays flat grey; deviceScaleFactor
+      // alone is what drives the actual (higher-resolution) pixels Chromium renders.
       const recordContext = await browser.newContext({
         viewport: compensatedViewport,
         deviceScaleFactor,
@@ -311,10 +312,7 @@ export async function runCaptureScreenRecording(
         ...(input.reducedMotion ? { reducedMotion: "reduce" as const } : {}),
         recordVideo: {
           dir: tmpDir,
-          size: {
-            width: Math.round(compensatedViewport.width * deviceScaleFactor),
-            height: Math.round(compensatedViewport.height * deviceScaleFactor),
-          },
+          size: compensatedViewport,
         },
       });
       let cursorPoints: CursorPoint[] = [];

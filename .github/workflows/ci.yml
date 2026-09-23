@@ -22,6 +22,9 @@ jobs:
       # Before install, so a split dependency tree is named as such rather than
       # surfacing later as a minified React error during a render.
       - run: node scripts/check-version-alignment.mjs
+      # Catches a skill added under .claude/skills that never got mirrored to the other
+      # five tool directories (.agents, .cursor, .github, .opencode, .windsurf).
+      - run: node scripts/sync-skills.mjs --check
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @openvidstudio/capture build
       - run: pnpm --filter @openvidstudio/capture typecheck

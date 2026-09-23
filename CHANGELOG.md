@@ -40,6 +40,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   free-text query; `add_motion_primitive` writes the named entry's real `.tsx` source
   into `src/videos/<videoName>/primitives/`, ready to import into a scene unmodified. No
   hosted tier or account, same as the built-in SFX pack.
+- **`openvidstudio` and `bgmusic` skills now mirrored to every tool directory**, not just
+  `.claude/skills`: `.agents/skills`, `.cursor/skills`, `.github/skills`,
+  `.opencode/skills` and `.windsurf/skills` now carry them alongside the vendored
+  `remotion-*` skills. `scripts/sync-skills.mjs` generates the copies from
+  `.claude/skills` (their one source of truth) and a `--check` run is wired into CI, so a
+  skill added later can't silently stay `.claude`-only again.
 
 ### Changed
 

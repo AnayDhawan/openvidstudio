@@ -265,7 +265,7 @@ openvidstudio/
 ├── packages/
 │   ├── capture/        # @openvidstudio/capture: browser, desktop, mobile, terminal capture, no Remotion dependency
 │   ├── core/            # Remotion compositions, scene templates, render pipeline
-│   ├── mcp-server/       # @openvidstudio/mcp-server: the 29-30 MCP tools an agent calls
+│   ├── mcp-server/       # @openvidstudio/mcp-server: the 31-32 MCP tools an agent calls
 │   └── docs/             # PLANNING · OVERVIEW · PIPELINE · STYLE · CAPTURE · SCRIPT · API · NARRATION · PRESETS · HIGGSFIELD
 ├── templates/
 │   └── default/           # Starter project scaffolded by init_project

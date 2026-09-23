@@ -140,6 +140,12 @@ sound-effects endpoint. The user downloads; you verify. Call the tool again with
 token, and every clip it takes is recorded in `ATTRIBUTION.md`. Anything in that file has
 to reach the video description or the licence is breached.
 
+Music is the exception to all of that. `find_music_bed` searches two CC0 public-domain
+catalogs (~9,400 tracks) and `import_music_bed` trims, fades and loudness-matches the one
+the user picks into `public/audio/music-bed.mp3`. Nothing there needs crediting. The
+`bgmusic` skill has the detail; reach for it when the synthesized beds are too plain for
+a launch or promo piece.
+
 ## 7. Assemble and check
 
 `stitch_composition`, then `contact_sheet` before rendering. The contact sheet is two

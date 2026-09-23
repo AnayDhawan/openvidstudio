@@ -35,7 +35,7 @@ they're built out. The site is live at
 - **Your agent drives.** No separate app, no timeline editor, no manual
   keyframing. The AI coding agent you already use (Claude Code, Cursor,
   ChatGPT, or anything that speaks MCP) runs the whole pipeline through
-  twenty-seven tools, twenty-eight with the Higgsfield tier enabled.
+  twenty-nine tools, thirty with the Higgsfield tier enabled.
 - **A directed video, not a screen recording.** Push-ins, drift, shallow depth
   of field, an oversized cursor, narration, and a synthesized music bed turn
   plain captures into something you'd ship.
@@ -44,6 +44,11 @@ they're built out. The site is live at
   grid is exact and free of any license question. `plan_music_cues` reads
   that grid, or estimates one for any track you bring, so a scene cut can
   land on the beat instead of an arbitrary second.
+- **Real music when a synthesized bed isn't enough.** `find_music_bed`
+  searches two CC0 public-domain catalogs, about 9,400 tracks, and
+  `import_music_bed` pulls the one you picked and trims, fades and
+  loudness-matches it into a bed. Public domain throughout: no attribution
+  line, no content ID claim, nothing to clear.
 - **B-roll for what a screen can't show.** An optional Higgsfield tier covers
   atmosphere and establishing shots, never product UI, when the running app
   genuinely can't produce a frame.
@@ -71,7 +76,7 @@ they're built out. The site is live at
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Twenty-seven tools should appear.
+restart the client. Twenty-nine tools should appear.
 
 Then paste this to your agent, from inside the repo you want a video of:
 
@@ -179,6 +184,8 @@ not just this project's own `PIPELINE.md`/`STYLE.md` rules.
 | `reformat_vertical` | A 9:16 cut with the crop chosen per beat from the manifest |
 | `plan_sound_effects` | Works out which sounds the synthesized pack already covers, and where to get the rest |
 | `plan_music_cues` | Beats and strong cues for a music track, read straight off the built-in pulse-bed or estimated for any other track |
+| `find_music_bed` | Searches two CC0 public-domain catalogs, about 9,400 tracks, for a bed with the mood you want |
+| `import_music_bed` | Downloads the track you picked and shapes it into a bed: trim, fades, loudness, provenance file |
 | `extract_brand` | Reads your repo's palette, fonts and logo so the video looks like your product |
 | `import_higgsfield_clip` | Optional AI b roll, gated on config |
 

@@ -30,6 +30,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   difference (`pixelThreshold`/`changedRatio`/`meanDelta` all 0) instead of its usual
   tolerance, meaningful once the beats being diffed were captured with `deterministic:
   true`. beats.json's `CaptureVisual.deterministic` mirrors the same flag on the manifest.
+- **`catalog_motion_primitives` and `add_motion_primitive`, a first batch of reusable
+  motion pieces.** `scaffold_scene`'s 10 templates are whole scenes; below that there was
+  nothing reusable, so a beat that wanted a count-up number or a fanned card layout got
+  that animation hand-derived from `motion.ts`'s tween/spring math again every time (the
+  `stat` template's own counter is a literal hardcoded `"0"` for exactly this reason).
+  `catalog_motion_primitives` searches a small, bundled, local registry (a count-up stat
+  card, a fanned card stack, a logo outro, a typewriter line, a beat-timeline strip) by
+  free-text query; `add_motion_primitive` writes the named entry's real `.tsx` source
+  into `src/videos/<videoName>/primitives/`, ready to import into a scene unmodified. No
+  hosted tier or account, same as the built-in SFX pack.
 
 ### Changed
 

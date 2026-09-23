@@ -8,6 +8,7 @@ import {
   DEFAULT_DEVICE_SCALE,
   DEFAULT_VIEWPORT,
   detectAndCompensateZoom,
+  installDeterminism,
   interactionSchema,
   launchChromium,
   replayInteractions,
@@ -72,6 +73,15 @@ export interface CaptureScreenshotInput {
    * would otherwise burn the whole settle budget under prefers-reduced-motion: no-preference).
    */
   reducedMotion?: boolean;
+  /**
+   * Freeze Date.now()/new Date() and seed Math.random() before the page ever runs, so a
+   * page whose content depends on either (a timestamp-based id, a randomly ordered list, a
+   * "today" string) captures identically on every run. Off by default: most beats want the
+   * page's own real behaviour. This does not force a CSS/JS animation to a specific phase --
+   * that is a separate, harder problem -- so a page whose only nondeterminism is animation
+   * timing still needs `settle` (or `reducedMotion`) to land on a repeatable frame.
+   */
+  deterministic?: boolean;
 }
 
 export interface CaptureScreenshotResult {
@@ -156,6 +166,10 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
     try {
       const page = await context.newPage();
       await page.setViewportSize(target);
+      // Before navigation, same timing rule as colorScheme/reducedMotion: applied after the
+      // first paint, this would race a page that reads Math.random()/Date.now() once at load
+      // and caches the result.
+      if (input.deterministic) await installDeterminism(page);
       // "load" (not "networkidle") by default: CAPTURE.md's protocol is resize -> navigate
       // -> measure, and this package targets arbitrary dev-server pages, some of which
       // poll/keep a websocket open and would never hit networkidle at all. waitUntil is an
@@ -259,7 +273,10 @@ export function registerCaptureScreenshot(server: McpServer): void {
         "the result is pixel-accurate with no bleed. colorScheme (\"light\"/\"dark\") and reducedMotion " +
         "(boolean) are opt-in context-level emulation, set before navigation so prefers-color-scheme/" +
         "prefers-reduced-motion CSS is correct from the first paint -- omit both for the page's own default. " +
-        "Default outPath is " +
+        "deterministic (boolean, default false) freezes Date.now()/new Date() and seeds Math.random() before " +
+        "the page's own scripts run, so a page whose content depends on either (a timestamp-based id, a " +
+        "randomly ordered list) captures the same way twice; it does not fix animation-phase nondeterminism, " +
+        "which settle/reducedMotion already cover. Default outPath is " +
         "public/images/<beatId>.png under projectRoot, matching scaffold_scene's real-screenshot convention. " +
         "Every click/hover/fill/select interaction's real target center is also measured (scrolled into view " +
         "first, same rect-measurement style as cropSelector) and written to `<outPath>.cursor.json`, so " +
@@ -306,6 +323,14 @@ export function registerCaptureScreenshot(server: McpServer): void {
           .boolean()
           .optional()
           .describe("Emulate prefers-reduced-motion: reduce. Off by default; turn on to catch a page's reduced-motion fallback state."),
+        deterministic: z
+          .boolean()
+          .optional()
+          .describe(
+            "Freeze Date.now()/new Date() and seed Math.random() before the page runs, so a page whose " +
+              "content depends on either captures identically every run. Off by default. Does not force a " +
+              "CSS/JS animation to a specific phase -- pair with settle/reducedMotion for that.",
+          ),
       },
     },
     async (input) => runTool("capture_screenshot", () => runCaptureScreenshot(input)),

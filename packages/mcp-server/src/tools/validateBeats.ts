@@ -266,6 +266,9 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       if (v.reducedMotion !== undefined && typeof v.reducedMotion !== "boolean") {
         errors.push(`${label}: visual.reducedMotion must be a boolean if present`);
       }
+      if (v.deterministic !== undefined && typeof v.deterministic !== "boolean") {
+        errors.push(`${label}: visual.deterministic must be a boolean if present`);
+      }
       if (!Array.isArray(v.interactions)) {
         errors.push(
           `${label}: visual.interactions (array, may be empty) is required for captureMethod "${captureMethod}"`,
@@ -347,8 +350,9 @@ export function registerValidateBeats(server: McpServer): void {
         "word-count vs the 2.3-2.9 words/sec budget checked in both directions (too many words for the " +
         "duration and suspiciously few), every beat has a captureMethod, and method-specific required " +
         "fields (url + interactions for screenshot/recording, higgsfieldPrompt for higgsfield, nothing extra " +
-        "for dom-demo). waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), and " +
-        "reducedMotion (boolean) are type-checked if present on a screenshot/recording beat. For screenshot/" +
+        "for dom-demo). waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), " +
+        "reducedMotion (boolean), and deterministic (boolean) are type-checked if present on a screenshot/" +
+        "recording beat. For screenshot/" +
         "recording beats, every interactions[] entry is also validated against " +
         "the exact schema capture_screenshot/capture_screen_recording enforce at replay time (click, fill, " +
         "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +

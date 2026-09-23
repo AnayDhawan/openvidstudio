@@ -54,6 +54,18 @@ interface Normalized {
   height: number;
 }
 
+/**
+ * An image's own width in pixels, for a caller that needs to compare at native resolution
+ * rather than at DEFAULT_COMPARE_WIDTH. visual_regression's `exact` mode is the one case:
+ * downscaling first is what makes an ordinary comparison stable, and it is exactly what a
+ * gate claiming to catch ANY pixel difference must not do.
+ */
+export async function imageWidth(file: string): Promise<number> {
+  const { width } = await sharp(file).metadata();
+  if (!width) throw new Error(`Could not read the pixel width of "${file}".`);
+  return width;
+}
+
 async function normalize(input: string, width: number, height?: number): Promise<Normalized> {
   const pipeline = sharp(input).removeAlpha();
   const resized = height ? pipeline.resize(width, height, { fit: "fill" }) : pipeline.resize({ width });

@@ -16,6 +16,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   by `deviceScaleFactor`, i.e. larger than the page ever paints into, so the extra area
   was never filled. `recordVideo.size` is now the unscaled viewport; `deviceScaleFactor`
   alone drives the actual resolution Chromium renders at, same as `capture_screenshot`.
+  **Output dimensions change for anyone already calling this.** A 1280x800 viewport at the
+  default `deviceScaleFactor` used to produce a 2560x1600 file with content in one quarter
+  of it; it now produces a filled 1280x800 file. Verified by recording a four-quadrant page
+  before and after: before, three quadrants read flat grey (rgb 128,128,128); after, all
+  four carry their real colours.
 
 ### Added
 
@@ -23,13 +28,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   that is the same twice.** Opt-in (default off): freezes `Date.now()`/`new Date()`
   (`page.clock.setFixedTime`, which "keeps all the timers running" rather than pausing
   them, so `settle` and any real animation are unaffected) and seeds `Math.random()` via
-  an init script, both before the page's own scripts run. A page whose content depends on
-  either a timestamp or `Math.random()` now captures byte-identically run to run. Does
-  not force a CSS/JS animation to a specific phase -- that stays a separate, harder
-  problem. `visual_regression` gained a matching `exact` flag that gates on any pixel
-  difference (`pixelThreshold`/`changedRatio`/`meanDelta` all 0) instead of its usual
-  tolerance, meaningful once the beats being diffed were captured with `deterministic:
-  true`. beats.json's `CaptureVisual.deterministic` mirrors the same flag on the manifest.
+  an init script, both before the page's own scripts run. Verified the way the issue asked:
+  a page that prints `Date.now()`, `Math.random()` and eight randomly sized bars captures to
+  two different PNGs with the flag off and to two byte-identical PNGs with it on. Screenshots
+  are the provable half; an MP4 also depends on x264's own run-to-run behaviour, so a
+  recording is closer to reproducible than it was, not guaranteed bit-exact. Does not force a
+  CSS/JS animation to a specific phase -- that stays a separate, harder problem.
+  `visual_regression` gained a matching `exact` flag that gates on any pixel difference
+  (`pixelThreshold`/`changedRatio`/`meanDelta` all 0, compared at the baseline's own
+  resolution instead of downscaled), meaningful once the beats being diffed were captured
+  with `deterministic: true`. beats.json's `CaptureVisual.deterministic` mirrors the same
+  flag on the manifest.
 - **`catalog_motion_primitives` and `add_motion_primitive`, a first batch of reusable
   motion pieces.** `scaffold_scene`'s 10 templates are whole scenes; below that there was
   nothing reusable, so a beat that wanted a count-up number or a fanned card layout got
@@ -46,22 +55,6 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `remotion-*` skills. `scripts/sync-skills.mjs` generates the copies from
   `.claude/skills` (their one source of truth) and a `--check` run is wired into CI, so a
   skill added later can't silently stay `.claude`-only again.
-
-### Changed
-
-- **Typing sound is now one recording.** `typing-effect.mp3`, a copyright-free typing
-  recording, replaces the four synthesized key sounds. `TypingSfx` plays it across each
-  typed run instead of firing one sample per character, and loops it for long runs. The
-  rest of the built-in pack is synthesized or CC0, so a rendered video still carries no
-  audio obligations.
-
-### Removed
-
-- `key_a.wav`, `key_b.wav`, `key_c.wav` and `key_enter.wav`, with the `KeySound` and
-  `EnterKey` components that played them. Use `TypingSfx` for typed text.
-
-### Added
-
 - **`find_music_bed` and `import_music_bed`, real music without a licence problem.** Two
   CC0-1.0 catalogs are searchable from the server: `btahir/open-lofi` (166 lo-fi tracks
   with category metadata) and `SoundSafari/CC0-1.0-Music` (~9,200 tracks aggregated from
@@ -240,6 +233,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `plan_sound_effects` now saves and checks imported sounds in
   `public/imported_audios/` instead of alongside the built-in pack in
   `public/sfx/`; its `sfxDir` result field is renamed `importedAudiosDir`.
+- **Typing sound is now one recording.** `typing-effect.mp3`, a copyright-free typing
+  recording, replaces the four synthesized key sounds. `TypingSfx` plays it across each
+  typed run instead of firing one sample per character, and loops it for long runs. The
+  rest of the built-in pack is synthesized or CC0, so a rendered video still carries no
+  audio obligations.
+
+### Removed
+
+- `key_a.wav`, `key_b.wav`, `key_c.wav` and `key_enter.wav`, with the `KeySound` and
+  `EnterKey` components that played them. Use `TypingSfx` for typed text.
 
 ## [1.0.0] - 2026-09-02
 

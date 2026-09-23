@@ -37,7 +37,7 @@ is your app, captured live.
   actually running app; the UI, the product text, and the layout are all ground truth.
 - **Your agent drives** - no separate app, no timeline editor, no manual keyframing.
   Claude Code, Cursor, ChatGPT, or anything that speaks MCP runs the whole pipeline
-  through twenty-nine tools, thirty with the Higgsfield tier enabled.
+  through thirty-one tools, thirty-two with the Higgsfield tier enabled.
 - **A directed video, not a screen recording** - push-ins, drift, shallow depth of
   field, an oversized cursor, narration, and a synthesized music bed turn plain
   captures into something you'd ship.
@@ -154,7 +154,7 @@ package and ignore the rest.
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Twenty-nine tools should appear.
+restart the client. Thirty-one tools should appear.
 
 Then paste this to your agent, from inside the repo you want a video of:
 

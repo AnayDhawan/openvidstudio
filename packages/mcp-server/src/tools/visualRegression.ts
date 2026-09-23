@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, spawnCapture } from "../util";
-import { compareFrames, judgeDrift, type FrameComparison } from "../frameDiff";
+import { compareFrames, imageWidth, judgeDrift, type FrameComparison } from "../frameDiff";
 import { buildFrameArgs, beatMidpointSeconds } from "./exportRendition";
 import { runTool } from "./mcp";
 
@@ -37,7 +37,8 @@ export interface VisualRegressionInput {
   updateBaseline?: boolean;
   /**
    * Gate on ANY pixel difference instead of the tolerance thresholds above: pixelThreshold
-   * 0 (any per-channel move counts) and changedRatio/meanDelta limits of 0. Only meaningful
+   * 0 (any per-channel move counts), changedRatio/meanDelta limits of 0, and the comparison
+   * run at the baseline's own resolution rather than downscaled. Only meaningful
    * once the beats being diffed were captured with `deterministic: true` (and, for a video
    * beat, an encoder that is itself pixel-deterministic run to run) -- against an ordinary
    * capture this will flag encoder noise and antialiasing jitter on every run, which is
@@ -172,9 +173,14 @@ export async function runVisualRegression(input: VisualRegressionInput): Promise
     }
 
     const diffRel = path.join(outRel, `${beat.id}.diff.png`);
+    // exact compares at the baseline's own resolution. compareFrames otherwise resamples
+    // both frames to DEFAULT_COMPARE_WIDTH first, which is what keeps an ordinary diff
+    // stable, and is also what would let a single changed pixel average away entirely: a
+    // gate that claims to catch ANY difference cannot be looking at a 640px thumbnail of
+    // a 2560px render.
     const comparison: FrameComparison = await compareFrames(baselineFileAbs, path.join(projectRoot, rel), {
       diffPath: path.join(projectRoot, diffRel),
-      ...(input.exact ? { pixelThreshold: 0 } : {}),
+      ...(input.exact ? { pixelThreshold: 0, compareWidth: await imageWidth(baselineFileAbs) } : {}),
     });
     const verdict = judgeDrift(
       comparison,

@@ -35,6 +35,16 @@ export interface VisualRegressionInput {
   meanDeltaThreshold?: number;
   /** Accept the current render as the new baseline. */
   updateBaseline?: boolean;
+  /**
+   * Gate on ANY pixel difference instead of the tolerance thresholds above: pixelThreshold
+   * 0 (any per-channel move counts) and changedRatio/meanDelta limits of 0. Only meaningful
+   * once the beats being diffed were captured with `deterministic: true` (and, for a video
+   * beat, an encoder that is itself pixel-deterministic run to run) -- against an ordinary
+   * capture this will flag encoder noise and antialiasing jitter on every run, which is
+   * exactly the false-positive rate the tolerance thresholds exist to avoid. Ignores
+   * changedRatioThreshold/meanDeltaThreshold when set.
+   */
+  exact?: boolean;
 }
 
 export interface BeatRegression {
@@ -164,11 +174,14 @@ export async function runVisualRegression(input: VisualRegressionInput): Promise
     const diffRel = path.join(outRel, `${beat.id}.diff.png`);
     const comparison: FrameComparison = await compareFrames(baselineFileAbs, path.join(projectRoot, rel), {
       diffPath: path.join(projectRoot, diffRel),
+      ...(input.exact ? { pixelThreshold: 0 } : {}),
     });
-    const verdict = judgeDrift(comparison, {
-      changedRatio: input.changedRatioThreshold,
-      meanDelta: input.meanDeltaThreshold,
-    });
+    const verdict = judgeDrift(
+      comparison,
+      input.exact
+        ? { changedRatio: 0, meanDelta: 0 }
+        : { changedRatio: input.changedRatioThreshold, meanDelta: input.meanDeltaThreshold },
+    );
 
     results.push({
       beatId: beat.id,
@@ -213,7 +226,10 @@ export function registerVisualRegression(server: McpServer): void {
         "moves the pixel count. Frames are downscaled before comparison, which is what makes the result " +
         "stable rather than flagging encoder noise and subpixel antialiasing on every run. The first run has " +
         "no baseline, so it writes one and says so instead of failing. Returns a per-beat verdict plus " +
-        "markdown ready to post as a PR comment. Pass updateBaseline to accept the current render.",
+        "markdown ready to post as a PR comment. Pass updateBaseline to accept the current render. Pass " +
+        "exact to gate on ANY pixel difference (pixelThreshold/changedRatio/meanDelta all 0) instead of the " +
+        "tolerance thresholds -- only meaningful against beats captured with deterministic: true, since " +
+        "otherwise ordinary encoder noise and antialiasing jitter will flag on every run.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -223,6 +239,13 @@ export function registerVisualRegression(server: McpServer): void {
         changedRatioThreshold: z.number().positive().optional(),
         meanDeltaThreshold: z.number().positive().optional(),
         updateBaseline: z.boolean().optional(),
+        exact: z
+          .boolean()
+          .optional()
+          .describe(
+            "Gate on ANY pixel difference instead of the tolerance thresholds. Only meaningful against beats " +
+              "captured with deterministic: true -- otherwise encoder noise alone will flag every run.",
+          ),
       },
     },
     async (input) => runTool("visual_regression", () => runVisualRegression(input)),

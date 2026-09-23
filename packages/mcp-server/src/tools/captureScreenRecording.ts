@@ -12,6 +12,7 @@ import {
   writeCursorSidecar,
   writeSettleSidecar,
   detectAndCompensateZoom,
+  installDeterminism,
   interactionSchema,
   launchChromium,
   replayInteractions,
@@ -74,6 +75,14 @@ export interface CaptureScreenRecordingInput {
   colorScheme?: "light" | "dark";
   /** Emulate prefers-reduced-motion: reduce for the recording context. Off by default. */
   reducedMotion?: boolean;
+  /**
+   * Freeze Date.now()/new Date() and seed Math.random() before the page ever runs, so a
+   * page whose content depends on either (a timestamp-based id, a randomly ordered list)
+   * records identically on every run. Off by default. Timers/animations still run in real
+   * time -- this does not force a CSS/JS animation to a specific phase, which stays a
+   * separate, harder problem.
+   */
+  deterministic?: boolean;
 }
 
 export interface CaptureScreenRecordingResult {
@@ -321,6 +330,10 @@ export async function runCaptureScreenRecording(
         // Playwright's video starts recording as soon as this page exists, so this is the
         // real zero point every cursor point's atMs gets rebased against below.
         const recordingStartedAt = Date.now();
+        // Before navigation, same timing rule as colorScheme/reducedMotion: applied after
+        // the first paint, this would race a page that reads Math.random()/Date.now() once
+        // at load and caches the result.
+        if (input.deterministic) await installDeterminism(page);
         await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
         // Settle BEFORE the interactions, not after: the recording is already running, so
         // this is what keeps the opening seconds of the clip from being the page still
@@ -431,8 +444,11 @@ export function registerCaptureScreenRecording(server: McpServer): void {
         "same way, so the overlay stays in sync either way. The intermediate webm and temp recording dir are " +
         "cleaned up after. colorScheme " +
         "(\"light\"/\"dark\") and reducedMotion (boolean) are opt-in, set on the recording context before the " +
-        "page exists so prefers-color-scheme/prefers-reduced-motion CSS is correct from the first frame. The " +
-        "settle report (when " +
+        "page exists so prefers-color-scheme/prefers-reduced-motion CSS is correct from the first frame. " +
+        "deterministic (boolean, default false) freezes Date.now()/new Date() and seeds Math.random() before " +
+        "the page's own scripts run -- timers/animations still run in real time, so this only helps a page " +
+        "whose content depends on the clock or Math.random(), not one whose only nondeterminism is animation " +
+        "phase. The settle report (when " +
         "settle wasn't disabled) is both returned and written to `<outPath>.settle.json`, so validate_scenes " +
         "can flag a timed-out beat without a browser. Every click/hover/fill/select interaction's real target " +
         "center is also measured during replay and written to `<outPath>.cursor.json`, with its timing " +
@@ -498,6 +514,14 @@ export function registerCaptureScreenRecording(server: McpServer): void {
           .boolean()
           .optional()
           .describe("Emulate prefers-reduced-motion: reduce for the recording context. Off by default."),
+        deterministic: z
+          .boolean()
+          .optional()
+          .describe(
+            "Freeze Date.now()/new Date() and seed Math.random() before the page runs, so a page whose " +
+              "content depends on either records identically every run. Off by default. Timers/animations " +
+              "still run in real time -- pair with settle/reducedMotion for animation-phase determinism.",
+          ),
       },
     },
     async (input) => runTool("capture_screen_recording", () => runCaptureScreenRecording(input)),

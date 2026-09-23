@@ -7,6 +7,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`capture_screen_recording` at the default `deviceScaleFactor` (2) no longer leaves
+  3/4 of the frame grey.** Playwright's `recordVideo.size` is in the same CSS-pixel units
+  as `viewport`, not physical pixels, and it only ever scales a painted frame *down* to
+  fit that size, never up. The recording context was asking for a canvas pre-multiplied
+  by `deviceScaleFactor`, i.e. larger than the page ever paints into, so the extra area
+  was never filled. `recordVideo.size` is now the unscaled viewport; `deviceScaleFactor`
+  alone drives the actual resolution Chromium renders at, same as `capture_screenshot`.
+
+### Added
+
+- **`deterministic` on `capture_screenshot`/`capture_screen_recording`, for a capture
+  that is the same twice.** Opt-in (default off): freezes `Date.now()`/`new Date()`
+  (`page.clock.setFixedTime`, which "keeps all the timers running" rather than pausing
+  them, so `settle` and any real animation are unaffected) and seeds `Math.random()` via
+  an init script, both before the page's own scripts run. A page whose content depends on
+  either a timestamp or `Math.random()` now captures byte-identically run to run. Does
+  not force a CSS/JS animation to a specific phase -- that stays a separate, harder
+  problem. `visual_regression` gained a matching `exact` flag that gates on any pixel
+  difference (`pixelThreshold`/`changedRatio`/`meanDelta` all 0) instead of its usual
+  tolerance, meaningful once the beats being diffed were captured with `deterministic:
+  true`. beats.json's `CaptureVisual.deterministic` mirrors the same flag on the manifest.
+
 ### Changed
 
 - **Typing sound is now one recording.** `typing-effect.mp3`, a copyright-free typing

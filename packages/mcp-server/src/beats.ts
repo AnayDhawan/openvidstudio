@@ -63,6 +63,12 @@ export interface CaptureVisual {
   colorScheme?: "light" | "dark";
   /** Emulate prefers-reduced-motion: reduce. Off by default. */
   reducedMotion?: boolean;
+  /**
+   * Freeze Date.now()/new Date() and seed Math.random() for this capture. Default false.
+   * Matches capture_screenshot/capture_screen_recording's own deterministic flag -- does not
+   * fix animation-phase nondeterminism, only clock/RNG-derived content.
+   */
+  deterministic?: boolean;
 }
 
 export interface Region {

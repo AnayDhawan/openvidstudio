@@ -94,11 +94,13 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
   });
 
   // Playwright keeps its browsers in a per-user cache; the surest check is asking it.
-  const pw = spawnSync(
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    ["playwright", "--version"],
-    { cwd: projectRoot, encoding: "utf8" },
-  );
+  // On Windows, npx is a .cmd shim, and Node refuses to spawn a batch file with shell:false
+  // (EINVAL), which reported Playwright as missing even when it was installed. The command is a
+  // fixed string with no user input, so routing it through cmd.exe is safe.
+  const pw =
+    process.platform === "win32"
+      ? spawnSync("npx playwright --version", { cwd: projectRoot, encoding: "utf8", shell: true })
+      : spawnSync("npx", ["playwright", "--version"], { cwd: projectRoot, encoding: "utf8" });
   const pwOk = pw.status === 0;
   checks.push({
     name: "playwright",

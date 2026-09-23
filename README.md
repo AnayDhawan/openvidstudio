@@ -1,68 +1,146 @@
-<p align="center">
-  <img src="brand/logo-lockup.png" alt="openvidstudio" width="480">
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache-2.0"></a>
-  <img src="https://img.shields.io/badge/stack-Remotion%20%2B%20Playwright%20%2B%20MCP-38bdf8" alt="Stack">
-  <a href="https://github.com/AnayDhawan/openvidstudio/stargazers"><img src="https://img.shields.io/github/stars/AnayDhawan/openvidstudio?style=social" alt="GitHub stars"></a>
-  <img src="https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio" alt="Last commit">
-</p>
+<img src="brand/logo-lockup.png" alt="openvidstudio logo" width="420" />
 
-openvidstudio is an open-source demo-video add-on, built on Remotion and
-Playwright, that an AI coding agent drives through MCP tools to produce
-launch and demo videos for a project directly from its repo and running app.
-Nothing on screen is generated: a real browser drives your real product and
-every frame is a capture of it, with an optional Higgsfield AI b-roll tier
-for atmosphere shots that can't be captured from a live screen.
+# openvidstudio
 
-> **Requirement:** your frontend has to load and work in Chrome under
-> Playwright. Playwright-driven capture is what this tool is for and what it is
-> tuned around. If a human can click through your app in Chrome, this can film
-> it; if not, it cannot. `packages/` and `templates/` each get their own README as
-they're built out. The site is live at
-[openvidstudio.vercel.app](https://openvidstudio.vercel.app).
+**Your agent drives. Your product is the footage.**
+
+An open-source demo-video pipeline built on Remotion and Playwright, driven end to
+end by an AI coding agent through MCP. A real browser drives your real product and
+every frame is a capture of it, not a generated mockup.
+
+[Features](#openvidstudio-features) · [Quick start](#quick-start) · [Docs](#docs) · [Contributing](CONTRIBUTING.md)
+
+[![CI](https://github.com/AnayDhawan/openvidstudio/actions/workflows/ci.yml/badge.svg)](https://github.com/AnayDhawan/openvidstudio/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
+![Stack](https://img.shields.io/badge/stack-Remotion%20%2B%20Playwright%20%2B%20MCP-38bdf8)
+[![GitHub stars](https://img.shields.io/github/stars/AnayDhawan/openvidstudio?style=social)](https://github.com/AnayDhawan/openvidstudio/stargazers)
+![Last commit](https://img.shields.io/github/last-commit/AnayDhawan/openvidstudio)
+
+</div>
+
+---
 
 <p align="center">
   <img src="brand/demo.gif" alt="openvidstudio: a real capture of the site, the beats plan, the approval gate, and the repo card, cut straight from a real render" width="720">
 </p>
 
+## Why openvidstudio?
+
+Making a demo video normally means a timeline editor, manual keyframing, stock
+b-roll standing in for your actual product, and hours of your own time. openvidstudio
+puts the whole pipeline behind the agent you already use, and every frame it produces
+is your app, captured live.
+
+- **Real product, real pixels** - every screenshot and recording comes from your
+  actually running app; the UI, the product text, and the layout are all ground truth.
+- **Your agent drives** - no separate app, no timeline editor, no manual keyframing.
+  Claude Code, Cursor, ChatGPT, or anything that speaks MCP runs the whole pipeline
+  through twenty-nine tools, thirty with the Higgsfield tier enabled.
+- **A directed video, not a screen recording** - push-ins, drift, shallow depth of
+  field, an oversized cursor, narration, and a synthesized music bed turn plain
+  captures into something you'd ship.
+- **License-clean music, start to finish** - the built-in `pulse-bed.mp3` is
+  generated at a fixed 112bpm so its cue grid is exact, and `find_music_bed` searches
+  two CC0 public-domain catalogs (about 9,400 tracks) when you want a real track.
+  No attribution line, no content ID claim, nothing to clear.
+- **Not only web apps** - a desktop window, an Android device or iOS Simulator, and a
+  terminal session are all capturable, so a CLI tool or a Linux distro gets real
+  footage instead of a hand-drawn panel standing in for it.
+- **One edit costs one beat** - beats render to their own cached segments and join
+  under a stream copy, so fixing a caption in a five minute video re-renders ninety
+  frames, not nine thousand.
+- **The same beats, other outputs** - a README GIF, a docs screenshot set, store
+  frames at each store's exact dimensions, and a manifest-driven 9:16 cut all come out
+  of the finished render.
+
 ## openvidstudio features
 
-- **Real product, real pixels.** Every screenshot and recording comes from your
-  actually running app, so nothing on screen is invented: the UI, the product
-  text, and the layout are all ground truth.
-- **Your agent drives.** No separate app, no timeline editor, no manual
-  keyframing. The AI coding agent you already use (Claude Code, Cursor,
-  ChatGPT, or anything that speaks MCP) runs the whole pipeline through
-  twenty-nine tools, thirty with the Higgsfield tier enabled.
-- **A directed video, not a screen recording.** Push-ins, drift, shallow depth
-  of field, an oversized cursor, narration, and a synthesized music bed turn
-  plain captures into something you'd ship.
-- **Beat-locked cuts, on a bed that carries no rights.** The built-in
-  `pulse-bed.mp3` is generated at a fixed 112bpm, not recorded, so its cue
-  grid is exact and free of any license question. `plan_music_cues` reads
-  that grid, or estimates one for any track you bring, so a scene cut can
-  land on the beat instead of an arbitrary second.
-- **Real music when a synthesized bed isn't enough.** `find_music_bed`
-  searches two CC0 public-domain catalogs, about 9,400 tracks, and
-  `import_music_bed` pulls the one you picked and trims, fades and
-  loudness-matches it into a bed. Public domain throughout: no attribution
-  line, no content ID claim, nothing to clear.
-- **B-roll for what a screen can't show.** An optional Higgsfield tier covers
-  atmosphere and establishing shots, never product UI, when the running app
-  genuinely can't produce a frame.
-- **Not only web apps.** A desktop window, an Android device or iOS Simulator,
-  and a terminal session are all capturable, so a CLI tool or a Linux distro
-  gets real footage instead of a hand-drawn panel standing in for it.
-- **One edit costs one beat.** Beats render to their own cached segments and
-  join under a stream copy, so fixing a caption in a five minute video
-  re-renders ninety frames, not nine thousand.
-- **The same beats, other outputs.** A README GIF, a docs screenshot set, store
-  frames at each store's exact dimensions, and a manifest-driven 9:16 cut all
-  come out of the finished render.
+| Area | What it does | Key tools |
+| --- | --- | --- |
+| **Project setup** | Scaffolds the project shell and checks the machine before anything runs | `init_project` · `preflight` |
+| **Beats** | Plans, validates, and commits the narration-and-shot skeleton the whole render is built from | `plan_beats` · `validate_beats` · `write_beats_file` |
+| **Capture** | Zoom-compensated browser, desktop, mobile, and terminal capture of the real running app | `capture_screenshot` · `capture_screen_recording` · `capture_desktop` · `capture_mobile` · `capture_terminal` |
+| **Shot planning** | Ranks what the video should show from the repo's own emphasis, with evidence per pick | `plan_shots` |
+| **Scenes** | Renders real Remotion scenes from ten templates, using each beat's own copy | `scaffold_scene` · `validate_scenes` |
+| **Narration** | One paced clip per beat, sized to fit without sounding stretched | `generate_narration` |
+| **Music** | A rights-clean synthesized bed by default, or a real CC0 track matched to the mood you want | `plan_music_cues` · `find_music_bed` · `import_music_bed` |
+| **Sound design** | Works out which effects the built-in pack already covers and where to source the rest | `plan_sound_effects` |
+| **Render** | Sequences scenes and audio, then renders draft or full quality, incrementally | `stitch_composition` · `render_video` · `contact_sheet` |
+| **QC & diffing** | Pulls frames back out, diffs against the last accepted render, and flags docs drift | `qc_extract_frames` · `diff_beats` · `visual_regression` · `docs_drift` · `release_diff` |
+| **Export** | A README GIF, a docs screenshot set, store frames, or a 9:16 cut, all from the finished render | `export_rendition` · `reformat_vertical` |
+| **Brand** | Reads your repo's palette, fonts, and logo so the video looks like your product | `extract_brand` |
+| **B-roll (optional)** | Higgsfield AI atmosphere shots for what a screen genuinely can't produce, never product UI | `import_higgsfield_clip` |
 
-## Quick Start
+### Beats
+
+- The skeleton every render is built from: a narration word budget per beat, validated
+  for schema and pacing before anything is written to disk
+- `write_beats_file` only commits what you approved; nothing renders off an
+  unapproved plan
+
+### Capture
+
+- `capture_screenshot` and `capture_screen_recording` are zoom compensated, so a
+  desktop's per-origin Chrome zoom never desyncs the frame from the real viewport
+- `capture_desktop` covers a native window, a region, or a whole screen through
+  ffmpeg, with Wayland routed through pipewire
+- `capture_mobile` drives an Android device or an iOS Simulator
+- `capture_terminal` records a real command run as timed text rather than pixels,
+  through a pty when one is available
+
+### Scenes
+
+- `scaffold_scene` picks from ten templates and fills them with that beat's own copy,
+  so a first render is structurally correct
+- `validate_scenes` catches what renders successfully but is wrong, chiefly content
+  cropped outside the camera
+
+### Music
+
+- The built-in `pulse-bed.mp3` runs at a fixed 112bpm, so its cue grid is exact and
+  carries no rights question
+- `plan_music_cues` reads that grid, or estimates one for any track you bring, so a
+  scene cut lands on the beat instead of an arbitrary second
+- `find_music_bed` searches two CC0 public-domain catalogs, about 9,400 tracks, for a
+  bed with the mood you want; `import_music_bed` downloads it and trims, fades, and
+  loudness-matches it into place, with a provenance file
+
+### Render
+
+- Beats render to their own cached segments and join under a stream copy, so a
+  one-caption fix re-renders one beat, not the whole video
+- `render_video` runs draft or full quality, and incrementally, only re-rendering the
+  beats whose inputs changed
+- `contact_sheet` puts every beat in one image, in a fraction of a full render
+
+### QC & diffing
+
+- `qc_extract_frames` pulls frames back out for review
+- `diff_beats` shows what changed between two manifests and what that costs to fix
+- `visual_regression` compares this render against the last accepted one, per beat,
+  with a PR comment
+- `docs_drift` flags which clips no longer match the pages they document
+- `release_diff` takes two refs and produces a before/after manifest for a
+  what's-new clip
+
+### Export
+
+- `export_rendition` produces a README GIF, a docs screenshot set, store frames at
+  each store's exact dimensions, or a poster frame baked in as the render's thumbnail
+- `reformat_vertical` produces a 9:16 cut with the crop chosen per beat from the
+  manifest
+
+### The capture engine on its own
+
+[`@openvidstudio/capture`](./packages/capture) is published separately: zoom
+compensated browser capture, interaction replay, and the desktop, mobile, and
+terminal backends, with no dependency on Remotion, React, or the video pipeline. If
+you want trustworthy captures of your app and you are not making a video, take that
+package and ignore the rest.
+
+## Quick start
 
 ```json
 {
@@ -89,8 +167,8 @@ need along the way, one question at a time, and show me the result when it is
 done.
 ```
 
-That is the whole thing. You do not have to know the port, read the tool list, or
-put the steps in order: the agent works out how to start the app from your scripts,
+That is the whole thing. You do not have to know the port, read the tool list, or put
+the steps in order: the agent works out how to start the app from your scripts,
 checks the machine with `preflight`, reads your palette and fonts with
 `extract_brand`, asks what the video should cover, and shows you the full plan before
 writing anything to disk. Say yes and it captures, renders, and hands you the mp4.
@@ -104,10 +182,10 @@ pnpm --filter @openvidstudio/mcp-server build
 # then point the config at packages/mcp-server/dist/stdio.js with "command": "node"
 ```
 
-## Prerequisites
+### Prerequisites
 
 | What | Minimum | Needed for | Blocking |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Node.js | 18 | Runs the server. `npx` ships with it, and `npx` is the install | yes |
 | ffmpeg | 4.0 | Sound effects and pulling QC frames back out of a render | yes |
 | Playwright | 1.48 | Resolvable inside the project the video is built in | yes |
@@ -137,65 +215,63 @@ pip install edge-tts
 ```
 
 pnpm is not needed to use openvidstudio. It is only for building this repo from a
-clone, which is covered under Quick Start.
+clone, which is covered under Quick start.
+
+### Scripts
+
+| Command | Description |
+| --- | --- |
+| `pnpm build` | Build `@openvidstudio/capture` and `@openvidstudio/mcp-server` |
+| `pnpm typecheck` | Run the TypeScript compiler across every workspace |
+| `pnpm test` | Run the mcp-server test suite |
+
+### Continuous integration
+
+GitHub Actions runs `ci.yml` on every push and pull request, plus `labeler.yml` and
+`stale.yml` for repo upkeep.
 
 ## Docs
 
 Read `packages/docs/PLANNING.md` first for the guided intake flow, then
-`packages/docs/OVERVIEW.md` for the full pipeline shape. `PIPELINE.md`,
-`STYLE.md`, `CAPTURE.md` and `SCRIPT.md` cover the individual steps and the rules
-that are enforced rather than suggested.
+`packages/docs/OVERVIEW.md` for the full pipeline shape. `PIPELINE.md`, `STYLE.md`,
+`CAPTURE.md`, and `SCRIPT.md` cover the individual steps and the rules that are
+enforced rather than suggested. `API.md`, `NARRATION.md`, `PRESETS.md`, and
+`HIGGSFIELD.md` cover the rest.
 
 ## Agent skills
 
-Both this repo and every scaffolded project ship the official Remotion
-agent-skills bundle (markup, captions, rendering, SaaS, maps, and more) for
-Claude Code, Cursor, Windsurf, OpenCode, and GitHub Copilot, so whichever
-coding agent writes your scenes has real Remotion knowledge to work from,
-not just this project's own `PIPELINE.md`/`STYLE.md` rules.
+Both this repo and every scaffolded project ship the official Remotion agent-skills
+bundle (markup, captions, rendering, SaaS, maps, and more) for Claude Code, Cursor,
+Windsurf, OpenCode, and GitHub Copilot, so whichever coding agent writes your scenes
+has real Remotion knowledge to work from, not just this project's own
+`PIPELINE.md`/`STYLE.md` rules.
 
-## What the tools do
+## Tech stack
 
-| Tool | |
-|---|---|
-| `init_project` | Scaffolds the project shell: package.json, Remotion config, the SFX pack, docs |
-| `preflight` | Checks node, ffmpeg, Playwright, Chromium, and whether your app is responding. Every failure names its fix |
-| `plan_beats` | A beat skeleton with a narration word budget per beat |
-| `validate_beats` | Schema and pacing, before anything is written |
-| `write_beats_file` | Commits the approved beats |
-| `capture_screenshot` | Zoom compensated capture of the real running app |
-| `capture_screen_recording` | Full viewport recording |
-| `capture_desktop` | A native window, a region, or a whole screen, through ffmpeg. Wayland goes through pipewire |
-| `capture_mobile` | An Android device or an iOS Simulator |
-| `capture_terminal` | A real command run, recorded as timed text rather than pixels, with a pty when one is available |
-| `plan_shots` | Ranks what the video should show from the repo's own emphasis, with the evidence for each |
-| `scaffold_scene` | A scene that renders, from one of ten templates, using that beat's own copy |
-| `validate_scenes` | Catches what renders successfully and is wrong, chiefly content cropped outside the camera |
-| `generate_narration` | One clip per beat, paced to fit without sounding stretched |
-| `stitch_composition` | Sequences scenes and audio |
-| `contact_sheet` | Every beat in one image, in a fraction of a render |
-| `render_video` | Draft or full quality, and incrementally: only the beats whose inputs changed |
-| `qc_extract_frames` | Frames back out for review |
-| `diff_beats` | What changed between two manifests, and what that costs to fix |
-| `visual_regression` | This render against the last accepted one, per beat, with a PR comment |
-| `docs_drift` | Which clips no longer match the pages they document |
-| `release_diff` | Two refs in, a before/after manifest for a what's-new clip out |
-| `export_rendition` | A README GIF, a docs screenshot set, store frames, or a poster frame baked in as the render's thumbnail |
-| `reformat_vertical` | A 9:16 cut with the crop chosen per beat from the manifest |
-| `plan_sound_effects` | Works out which sounds the synthesized pack already covers, and where to get the rest |
-| `plan_music_cues` | Beats and strong cues for a music track, read straight off the built-in pulse-bed or estimated for any other track |
-| `find_music_bed` | Searches two CC0 public-domain catalogs, about 9,400 tracks, for a bed with the mood you want |
-| `import_music_bed` | Downloads the track you picked and shapes it into a bed: trim, fades, loudness, provenance file |
-| `extract_brand` | Reads your repo's palette, fonts and logo so the video looks like your product |
-| `import_higgsfield_clip` | Optional AI b roll, gated on config |
+| Area | Choice |
+| --- | --- |
+| Video engine | [Remotion](https://www.remotion.dev) |
+| Capture | [Playwright](https://playwright.dev), ffmpeg |
+| Agent interface | [Model Context Protocol](https://modelcontextprotocol.io) (`@openvidstudio/mcp-server`) |
+| Narration | edge-tts |
+| Language | TypeScript |
+| Package manager | pnpm workspaces |
+| CI | GitHub Actions |
 
-## The capture engine on its own
+## Folder structure
 
-[`@openvidstudio/capture`](./packages/capture) is published separately: zoom
-compensated browser capture, interaction replay, and the desktop, mobile and
-terminal backends, with no dependency on Remotion, React, or the video pipeline.
-If you want trustworthy captures of your app and you are not making a video,
-take that package and ignore the rest.
+```
+openvidstudio/
+├── packages/
+│   ├── capture/        # @openvidstudio/capture — browser, desktop, mobile, terminal capture, no Remotion dependency
+│   ├── core/            # Remotion compositions, scene templates, render pipeline
+│   ├── mcp-server/       # @openvidstudio/mcp-server — the 29-30 MCP tools an agent calls
+│   └── docs/             # PLANNING · OVERVIEW · PIPELINE · STYLE · CAPTURE · SCRIPT · API · NARRATION · PRESETS · HIGGSFIELD
+├── templates/
+│   └── default/           # Starter project scaffolded by init_project
+├── brand/                  # Logo, wordmark, demo gif
+└── .github/workflows/       # ci.yml, labeler.yml, stale.yml
+```
 
 ## Status
 
@@ -203,3 +279,14 @@ The pipeline runs end to end and `scaffold_scene` emits scenes that render, so a
 agent can go from a brief to a narrated mp4 without hand writing Remotion. The
 templates are structurally correct but plain: a first render looks right rather than
 good, and making it look good is still your job.
+
+## Contributing
+
+Contributions of all sizes are welcome - bug reports, docs, new scene templates, or a
+whole new capture backend. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and please
+follow our [Code of Conduct](CODE_OF_CONDUCT.md). Security issues: see
+[SECURITY.md](SECURITY.md).
+
+## License
+
+[Apache-2.0](./LICENSE)

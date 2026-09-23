@@ -12,7 +12,7 @@
     "@remotion/transitions": "4.0.524",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "remotion": "4.0.524",
+    "remotion": "4.0.526",
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {

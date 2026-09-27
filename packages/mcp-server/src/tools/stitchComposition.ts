@@ -24,6 +24,14 @@ export interface StitchCompositionInput {
   languages?: string[];
   /** The language public/audio/vo/<beatId>.mp3 is in. Defaults to en. */
   baseLanguage?: string;
+  /**
+   * Overrides the auto-detected music bed and its mix level. `file` is a filename under
+   * public/audio/ (same convention as the auto-detected pulse-bed.mp3/music-bed.mp3, not
+   * an arbitrary path). `volume` defaults to 0.18 (today's under-narration level) when
+   * beats.json's narration is "voice" or omitted, and 1.0 (full level, there is no VO to
+   * duck under) when narration is "none".
+   */
+  musicBed?: { file: string; volume?: number };
 }
 
 export interface LanguageComposition {
@@ -50,6 +58,10 @@ export interface StitchCompositionResult {
    * trouble of adding the rhythmic bed almost always means to use it.
    */
   musicBedFile: string | null;
+  /** The mix level actually applied to musicBedFile, honest about the default that was picked. */
+  musicBedVolume: number;
+  /** True when src/videos/<videoName>/overrides.tsx exists and was wired into the composition. */
+  overridesApplied: boolean;
   /** Plain-language notices for things that succeeded but probably are not what was wanted. */
   warnings: string[];
   /** One entry per language, including the base. */
@@ -140,8 +152,10 @@ function renderDemoTsx(opts: {
   voByLanguage: Record<string, Record<string, string>>;
   baseLanguage: string;
   musicBedFile: string | null;
+  musicBedVolume: number;
+  hasOverrides: boolean;
 }): string {
-  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile } = opts;
+  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, hasOverrides } = opts;
   const sceneImports = beats
     .map((b) => `import { ${pascalCase(b.id)} } from "./scenes/${pascalCase(b.id)}";`)
     .join("\n");
@@ -158,10 +172,16 @@ function renderDemoTsx(opts: {
 
   const musicBedBlock = musicBedFile
     ? `      <Sequence from={0} durationInFrames={DURATION_IN_FRAMES} layout="none">
-        <Audio src={staticFile(${JSON.stringify(`audio/${musicBedFile}`)})} volume={0.18} loop />
+        <Audio src={staticFile(${JSON.stringify(`audio/${musicBedFile}`)})} volume={${musicBedVolume}} loop />
       </Sequence>
 `
     : "";
+  // overrides.tsx is a dev-authored extension point this tool only ever references, never
+  // writes: re-running stitch_composition regenerates everything above but always imports
+  // the same still-there file, so a hand-added layer survives a re-stitch instead of being
+  // clobbered by it.
+  const overridesImport = hasOverrides ? `import Overrides from "./overrides";\n` : "";
+  const overridesBlock = hasOverrides ? `      <Overrides />\n` : "";
 
   // One component per language, all wrapping the same inner one. The picture is identical
   // across languages, so duplicating the scene tree per language would be a second copy of
@@ -181,7 +201,7 @@ function renderDemoTsx(opts: {
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, Series, staticFile } from "remotion";
 import beats from "./beats.json";
-${sceneImports}
+${overridesImport}${sceneImports}
 
 const SCENES: Record<string, React.FC> = {
 ${sceneMapLines}
@@ -217,7 +237,7 @@ const Narrated: React.FC<{ language: string }> = ({ language }) => {
             <Audio src={staticFile(vo[b.id])} volume={0.9} />
           </Sequence>
         ))}
-${musicBedBlock}    </AbsoluteFill>
+${musicBedBlock}${overridesBlock}    </AbsoluteFill>
   );
 };
 
@@ -254,6 +274,7 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
   const beatsData = JSON.parse(fs.readFileSync(beatsPath, "utf8")) as {
     fps?: number;
     beats?: BeatLike[];
+    narration?: "voice" | "none";
   };
   const beats = beatsData.beats;
   if (!Array.isArray(beats) || beats.length === 0) {
@@ -313,12 +334,35 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
 
   const voMap = voByLanguage[baseLanguage];
   const voBeatsMissing = languageReports.find((r) => r.language === baseLanguage)!.voBeatsMissing;
-  const pulseBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "pulse-bed.mp3"));
-  const musicBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
-  const musicBedFile = pulseBedPresent ? "pulse-bed.mp3" : musicBedPresent ? "music-bed.mp3" : null;
-  const musicBedFound = musicBedFile !== null;
 
-  const demoTsx = renderDemoTsx({ componentName, beats, voByLanguage, baseLanguage, musicBedFile });
+  let musicBedFile: string | null;
+  if (input.musicBed?.file) {
+    const exists = fs.existsSync(path.join(projectRoot, "public", "audio", input.musicBed.file));
+    if (!exists) {
+      throw new Error(`musicBed.file "${input.musicBed.file}" does not exist at public/audio/${input.musicBed.file}`);
+    }
+    musicBedFile = input.musicBed.file;
+  } else {
+    const pulseBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "pulse-bed.mp3"));
+    const musicBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
+    musicBedFile = pulseBedPresent ? "pulse-bed.mp3" : musicBedPresent ? "music-bed.mp3" : null;
+  }
+  const musicBedFound = musicBedFile !== null;
+  // No VO to duck under when narration is "none", so the bed defaults to full level instead
+  // of the 0.18 tuned for sitting quietly beneath narration.
+  const narrationMode = beatsData.narration === "none" ? "none" : "voice";
+  const musicBedVolume = input.musicBed?.volume ?? (narrationMode === "none" ? 1.0 : 0.18);
+  const hasOverrides = fs.existsSync(path.join(videoDir, "overrides.tsx"));
+
+  const demoTsx = renderDemoTsx({
+    componentName,
+    beats,
+    voByLanguage,
+    baseLanguage,
+    musicBedFile,
+    musicBedVolume,
+    hasOverrides,
+  });
   const demoPath = path.join(videoDir, `${componentName}.tsx`);
   fs.writeFileSync(demoPath, demoTsx, "utf8");
 
@@ -354,6 +398,8 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
     voBeatsMissing,
     musicBedFound,
     musicBedFile,
+    musicBedVolume,
+    overridesApplied: hasOverrides,
     warnings,
     languages: languageReports,
   };
@@ -382,13 +428,21 @@ export function registerStitchComposition(server: McpServer): void {
         + "language, reading public/audio/vo/<lang>/<beatId>.mp3 for every language but the base, which "
         + "keeps the original flat path. requireNarration is then enforced per language, because a video "
         + "fully narrated in English and half narrated in Hindi is a failure of the Hindi cut and saying so "
-        + "once for the whole stitch would hide which cut is broken.",
+        + "once for the whole stitch would hide which cut is broken. Pass musicBed to override the "
+        + "auto-detected bed file and its mix level: file is a filename under public/audio/ (same convention "
+        + "as the auto-detected pulse-bed.mp3/music-bed.mp3), volume defaults to 0.18 when beats.json's "
+        + "narration is \"voice\" or omitted (today's under-narration tuning) and 1.0 when narration is "
+        + "\"none\" (there is no VO to duck under). If src/videos/<videoName>/overrides.tsx exists, it is "
+        + "imported and rendered as an extra layer inside the composition on every stitch, a dev-authored "
+        + "extension point this tool only ever references and never writes, so it survives a re-stitch "
+        + "instead of being clobbered by one.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
         requireNarration: z.boolean().optional(),
         languages: z.array(z.string()).optional(),
         baseLanguage: z.string().optional(),
+        musicBed: z.object({ file: z.string().min(1), volume: z.number().min(0).optional() }).optional(),
       },
     },
     async (input) => runTool("stitch_composition", () => runStitchComposition(input)),

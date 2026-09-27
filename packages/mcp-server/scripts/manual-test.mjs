@@ -2389,6 +2389,109 @@ console.log("\n== Part 33: incremental render's sample-exact audio join (A1) =="
   }
 }
 
+console.log("\n== Part 34: narration:\"none\", onScreenText, musicBed volume, overrides.tsx (A8) ==");
+{
+  const { validateBeatsLogic } = require(path.join(distDir, "tools", "validateBeats.js"));
+  const { runStitchComposition } = require(path.join(distDir, "tools", "stitchComposition.js"));
+
+  // narration: "none" -- vo may be omitted, onScreenText is checked for reading time instead.
+  const okNone = validateBeatsLogic({
+    fps: 30,
+    narration: "none",
+    beats: [
+      {
+        id: "hook",
+        start: 0,
+        duration: 60, // 2s at 30fps: 6 words / 3.5 + 0.8 = 2.51s needed... see next case
+        visual: { captureMethod: "dom-demo" },
+        onScreenText: "Fast, quiet, and free.",
+      },
+    ],
+  });
+  check("narration:none with no vo and a fitting onScreenText validates", okNone.valid === true);
+
+  const tooFast = validateBeatsLogic({
+    fps: 30,
+    narration: "none",
+    beats: [
+      {
+        id: "hook",
+        start: 0,
+        duration: 30, // 1s -- nowhere near enough to read the line below
+        visual: { captureMethod: "dom-demo" },
+        onScreenText: "This on-screen card carries a lot more words than one second can hold.",
+      },
+    ],
+  });
+  check(
+    "narration:none rejects onScreenText that outruns the reading-time budget",
+    tooFast.valid === false && tooFast.errors.some((e) => e.includes("onScreenText needs at least")),
+  );
+
+  const stillNeedsVo = validateBeatsLogic({
+    fps: 30,
+    beats: [{ id: "hook", start: 0, duration: 60, visual: { captureMethod: "dom-demo" } }],
+  });
+  check(
+    "narration omitted (defaults to \"voice\") still requires vo -- unchanged behavior",
+    stillNeedsVo.valid === false && stillNeedsVo.errors.some((e) => e.includes(`missing or invalid "vo"`)),
+  );
+
+  // Real stitch: music bed defaults to full level with no narration, and can be overridden.
+  const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a8-"));
+  const videoName = "silent";
+  const videoDir = path.join(projectRoot, "src", "videos", videoName);
+  fs.mkdirSync(videoDir, { recursive: true });
+  fs.mkdirSync(path.join(projectRoot, "public", "audio"), { recursive: true });
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      narration: "none",
+      beats: [
+        { id: "hook", start: 0, duration: 60, visual: { captureMethod: "dom-demo" }, onScreenText: "Made with itself." },
+        { id: "cta", start: 60, duration: 90, visual: { captureMethod: "dom-demo" }, onScreenText: "Try it today." },
+      ],
+    }),
+    "utf8",
+  );
+  fs.writeFileSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"), Buffer.from([0]));
+
+  const stitched = runStitchComposition({ projectRoot, videoName });
+  check("music-only stitch reports the bed found", stitched.musicBedFound === true && stitched.musicBedFile === "music-bed.mp3");
+  check("...at full volume by default with no narration", stitched.musicBedVolume === 1);
+  const demoContent1 = fs.readFileSync(stitched.demoPath, "utf8");
+  check("...and the generated composition actually carries volume={1}", demoContent1.includes("volume={1}"));
+
+  const stitchedCustom = runStitchComposition({ projectRoot, videoName, musicBed: { file: "music-bed.mp3", volume: 0.42 } });
+  check("musicBed.volume overrides the default", stitchedCustom.musicBedVolume === 0.42);
+  const demoContentCustom = fs.readFileSync(stitchedCustom.demoPath, "utf8");
+  check("...reflected in the generated composition", demoContentCustom.includes("volume={0.42}"));
+
+  // overrides.tsx: a hand-authored extension point that must survive re-stitching untouched.
+  const overridesPath = path.join(videoDir, "overrides.tsx");
+  const overridesMarker = "export default function Overrides() { return <div data-testid=\"ovs-override-marker\" />; }\n";
+  fs.writeFileSync(overridesPath, `import React from "react";\n${overridesMarker}`, "utf8");
+
+  const withOverrides = runStitchComposition({ projectRoot, videoName });
+  check("overrides.tsx present is reported", withOverrides.overridesApplied === true);
+  const demoWithOverrides = fs.readFileSync(withOverrides.demoPath, "utf8");
+  check(
+    "...and wired into the generated composition",
+    demoWithOverrides.includes('import Overrides from "./overrides";') && demoWithOverrides.includes("<Overrides />"),
+  );
+
+  const overridesBefore = fs.readFileSync(overridesPath, "utf8");
+  const restitched = runStitchComposition({ projectRoot, videoName }); // as if a caption were edited
+  const overridesAfter = fs.readFileSync(overridesPath, "utf8");
+  check("re-stitching never touches overrides.tsx's own content", overridesBefore === overridesAfter);
+  const demoAfterRestitch = fs.readFileSync(restitched.demoPath, "utf8");
+  check(
+    "...and the override still survives being wired into the re-stitched composition",
+    demoAfterRestitch.includes("<Overrides />"),
+  );
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

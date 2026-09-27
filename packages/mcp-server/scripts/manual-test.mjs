@@ -20,7 +20,7 @@ import { createRequire } from "node:module";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
@@ -2243,6 +2243,150 @@ if (browserAvailable) {
   }
 } else {
   skip("Part 32: real settling E2E", "real Chromium is not available in this environment");
+}
+
+console.log("\n== Part 33: incremental render's sample-exact audio join (A1) ==");
+{
+  const rc = require(path.join(distDir, "renderCache.js"));
+  const {
+    expectedPcmBytes,
+    fitPcmLength,
+    buildExtractPcmArgs,
+    buildIsolateVideoArgs,
+    buildVideoOnlyConcatArgs,
+    buildFinalMuxArgs,
+    buildConcatList,
+    pcmFileName,
+    videoOnlyFileName,
+  } = rc;
+
+  check("expectedPcmBytes: 1s at 30fps, 48kHz stereo s16le is 192000 bytes", expectedPcmBytes(30, 30) === 48000 * 2 * 2);
+  const short = Buffer.alloc(100, 7);
+  const padded = fitPcmLength(short, 200);
+  check(
+    "fitPcmLength pads a short buffer with trailing silence",
+    padded.length === 200 && padded.subarray(0, 100).equals(short) && padded.subarray(100).every((b) => b === 0),
+  );
+  const long = Buffer.alloc(300, 9);
+  check("fitPcmLength trims a long buffer", fitPcmLength(long, 200).length === 200);
+
+  const ffmpegAvailable = (() => {
+    try {
+      execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+      execFileSync("ffprobe", ["-version"], { stdio: "ignore" });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  if (ffmpegAvailable) {
+    const fps = 30;
+    const beatFrames = 45; // 1.5s/beat, short enough to keep this test fast
+    const beatCount = 16;
+    const blipBeatIndex = 8;
+    const padSec = 0.052; // matches the drift reported against a real 16-beat render
+    const blipOffsetSec = 0.2;
+    const blipDurSec = 0.05;
+
+    const testDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a1-sync-"));
+    const segDir = path.join(testDir, "segments");
+    fs.mkdirSync(segDir);
+    const beats = Array.from({ length: beatCount }, (_, i) => ({ id: `b${i}`, start: i * beatFrames, duration: beatFrames }));
+
+    for (let i = 0; i < beatCount; i++) {
+      const beat = beats[i];
+      const videoDurSec = beat.duration / fps;
+      // Every segment's own audio deliberately overruns its video by padSec, the same shape
+      // as a real per-beat AAC encode's frame-boundary padding -- this is what the old
+      // stream-copy concat let accumulate beat over beat.
+      const audioDurSec = videoDurSec + padSec;
+      const videoFile = path.join(segDir, `${beat.id}.video.mp4`);
+      const audioFile = path.join(segDir, `${beat.id}.audio.m4a`);
+      const segFile = path.join(segDir, `${beat.id}.mp4`);
+
+      execFileSync("ffmpeg", [
+        "-y", "-loglevel", "error",
+        "-f", "lavfi", "-i", `testsrc2=size=320x240:rate=${fps}:duration=${videoDurSec}`,
+        "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", videoFile,
+      ]);
+
+      let audioArgs;
+      if (i === blipBeatIndex) {
+        // A short, loud blip inside otherwise-silent audio, at a known offset -- stands in
+        // for the report's "impact at a known beat boundary" so its arrival time in the
+        // final file can be checked against what beats 0..i-1 plus the offset predict.
+        const rest = audioDurSec - blipOffsetSec - blipDurSec;
+        audioArgs = [
+          "-f", "lavfi", "-i", `anullsrc=r=48000:cl=stereo:d=${blipOffsetSec}`,
+          "-f", "lavfi", "-i", `sine=f=2000:r=48000:d=${blipDurSec}`,
+          "-f", "lavfi", "-i", `anullsrc=r=48000:cl=stereo:d=${rest}`,
+          "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[aout]",
+          "-map", "[aout]",
+        ];
+      } else {
+        audioArgs = ["-f", "lavfi", "-i", `sine=f=${330 + i * 7}:r=48000:d=${audioDurSec}`];
+      }
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...audioArgs, "-c:a", "aac", "-b:a", "128k", audioFile]);
+      execFileSync("ffmpeg", [
+        "-y", "-loglevel", "error",
+        "-i", videoFile, "-i", audioFile,
+        "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "copy", segFile,
+      ]);
+    }
+
+    // The actual join, calling the exact functions render_video's incremental path calls.
+    for (const beat of beats) {
+      const segFile = path.join(segDir, `${beat.id}.mp4`);
+      const pcmFile = path.join(segDir, pcmFileName(beat.id));
+      execFileSync("ffmpeg", buildExtractPcmArgs(segFile, pcmFile));
+      fs.writeFileSync(pcmFile, fitPcmLength(fs.readFileSync(pcmFile), expectedPcmBytes(beat.duration, fps)));
+      execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...buildIsolateVideoArgs(segFile, videoOnlyFileName(beat.id))], { cwd: segDir });
+    }
+    fs.writeFileSync(path.join(segDir, "concat.txt"), buildConcatList(beats.map((b) => videoOnlyFileName(b.id))));
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...buildVideoOnlyConcatArgs("concat.txt", "_video-only.mp4")], { cwd: segDir });
+    fs.writeFileSync(
+      path.join(segDir, "_concat-audio.pcm"),
+      Buffer.concat(beats.map((b) => fs.readFileSync(path.join(segDir, pcmFileName(b.id))))),
+    );
+    execFileSync("ffmpeg", ["-y", "-loglevel", "error", ...buildFinalMuxArgs("_video-only.mp4", "_concat-audio.pcm", "final.mp4")], {
+      cwd: segDir,
+    });
+
+    const finalPath = path.join(segDir, "final.mp4");
+    const probeDuration = (stream) =>
+      parseFloat(
+        execFileSync("ffprobe", [
+          "-v", "error", "-select_streams", stream,
+          "-show_entries", "stream=duration",
+          "-of", "default=noprint_wrappers=1:nokey=1",
+          finalPath,
+        ]).toString().trim(),
+      );
+    const expectedDur = (beatCount * beatFrames) / fps;
+    const videoDur = probeDuration("v:0");
+    const audioDur = probeDuration("a:0");
+    check(`joined video duration matches frames/fps exactly (${videoDur}s vs expected ${expectedDur}s)`, Math.abs(videoDur - expectedDur) < 0.001);
+    check(
+      `joined audio duration matches frames/fps exactly, not drifted by 16 segments' encoder padding (${audioDur}s vs expected ${expectedDur}s)`,
+      Math.abs(audioDur - expectedDur) < 0.001,
+    );
+
+    // Only the blip beat's silence-blip-silence pattern produces silence in an otherwise
+    // continuously-toned track, so the first silence_end in the whole file is the blip's start.
+    // -30dB, not -20dB: lavfi's sine source sits around -21dB mean RMS, so a -20dB floor would
+    // misclassify every beat's own continuous tone as silence too.
+    const detect = spawnSync("ffmpeg", ["-i", finalPath, "-af", "silencedetect=n=-30dB:d=0.02", "-f", "null", "-"], { encoding: "utf8" });
+    const match = (detect.stderr || "").match(/silence_end: ([\d.]+)/);
+    const blipAt = match ? parseFloat(match[1]) : null;
+    const expectedBlipAt = beats.slice(0, blipBeatIndex).reduce((sum, b) => sum + b.duration / fps, 0) + blipOffsetSec;
+    check(
+      `a transient inside beat ${blipBeatIndex} lands within 1 frame of its expected time (got ${blipAt}, expected ${expectedBlipAt.toFixed(4)})`,
+      blipAt !== null && Math.abs(blipAt - expectedBlipAt) < 1 / fps,
+    );
+  } else {
+    skip("Part 33: sample-exact audio join E2E", "ffmpeg/ffprobe not available in this environment");
+  }
 }
 
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);

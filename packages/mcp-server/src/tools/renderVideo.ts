@@ -6,13 +6,20 @@ import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, pascalCas
 import { loadConfig } from "../config";
 import {
   CACHE_VERSION,
-  buildConcatArgs,
   buildConcatList,
+  buildExtractPcmArgs,
+  buildFinalMuxArgs,
+  buildIsolateVideoArgs,
   buildSegmentRenderArgs,
+  buildVideoOnlyConcatArgs,
+  expectedPcmBytes,
+  fitPcmLength,
+  pcmFileName,
   planSegments,
   readCache,
   renderKey,
   segmentsDir,
+  videoOnlyFileName,
   writeCache,
   type BeatLike,
   type CachedSegment,
@@ -156,11 +163,12 @@ async function runIncrementalRender(
   }
 
   const config = loadConfig(projectRoot);
+  const fps = doc.fps ?? config.videoConfig.fps;
   const key = renderKey({
     draft: input.draft,
     width: config.videoConfig.width,
     height: config.videoConfig.height,
-    fps: doc.fps ?? config.videoConfig.fps,
+    fps,
   });
 
   const { plan } = planSegments({
@@ -212,13 +220,100 @@ async function runIncrementalRender(
     };
   }
 
+  // Sample-exact audio join (see renderCache.ts's buildFinalMuxArgs doc comment): every
+  // segment's audio is decoded to raw PCM and trimmed/padded to duration/fps exactly, so
+  // stream-copying every segment's own (encoder-padded) AAC track under one concat demuxer
+  // -- the old approach -- can't stack drift beat over beat. The PCM file lives next to its
+  // segment and is reused whenever the segment itself is reused, so this costs nothing on a
+  // cache hit.
+  for (const segment of plan) {
+    const pcmAbs = path.join(dir, pcmFileName(segment.beatId));
+    if (segment.reused && fs.existsSync(pcmAbs)) continue;
+    const extract = await spawnCapture(
+      "ffmpeg",
+      buildExtractPcmArgs(path.join(projectRoot, segment.file), pcmAbs),
+      dir,
+    );
+    if (extract.code !== 0 || !fs.existsSync(pcmAbs)) {
+      errors.push(`audio extract for beat "${segment.beatId}" failed:\n${extract.stderr.slice(-2000)}`);
+      break;
+    }
+    const durationFrames = segment.lastFrame - segment.firstFrame + 1;
+    const fitted = fitPcmLength(fs.readFileSync(pcmAbs), expectedPcmBytes(durationFrames, fps));
+    fs.writeFileSync(pcmAbs, fitted);
+  }
+
+  if (errors.length > 0) {
+    return {
+      success: false,
+      outPath: path.join(projectRoot, outPathRel),
+      draft: Boolean(input.draft),
+      elapsedSeconds: Math.round((Date.now() - started) / 1000),
+      stdout: log.join("\n"),
+      stderr: errors.join("\n\n"),
+      brandLocked,
+    };
+  }
+
+  // Isolate each segment's video into its own fresh container first (see renderCache.ts's
+  // buildIsolateVideoArgs doc comment): a segment's own container duration reflects its
+  // longer, padded audio track, and the concat demuxer trusts that duration to place the
+  // next file, so concatenating the original segments with `-an` would still leave a
+  // silent gap at every join. Isolating drops that stale duration along with the audio.
+  const voNames = plan.map((p) => videoOnlyFileName(p.beatId));
+  for (let i = 0; i < plan.length; i++) {
+    const isolate = await spawnCapture(
+      "ffmpeg",
+      buildIsolateVideoArgs(path.join(projectRoot, plan[i].file), voNames[i]),
+      dir,
+    );
+    if (isolate.code !== 0 || !fs.existsSync(path.join(dir, voNames[i]))) {
+      errors.push(`video isolation for beat "${plan[i].beatId}" failed:\n${isolate.stderr.slice(-2000)}`);
+      break;
+    }
+  }
+
+  if (errors.length > 0) {
+    for (const name of voNames) fs.rmSync(path.join(dir, name), { force: true });
+    return {
+      success: false,
+      outPath: path.join(projectRoot, outPathRel),
+      draft: Boolean(input.draft),
+      elapsedSeconds: Math.round((Date.now() - started) / 1000),
+      stdout: log.join("\n"),
+      stderr: errors.join("\n\n"),
+      brandLocked,
+    };
+  }
+
   // The list lives beside the segments and names them by basename, so the whole segments
   // directory stays relocatable and ffmpeg's -safe 0 has the least to swallow.
   const listPath = path.join(dir, "concat.txt");
-  fs.writeFileSync(listPath, buildConcatList(plan.map((p) => path.basename(p.file))), "utf8");
+  fs.writeFileSync(listPath, buildConcatList(voNames), "utf8");
 
-  const concat = await spawnCapture("ffmpeg", buildConcatArgs("concat.txt", path.relative(dir, path.join(projectRoot, outPathRel))), dir);
-  const success = concat.code === 0 && fs.existsSync(path.join(projectRoot, outPathRel));
+  const videoOnlyName = "_video-only.mp4";
+  const videoOnly = await spawnCapture("ffmpeg", buildVideoOnlyConcatArgs("concat.txt", videoOnlyName), dir);
+
+  const concatPcmName = "_concat-audio.pcm";
+  fs.writeFileSync(
+    path.join(dir, concatPcmName),
+    Buffer.concat(plan.map((p) => fs.readFileSync(path.join(dir, pcmFileName(p.beatId))))),
+  );
+
+  const outAbs = path.join(projectRoot, outPathRel);
+  const concat =
+    videoOnly.code === 0 && fs.existsSync(path.join(dir, videoOnlyName))
+      ? await spawnCapture(
+          "ffmpeg",
+          buildFinalMuxArgs(videoOnlyName, concatPcmName, path.relative(dir, outAbs)),
+          dir,
+        )
+      : videoOnly;
+  const success = concat.code === 0 && fs.existsSync(outAbs);
+
+  for (const name of voNames) fs.rmSync(path.join(dir, name), { force: true });
+  fs.rmSync(path.join(dir, videoOnlyName), { force: true });
+  fs.rmSync(path.join(dir, concatPcmName), { force: true });
 
   if (success) {
     const segments: Record<string, CachedSegment> = {};

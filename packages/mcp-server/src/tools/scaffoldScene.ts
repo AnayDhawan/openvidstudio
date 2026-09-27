@@ -15,6 +15,7 @@ import { pngSize } from "../scenes/pngSize";
 import { castToSteps, serializeSteps, type TerminalCastLike } from "../scenes/castToSteps";
 import { probeVideoDurationFrames } from "../scenes/videoDuration";
 import { readCursorPoints } from "../scenes/cursorPoints";
+import { detectRepoInfo } from "../scenes/repoInfo";
 
 export type { SceneKind };
 
@@ -219,6 +220,21 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
   }
 
   const template = input.template ?? pickTemplate(input.kind, description);
+
+  if (template === "cta") {
+    const repo = detectRepoInfo(projectRoot);
+    ctx.repo = repo;
+    notes.push(
+      repo.isFallback
+        ? `No git remote and no package.json "repository" field found, so the cta scene still ships ` +
+            `the your-org/your-repo placeholders. Fix package.json or the remote, then re-run scaffold_scene ` +
+            `with overwrite: true.`
+        : `RepoCta filled from the real repo: ${repo.owner}/${repo.name}` +
+            `${repo.license ? `, license ${repo.license}` : " (no package.json \"license\" field found)"}` +
+            `${repo.language ? `, guessed language ${repo.language}` : ""}.`,
+    );
+  }
+
   const source = renderTemplate(template, ctx, input.kind);
 
   fs.mkdirSync(scenesDir, { recursive: true });

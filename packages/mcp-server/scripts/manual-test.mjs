@@ -2684,6 +2684,93 @@ console.log("\n== Part 37: CursorActor click rings anchor at the click frame, no
   );
 }
 
+console.log("\n== Part 35: cta template fills real repo info; validate_scenes doesn't false-positive on it (A11) ==");
+{
+  const { runScaffoldScene } = require(path.join(distDir, "tools", "scaffoldScene.js"));
+  const { runValidateScenes } = require(path.join(distDir, "tools", "validateScenes.js"));
+
+  // Scaffolded inside THIS repo's own working tree (not a fresh git init with a fake
+  // remote), so `git remote get-url origin` walks up to the real .git and resolves the
+  // real github.com/AnayDhawan/openvidstudio -- the task's own suggested test subject.
+  // Lives under a throwaway, gitignored-by-being-untracked subfolder and is removed after.
+  const a11Root = path.join(monorepoRoot, ".tmp-a11-validate-scenes-test");
+  fs.rmSync(a11Root, { recursive: true, force: true });
+  fs.mkdirSync(a11Root, { recursive: true });
+  // No package.json here on purpose -- this exercises the git-remote path (higher priority
+  // than package.json's "repository" field per repoInfo.ts), and plants a tsconfig.json to
+  // exercise the "tsconfig.json present -> TypeScript" language guess.
+  fs.writeFileSync(path.join(a11Root, "tsconfig.json"), "{}\n");
+
+  try {
+    const scaffoldResult = runScaffoldScene({
+      projectRoot: a11Root,
+      videoName: "a11test",
+      beatId: "outro-cta",
+      kind: "dom-demo",
+      template: "cta",
+    });
+    const sceneSrc = fs.readFileSync(scaffoldResult.path, "utf8");
+
+    check(
+      "cta scene shows the real owner/repo (github.com/AnayDhawan/openvidstudio), not a placeholder",
+      sceneSrc.includes('owner="AnayDhawan"') && sceneSrc.includes('name="openvidstudio"'),
+    );
+    check(
+      "...and its chips carry a real language guess (TypeScript, from the planted tsconfig.json)",
+      /chips=\{\["TypeScript",/.test(sceneSrc),
+    );
+    check(
+      "...and no your-org/your-repo placeholder is left anywhere in the file",
+      !sceneSrc.includes("your-org") && !sceneSrc.includes("your-repo"),
+    );
+
+    const videoDir = path.join(a11Root, "src", "videos", "a11test");
+    fs.writeFileSync(
+      path.join(videoDir, "beats.json"),
+      JSON.stringify({
+        fps: 30,
+        title: "a11test",
+        beats: [{ id: "outro-cta", start: 0, duration: 90, visual: { description: "cta", captureMethod: "dom-demo" }, vo: "" }],
+      }),
+    );
+
+    const report = runValidateScenes({ projectRoot: a11Root, videoName: "a11test" });
+    const ctaFindings = report.findings.filter((f) => f.beatId === "outro-cta");
+    check(
+      "validate_scenes reports no false-positive 'fewer than two camera keyframes' for the RepoCta scene " +
+        `(got: ${ctaFindings.map((f) => f.message).join(" | ") || "none"})`,
+      !ctaFindings.some((f) => /fewer than two camera keyframes/i.test(f.message)),
+    );
+
+    // Regression pin: the skip is scoped to RepoCta specifically, not a global disable of the
+    // check -- a genuinely camera-less scene (no RepoCta, no scale: keyframes) must still fire it.
+    const noCameraDir = path.join(videoDir, "scenes");
+    fs.writeFileSync(
+      path.join(noCameraDir, "NoCamera.tsx"),
+      `import React from "react";\nexport const NoCamera: React.FC = () => <div>static, no camera, plain content</div>;\n`,
+    );
+    fs.writeFileSync(
+      path.join(videoDir, "beats.json"),
+      JSON.stringify({
+        fps: 30,
+        title: "a11test",
+        beats: [
+          { id: "outro-cta", start: 0, duration: 90, visual: { description: "cta", captureMethod: "dom-demo" }, vo: "" },
+          { id: "no-camera", start: 90, duration: 90, visual: { description: "static", captureMethod: "dom-demo" }, vo: "" },
+        ],
+      }),
+    );
+    const report2 = runValidateScenes({ projectRoot: a11Root, videoName: "a11test" });
+    const noCameraFindings = report2.findings.filter((f) => f.beatId === "no-camera");
+    check(
+      "...a genuinely camera-less, non-RepoCta scene still gets the real warning (the skip isn't global)",
+      noCameraFindings.some((f) => /fewer than two camera keyframes/i.test(f.message)),
+    );
+  } finally {
+    fs.rmSync(a11Root, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

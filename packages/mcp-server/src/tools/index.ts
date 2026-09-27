@@ -6,6 +6,7 @@ import { registerWriteBeatsFile } from "./writeBeatsFile";
 import { registerScaffoldScene } from "./scaffoldScene";
 import { registerStitchComposition } from "./stitchComposition";
 import { registerRenderVideo } from "./renderVideo";
+import { registerJobStatus } from "./jobStatus";
 import { registerQcExtractFrames } from "./qcExtractFrames";
 import { registerCaptureScreenshot } from "./captureScreenshot";
 import { registerCaptureScreenRecording } from "./captureScreenRecording";
@@ -49,6 +50,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerScaffoldScene(server);
   registerStitchComposition(server);
   registerRenderVideo(server);
+  registerJobStatus(server);
   registerQcExtractFrames(server);
   registerCaptureScreenshot(server);
   registerCaptureScreenRecording(server);

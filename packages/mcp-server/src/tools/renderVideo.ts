@@ -25,6 +25,7 @@ import {
   type CachedSegment,
 } from "../renderCache";
 import { runTool } from "./mcp";
+import { createJob, updateJobProgress, completeJob, failJob } from "../jobs";
 
 export interface RenderVideoInput {
   projectRoot?: string;
@@ -60,6 +61,22 @@ export interface RenderVideoInput {
    * one caption edit cost one beat instead of nine thousand frames.
    */
   incremental?: boolean;
+  /**
+   * Start the render without blocking the request. Returns { jobId, estimate } immediately;
+   * poll job_status for progress and the eventual RenderVideoResult. Exists because a real
+   * render can run 40+ minutes on a modest machine, and an MCP client's own request timeout
+   * (Claude Code's MCP_TOOL_TIMEOUT, or the SDK client default) will have long since killed
+   * a synchronous call by then. See job_status.ts and README's timeout-guidance section.
+   */
+  async?: boolean;
+}
+
+/** Progress callback shape, shared by the async job-store path and the synchronous
+ * MCP-progress-notification path -- both just want to know frames rendered and the current
+ * beat, they differ only in what they do with that. */
+export type RenderProgress = { framesRendered: number; totalFrames: number; currentBeat: string | null };
+export interface RenderVideoOpts {
+  onProgress?: (progress: RenderProgress) => void;
 }
 
 export interface RenderVideoResult {
@@ -137,6 +154,33 @@ function readBeats(projectRoot: string, videoName: string): BeatsDoc {
   return JSON.parse(fs.readFileSync(beatsPath, "utf8")) as BeatsDoc;
 }
 
+/** Best-effort total frame count, for a progress denominator and the async estimate. Never
+ * throws: a render that isn't beats.json-driven (unusual, but not disallowed) just gets an
+ * unknown (0) total rather than failing the whole call over a progress nicety. */
+function tryReadTotalFrames(projectRoot: string, videoName: string): number {
+  try {
+    const doc = readBeats(projectRoot, videoName);
+    const beats = doc.beats;
+    if (!Array.isArray(beats) || beats.length === 0) return 0;
+    const last = beats[beats.length - 1];
+    return last.start + last.duration;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Rough wall-clock estimate for the async path's immediate response, in seconds. This is a
+ * placeholder constant, not a measurement: Phase B's preflight render benchmark (real
+ * frames/sec on this machine) is what plan_production uses for an estimate worth planning
+ * around. This one just needs to be in the right order of magnitude so a caller polling
+ * job_status knows roughly how long to expect, not exactly.
+ */
+function estimateRenderSeconds(totalFrames: number, draft: boolean): number {
+  const secondsPerFrame = draft ? 0.15 : 0.6;
+  return Math.max(5, Math.round(totalFrames * secondsPerFrame));
+}
+
 /**
  * Renders only the beats whose inputs changed, then concatenates every segment.
  *
@@ -153,9 +197,10 @@ async function runIncrementalRender(
     outPathRel: string;
     brandLocked: boolean;
     started: number;
+    onProgress?: (progress: RenderProgress) => void;
   },
 ): Promise<RenderVideoResult> {
-  const { projectRoot, videoName, compositionId, outPathRel, brandLocked, started } = ctx;
+  const { projectRoot, videoName, compositionId, outPathRel, brandLocked, started, onProgress } = ctx;
   const doc = readBeats(projectRoot, videoName);
   const beats = doc.beats;
   if (!Array.isArray(beats) || beats.length === 0) {
@@ -183,13 +228,18 @@ async function runIncrementalRender(
   const dir = segmentsDir(projectRoot, videoName);
   fs.mkdirSync(dir, { recursive: true });
 
+  const last = beats[beats.length - 1];
+  const totalFrames = last.start + last.duration;
   const log: string[] = [];
   const errors: string[] = [];
   let framesRendered = 0;
+  onProgress?.({ framesRendered: 0, totalFrames, currentBeat: null });
 
   for (const segment of plan) {
     if (segment.reused) {
+      framesRendered += segment.lastFrame - segment.firstFrame + 1;
       log.push(`reused  ${segment.beatId} (frames ${segment.firstFrame}-${segment.lastFrame})`);
+      onProgress?.({ framesRendered, totalFrames, currentBeat: segment.beatId });
       continue;
     }
     const { command, args } = buildSegmentRenderArgs(
@@ -206,6 +256,7 @@ async function runIncrementalRender(
     }
     framesRendered += segment.lastFrame - segment.firstFrame + 1;
     log.push(`rendered ${segment.beatId} (frames ${segment.firstFrame}-${segment.lastFrame})`);
+    onProgress?.({ framesRendered, totalFrames, currentBeat: segment.beatId });
   }
 
   if (errors.length > 0) {
@@ -331,7 +382,7 @@ async function runIncrementalRender(
     writeCache(projectRoot, videoName, { version: CACHE_VERSION, compositionId, renderKey: key, segments });
   }
 
-  const last = beats[beats.length - 1];
+  onProgress?.({ framesRendered: success ? totalFrames : framesRendered, totalFrames, currentBeat: null });
   return {
     success,
     outPath: path.join(projectRoot, outPathRel),
@@ -343,11 +394,26 @@ async function runIncrementalRender(
     reusedBeats: plan.filter((p) => p.reused).map((p) => p.beatId),
     renderedBeats: plan.filter((p) => !p.reused).map((p) => p.beatId),
     framesRendered,
-    totalFrames: last.start + last.duration,
+    totalFrames,
   };
 }
 
-export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVideoResult> {
+export interface PreparedRenderVideo {
+  videoName: string;
+  projectRoot: string;
+  compositionId: string;
+  outPathRel: string;
+  brandLocked: boolean;
+}
+
+/**
+ * The synchronous half of render_video: validate input and the brand-lock gate, throwing
+ * immediately on anything wrong, before any real work (a render that will take 40+ minutes,
+ * possibly started detached under `async: true`) begins. Split out so the async path can
+ * fail a bad call synchronously too, instead of "succeeding" with a jobId that immediately
+ * errors.
+ */
+export function prepareRenderVideo(input: RenderVideoInput): PreparedRenderVideo {
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const compositionId = input.compositionId ?? `${pascalCase(videoName)}Demo`;
@@ -369,6 +435,11 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
   }
 
   fs.mkdirSync(path.dirname(path.join(projectRoot, outPathRel)), { recursive: true });
+  return { videoName, projectRoot, compositionId, outPathRel, brandLocked };
+}
+
+export async function runRenderVideo(input: RenderVideoInput, opts: RenderVideoOpts = {}): Promise<RenderVideoResult> {
+  const { videoName, projectRoot, compositionId, outPathRel, brandLocked } = prepareRenderVideo(input);
 
   const started = Date.now();
   if (input.incremental === true) {
@@ -379,15 +450,22 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
       outPathRel,
       brandLocked,
       started,
+      onProgress: opts.onProgress,
     });
   }
 
+  // No natural per-frame hook on the plain (non-incremental) Remotion CLI path without
+  // parsing its verbose stdout, so progress here is coarse: unknown/0, then done. The
+  // incremental path above is where real per-beat progress actually comes from.
+  const totalFrames = tryReadTotalFrames(projectRoot, videoName);
+  opts.onProgress?.({ framesRendered: 0, totalFrames, currentBeat: null });
   const { command, args } = buildRenderCommand(compositionId, outPathRel, {
     draft: input.draft,
     concurrency: input.concurrency,
   });
   const result = await spawnCapture(command, args, projectRoot);
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);
+  opts.onProgress?.({ framesRendered: result.code === 0 ? totalFrames : 0, totalFrames, currentBeat: null });
 
   return {
     success: result.code === 0,
@@ -429,7 +507,16 @@ export function registerRenderVideo(server: McpServer): void {
         + "the project-wide inputs (brand tokens, the generated composition, the music bed) all hash identical "
         + "to when it was rendered, so a false hit cannot ship a stale frame. This is what makes diff_beats "
         + "actionable: editing one caption in a ten beat video re-renders one beat instead of all of them. The "
-        + "result then also reports reusedBeats, renderedBeats, and how many frames were actually rendered.",
+        + "result then also reports reusedBeats, renderedBeats, and how many frames were actually rendered. "
+        + "Pass async: true to not block on the render at all: input is validated synchronously same as "
+        + "always (a bad call still fails immediately), then the render starts detached and this call "
+        + "returns { jobId, estimate } right away. Poll job_status with that jobId for progress (frames "
+        + "rendered, current beat, a log tail) and the eventual result, which is exactly the "
+        + "RenderVideoResult a synchronous call would have returned. Use this for anything that might run "
+        + "past about 60 seconds: MCP clients enforce their own request timeout (Claude Code's "
+        + "MCP_TOOL_TIMEOUT, or the SDK client default), and a 40-minute render will not survive one. On "
+        + "the synchronous path (async not set), real MCP progress notifications are emitted as the render "
+        + "progresses, for any client that attached a progressToken to the request.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -439,8 +526,43 @@ export function registerRenderVideo(server: McpServer): void {
         concurrency: z.number().positive().optional(),
         skipBrandLock: z.boolean().optional(),
         incremental: z.boolean().optional(),
+        async: z.boolean().optional(),
       },
     },
-    async (input) => runTool("render_video", () => runRenderVideo(input)),
+    async (input, extra) =>
+      runTool("render_video", async () => {
+        if (input.async === true) {
+          // Validate synchronously first (throws here, caught by runTool, same as any other
+          // tool failure) so a bad call never "succeeds" with a jobId that immediately errors.
+          const prepared = prepareRenderVideo(input);
+          const totalFrames = tryReadTotalFrames(prepared.projectRoot, prepared.videoName);
+          const job = createJob<RenderVideoResult>("render_video", totalFrames);
+          // Deliberately not awaited: this keeps running on the event loop after this
+          // handler returns, exactly what makes the "return now, finish later" contract work.
+          runRenderVideo(input, { onProgress: (p) => updateJobProgress(job.id, p) })
+            .then((result) => completeJob(job.id, result))
+            .catch((err) => failJob(job.id, err instanceof Error ? err.message : String(err)));
+          return { jobId: job.id, estimate: estimateRenderSeconds(totalFrames, Boolean(input.draft)) };
+        }
+
+        const progressToken = extra._meta?.progressToken;
+        const onProgress =
+          progressToken === undefined
+            ? undefined
+            : (p: RenderProgress) => {
+                void extra
+                  .sendNotification({
+                    method: "notifications/progress",
+                    params: {
+                      progressToken,
+                      progress: p.framesRendered,
+                      total: p.totalFrames,
+                      message: p.currentBeat ? `rendering beat "${p.currentBeat}"` : undefined,
+                    },
+                  })
+                  .catch(() => {});
+              };
+        return runRenderVideo(input, { onProgress });
+      }),
   );
 }

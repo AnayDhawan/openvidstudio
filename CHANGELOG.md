@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs
+
+- **README and llms.txt now disclose Remotion's own license, not just openvidstudio's.**
+  openvidstudio's code is Apache-2.0 and free for anyone, but it renders through Remotion,
+  which is free only for individuals, non-profits, evaluation use, and for-profit companies
+  with up to 3 employees; a larger company needs a paid Remotion Company License
+  (remotion.pro) to render with it. The README's badge and llms.txt's tagline said
+  openvidstudio was free without that caveat, which reads as "free to use" to a company
+  evaluator when the Remotion dependency underneath it isn't, for them. Tech stack and
+  License sections now state the split plainly.
+
 ### Fixed
 
 - **`capture_screen_recording` at the default `deviceScaleFactor` (2) no longer leaves

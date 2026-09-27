@@ -250,7 +250,7 @@ has real Remotion knowledge to work from, not just this project's own
 
 | Area | Choice |
 | --- | --- |
-| Video engine | [Remotion](https://www.remotion.dev) |
+| Video engine | [Remotion](https://www.remotion.dev) (own license, see below) |
 | Capture | [Playwright](https://playwright.dev), ffmpeg |
 | Agent interface | [Model Context Protocol](https://modelcontextprotocol.io) (`@openvidstudio/mcp-server`) |
 | Narration | edge-tts |
@@ -289,4 +289,12 @@ follow our [Code of Conduct](CODE_OF_CONDUCT.md). Security issues: see
 
 ## License
 
-[Apache-2.0](./LICENSE)
+openvidstudio itself is [Apache-2.0](./LICENSE): free for individuals and companies of any size,
+including this repo's own code, the MCP tools, and the capture package.
+
+It renders through [Remotion](https://www.remotion.dev), which is under Remotion's own license, not
+Apache-2.0. Remotion is free to render with if you're an individual, a non-profit, evaluating it, or
+a for-profit company with up to 3 employees. A larger for-profit company needs a paid Remotion
+Company License ([remotion.pro](https://www.remotion.pro/license)) to render with openvidstudio,
+same as it would to use Remotion directly. openvidstudio doesn't check for this; it's between you
+and Remotion.

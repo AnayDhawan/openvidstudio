@@ -4,7 +4,11 @@
 
 openvidstudio is an open-source node project maintained at
 [github.com/AnayDhawan/openvidstudio](https://github.com/AnayDhawan/openvidstudio) under the
-Apache-2.0 license.
+Apache-2.0 license. openvidstudio's own code is free for everyone, including companies of any
+size. It renders through Remotion, which is free for individuals and for-profit companies with
+up to 3 employees; a larger company needs a separate Remotion Company License
+([remotion.pro](https://www.remotion.pro/license)) to render with it. See README's Tech stack
+section.
 
 This file follows the [llms.txt](https://llmstxt.org/) convention: a short, stable,
 plain-language map of the project for language models and the people using them. Keep it

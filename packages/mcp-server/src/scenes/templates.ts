@@ -92,6 +92,12 @@ export interface SceneContext {
   /** For existing-asset: the staticFile-relative path and the mandatory credit. */
   assetStaticPath?: string;
   attribution?: string;
+  /**
+   * For the cta template: the real repo (git remote, falling back to package.json's
+   * "repository" field), its license, and a simple language guess -- so RepoCta never
+   * ships "your-org"/"your-repo" placeholders for a project that has a real remote.
+   */
+  repo?: { owner: string; name: string; license?: string; language?: string; isFallback: boolean };
 }
 
 /** Content wider or taller than this gets cropped once the camera pushes in. */
@@ -691,20 +697,29 @@ ${SAFE_WRAP(`          <div style={{ display: "flex", gap: 44, width: "100%", al
 }
 
 function cta(ctx: SceneContext): string {
+  const owner = ctx.repo?.owner ?? "your-org";
+  const name = ctx.repo?.name ?? "your-repo";
+  const chips = [ctx.repo?.language ?? "code", ctx.repo?.license ?? "source available"];
   return `${HEADER(ctx.beatId, "cta", ctx.description)}
 //
 // RepoCta ships without a star action by default, per OVERVIEW.md.
-
+${
+    ctx.repo && !ctx.repo.isFallback
+      ? "//\n// owner/name/chips read from the real git remote (or package.json's \"repository\" field) and\n" +
+        "// package.json's \"license\" field -- re-run scaffold_scene with overwrite: true if either changes.\n"
+      : "//\n// No git remote or package.json \"repository\" field found, so this still ships the your-org/\n" +
+        "// your-repo placeholders. Fix package.json or the remote, then re-run with overwrite: true.\n"
+  }
 import React from "react";
 import { RepoCta } from "@openvidstudio/core";
 
 export const ${ctx.componentName}: React.FC = () => {
   return (
     <RepoCta
-      owner="your-org"
-      name="your-repo"
+      owner="${owner}"
+      name="${name}"
       description="${leadLine(ctx, 110)}"
-      chips={["open source", "MIT"]}
+      chips={${JSON.stringify(chips)}}
       titleText="${headline(ctx)}"
       durationInFrames={${ctx.durationFrames}}
     />

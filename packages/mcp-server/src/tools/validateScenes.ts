@@ -97,6 +97,20 @@ function cameraScales(src: string): number[] {
     .filter((n) => Number.isFinite(n));
 }
 
+/**
+ * Core components that wrap `CinematicScene` with their own hardcoded internal camera
+ * keyframes (see e.g. RepoCta.tsx's `camera={[...]}`), so a scene built from one needs no
+ * external camera layered on top -- the generated .tsx just renders the component with
+ * content props and has no `scale:`/`camera` array of its own to find. Checked in packages/
+ * core/src for anything else similarly wrapping CinematicScene internally: RepoCta is the
+ * only one today. Extend this list if another one is added.
+ */
+const SELF_CAMERA_COMPONENTS = ["RepoCta"];
+
+function usesSelfManagedCamera(src: string): boolean {
+  return SELF_CAMERA_COMPONENTS.some((name) => new RegExp(`\\b${name}\\b`).test(src));
+}
+
 /** Explicit pixel widths a scene declares, which is what gets cropped. */
 function declaredWidths(src: string): number[] {
   const out: number[] = [];
@@ -218,7 +232,7 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
         });
       }
     }
-    if (scales.length < 2) {
+    if (scales.length < 2 && !usesSelfManagedCamera(src)) {
       findings.push({
         beatId: beat.id,
         scene: `${component}.tsx`,

@@ -20,6 +20,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`render_video`'s incremental path no longer drifts audio out of sync with video.**
+  Each per-beat segment's AAC track ran slightly longer than its video (encoder padding),
+  and stream-copying every segment's audio under one concat pass stacked that drift beat
+  over beat: a 16-beat, 5400-frame video came out ~0.85s audio-behind by the end. Video now
+  concatenates from per-segment files with their audio isolated into a fresh container first
+  (a segment's own container duration otherwise still reflects its longer audio track even
+  after dropping the audio stream, so the old approach left a silent gap at every join
+  instead of drift); audio is decoded to raw PCM per segment, trimmed/padded to exactly
+  duration/fps samples, concatenated as samples, and encoded to AAC once at the end.
+  Verified on a synthetic 16-beat composition: joined video and audio both land within 1ms
+  of frames/fps, and a transient placed at a known offset lands within 1 frame of its
+  expected time.
+
 - **`capture_screen_recording` at the default `deviceScaleFactor` (2) no longer leaves
   3/4 of the frame grey.** Playwright's `recordVideo.size` is in the same CSS-pixel units
   as `viewport`, not physical pixels, and it only ever scales a painted frame *down* to
@@ -34,6 +47,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   four carry their real colours.
 
 ### Added
+
+- **Music-only videos: `narration: "none"`, `stitch_composition`'s `musicBed`, and
+  `overrides.tsx`.** `validate_beats` required every beat's `vo` and held it to the spoken
+  words/sec budget, so a text-and-music video with no narration at all could never pass
+  `write_beats_file`. `beats.json` gains an optional top-level `narration: "voice" | "none"`
+  ("voice" assumed when omitted, so every existing file stays valid); under `"none"`, `vo`
+  is optional and unpaced, and a new optional per-beat `onScreenText` is checked against a
+  reading-time budget instead (see `SCRIPT.md`). `stitch_composition` gains
+  `musicBed: { file, volume }` (volume defaults to 0.18 with narration, 1.0 without), and
+  imports `src/videos/<name>/overrides.tsx` when present as a dev-authored extension point
+  it only ever references, never writes, so a hand-added layer survives a re-stitch.
 
 - **`deterministic` on `capture_screenshot`/`capture_screen_recording`, for a capture
   that is the same twice.** Opt-in (default off): freezes `Date.now()`/`new Date()`

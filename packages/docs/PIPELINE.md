@@ -129,6 +129,16 @@ One file per beat. Rules:
 `<video>/<Name>Demo.tsx`: `<Series>` mapping `beats.json` ids to scene
 components. Register in the project's `Root.tsx` with duration from beats.
 
+**Music-only videos** (`beats.json`'s top-level `narration: "none"`, see `SCRIPT.md`): pass
+`stitch_composition` a `musicBed: { file, volume }` to control the bed and its mix level
+directly; it otherwise defaults the bed to full volume with no narration to duck under.
+
+**`<video>/overrides.tsx`** (optional): if this file exists, `stitch_composition` imports and
+renders it as an extra layer on every stitch, without ever writing to it itself. This is the
+place for a hand-added layer (an extra callout, a one-off effect) that needs to survive a
+caption edit and re-stitch, since everything else in the generated composition file is
+regenerated from `beats.json` on every run.
+
 ## 4. Preview + QC loop
 - `npm run dev` for live preview while writing scenes.
 - Render, then extract frames at each beat midpoint:

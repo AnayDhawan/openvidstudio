@@ -53,17 +53,51 @@ export function readCursorPoints(assetPathAbs: string, timing: CursorTiming): Re
   const points =
     timing.kind === "even-spread"
       ? spreadEvenly(sidecar.points, timing.durationFrames)
-      : sidecar.points.map((p) => ({
-          frame: Math.min(
-            Math.max(0, Math.round((p.atMs / 1000) * timing.fps)),
-            Math.max(0, timing.durationFrames - 1),
-          ),
-          x: p.x,
-          y: p.y,
-          click: p.type === "click",
-        }));
+      : addClickDwell(
+          sidecar.points.map((p) => ({
+            frame: Math.min(
+              Math.max(0, Math.round((p.atMs / 1000) * timing.fps)),
+              Math.max(0, timing.durationFrames - 1),
+            ),
+            x: p.x,
+            y: p.y,
+            click: p.type === "click",
+          })),
+          timing.durationFrames,
+        );
 
   return { points, viewport: sidecar.viewport, pointCount: sidecar.points.length };
+}
+
+/**
+ * A real recording's raw interaction timeline keeps moving right through a click: the mouse
+ * doesn't stop just because the sidecar happened to log a click event at that instant. Left
+ * alone, CursorActor's path interpolates straight through the click frame and on to wherever
+ * the cursor goes next, so by the time the click ring is a few frames into its fade the
+ * cursor (and, before A7, the ring itself) has visibly moved off the target -- a real repro
+ * measured this ~100px off a real button.
+ *
+ * This inserts two extra keyframes around every click point, both pinned to the click's own
+ * x/y: one ~4 frames before it (arrive), one ~7 frames after (dwell). Between "arrive" and
+ * the click, and between the click and "dwell", consecutive keyframes share the same x/y, so
+ * CursorActor's interpolation is flat across that span -- the cursor visibly settles onto the
+ * target before the click and holds there briefly after, instead of arriving and departing on
+ * the same continuous sweep. Only affects real-time (recording) paths: an even-spread still
+ * already has margin between its points and no continuous motion to arrest.
+ */
+function addClickDwell(points: ResolvedCursorPoint[], durationFrames: number): ResolvedCursorPoint[] {
+  const ARRIVE_BEFORE = 4;
+  const DWELL_AFTER = 7;
+  const maxFrame = Math.max(0, durationFrames - 1);
+  const withDwell: ResolvedCursorPoint[] = [];
+  for (const p of points) {
+    withDwell.push(p);
+    if (p.click) {
+      withDwell.push({ frame: Math.max(0, p.frame - ARRIVE_BEFORE), x: p.x, y: p.y, click: false });
+      withDwell.push({ frame: Math.min(maxFrame, p.frame + DWELL_AFTER), x: p.x, y: p.y, click: false });
+    }
+  }
+  return withDwell.sort((a, b) => a.frame - b.frame);
 }
 
 function spreadEvenly(rawPoints: CursorSidecar["points"], durationFrames: number): ResolvedCursorPoint[] {

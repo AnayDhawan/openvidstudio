@@ -37,7 +37,7 @@ is your app, captured live.
   actually running app; the UI, the product text, and the layout are all ground truth.
 - **Your agent drives** - no separate app, no timeline editor, no manual keyframing.
   Claude Code, Cursor, ChatGPT, or anything that speaks MCP runs the whole pipeline
-  through thirty-one tools, thirty-two with the Higgsfield tier enabled.
+  through thirty-three tools, thirty-four with the Higgsfield tier enabled.
 - **A directed video, not a screen recording** - push-ins, drift, shallow depth of
   field, an oversized cursor, narration, and a synthesized music bed turn plain
   captures into something you'd ship.
@@ -154,7 +154,7 @@ package and ignore the rest.
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Thirty-one tools should appear.
+restart the client. Thirty-three tools should appear.
 
 Then paste this to your agent, from inside the repo you want a video of:
 
@@ -195,6 +195,12 @@ pnpm --filter @openvidstudio/mcp-server build
 
 `preflight` checks every row and names the fix for your platform. Only the Node
 version is enforced numerically; the rest are presence checks.
+
+Remotion normally downloads its own Chromium build (chrome-headless-shell) the first time
+it renders, separate from the Playwright Chromium above, which fails outright with no
+network access. Set `render.browserExecutable` in `openvidstudio.config.json` to the
+resolved path `preflight`'s `chromium` check reports and `render_video` reuses that browser
+instead; `preflight` then checks the configured path too.
 
 ```bash
 # Windows. Reopen the terminal after installing ffmpeg, winget only puts it on
@@ -265,7 +271,7 @@ openvidstudio/
 ├── packages/
 │   ├── capture/        # @openvidstudio/capture: browser, desktop, mobile, terminal capture, no Remotion dependency
 │   ├── core/            # Remotion compositions, scene templates, render pipeline
-│   ├── mcp-server/       # @openvidstudio/mcp-server: the 31-32 MCP tools an agent calls
+│   ├── mcp-server/       # @openvidstudio/mcp-server: the 33-34 MCP tools an agent calls
 │   └── docs/             # PLANNING · OVERVIEW · PIPELINE · STYLE · CAPTURE · SCRIPT · API · NARRATION · PRESETS · HIGGSFIELD
 ├── templates/
 │   └── default/           # Starter project scaffolded by init_project

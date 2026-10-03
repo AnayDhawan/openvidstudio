@@ -113,7 +113,7 @@ const COMPOSITION_ID_RE = /^[A-Za-z0-9_-]+$/;
 export function buildRenderCommand(
   compositionId: string,
   outPath: string,
-  opts: { draft?: boolean; concurrency?: number } = {},
+  opts: { draft?: boolean; concurrency?: number; browserExecutable?: string } = {},
 ): RenderCommand {
   const args = ["remotion", "render", compositionId, outPath];
   if (opts.draft) {
@@ -130,6 +130,12 @@ export function buildRenderCommand(
   }
   if (opts.concurrency && opts.concurrency > 0) {
     args.push(`--concurrency=${Math.floor(opts.concurrency)}`);
+  }
+  if (opts.browserExecutable) {
+    // Reuses the project's configured browser (render.browserExecutable, normally pointed
+    // at the same Playwright-managed Chromium capture already launches) instead of Remotion
+    // downloading its own chrome-headless-shell, which fails outright with no network.
+    args.push(`--browser-executable=${opts.browserExecutable}`);
   }
   // Remotion suppresses its progress bar when stdout is not a TTY, which is always
   // the case here, so a piped render writes an empty log for its whole run and an
@@ -232,14 +238,20 @@ async function runIncrementalRender(
   const totalFrames = last.start + last.duration;
   const log: string[] = [];
   const errors: string[] = [];
+  // framesRendered (the result field, asserted by existing cache tests) counts only frames
+  // actually sent to the renderer this call -- a cache that reports "rendered" frames for a
+  // reused segment would make "did this run do any real work" unanswerable from the result.
+  // progressFramesDone is the separate, job_status/MCP-progress-facing number: how much of
+  // the FINAL video is accounted for so far, where a reused segment is already done.
   let framesRendered = 0;
+  let progressFramesDone = 0;
   onProgress?.({ framesRendered: 0, totalFrames, currentBeat: null });
 
   for (const segment of plan) {
     if (segment.reused) {
-      framesRendered += segment.lastFrame - segment.firstFrame + 1;
+      progressFramesDone += segment.lastFrame - segment.firstFrame + 1;
       log.push(`reused  ${segment.beatId} (frames ${segment.firstFrame}-${segment.lastFrame})`);
-      onProgress?.({ framesRendered, totalFrames, currentBeat: segment.beatId });
+      onProgress?.({ framesRendered: progressFramesDone, totalFrames, currentBeat: segment.beatId });
       continue;
     }
     const { command, args } = buildSegmentRenderArgs(
@@ -247,7 +259,7 @@ async function runIncrementalRender(
       segment.file,
       segment.firstFrame,
       segment.lastFrame,
-      { draft: input.draft, concurrency: input.concurrency },
+      { draft: input.draft, concurrency: input.concurrency, browserExecutable: config.render.browserExecutable },
     );
     const result = await spawnCapture(command, args, projectRoot);
     if (result.code !== 0 || !fs.existsSync(path.join(projectRoot, segment.file))) {
@@ -255,8 +267,9 @@ async function runIncrementalRender(
       break;
     }
     framesRendered += segment.lastFrame - segment.firstFrame + 1;
+    progressFramesDone += segment.lastFrame - segment.firstFrame + 1;
     log.push(`rendered ${segment.beatId} (frames ${segment.firstFrame}-${segment.lastFrame})`);
-    onProgress?.({ framesRendered, totalFrames, currentBeat: segment.beatId });
+    onProgress?.({ framesRendered: progressFramesDone, totalFrames, currentBeat: segment.beatId });
   }
 
   if (errors.length > 0) {
@@ -382,7 +395,7 @@ async function runIncrementalRender(
     writeCache(projectRoot, videoName, { version: CACHE_VERSION, compositionId, renderKey: key, segments });
   }
 
-  onProgress?.({ framesRendered: success ? totalFrames : framesRendered, totalFrames, currentBeat: null });
+  onProgress?.({ framesRendered: success ? totalFrames : progressFramesDone, totalFrames, currentBeat: null });
   return {
     success,
     outPath: path.join(projectRoot, outPathRel),
@@ -459,9 +472,11 @@ export async function runRenderVideo(input: RenderVideoInput, opts: RenderVideoO
   // incremental path above is where real per-beat progress actually comes from.
   const totalFrames = tryReadTotalFrames(projectRoot, videoName);
   opts.onProgress?.({ framesRendered: 0, totalFrames, currentBeat: null });
+  const config = loadConfig(projectRoot);
   const { command, args } = buildRenderCommand(compositionId, outPathRel, {
     draft: input.draft,
     concurrency: input.concurrency,
+    browserExecutable: config.render.browserExecutable,
   });
   const result = await spawnCapture(command, args, projectRoot);
   const elapsedSeconds = Math.round((Date.now() - started) / 1000);

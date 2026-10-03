@@ -23,6 +23,9 @@ export {
   Blip,
   SuccessChime,
   Bell,
+  SoftClick,
+  Bong,
+  Drop,
   MusicBed,
 } from "./sfx";
 

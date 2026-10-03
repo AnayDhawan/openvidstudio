@@ -3161,6 +3161,214 @@ console.log("\n== Part 40: extract_brand finds a palette in the logo when there 
 }
 
 
+console.log("\n== Part 41: preflight resolves Chromium the same way real capture launches it (A5) ==");
+{
+  // Playwright resolves its browser path registry once at module load, from env vars read
+  // at THAT time -- mutating process.env.PLAYWRIGHT_BROWSERS_PATH later in this same long-
+  // lived process does not change what an already-loaded chromium.executablePath() returns.
+  // A real client only ever sets this once per process too, so each case here runs preflight
+  // in its own fresh child process, exactly like three separate real invocations would.
+  const preflightRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a5-"));
+  // Written inside packageRoot (not the temp project), so plain `require("@openvidstudio/
+  // capture")` resolves through this package's own node_modules exactly like preflight.ts's
+  // real import does, rather than finding nothing from a bare temp directory.
+  const probeScript = path.join(packageRoot, ".a5-probe-preflight.cjs");
+  fs.writeFileSync(
+    probeScript,
+    `const { runPreflight } = require(${JSON.stringify(path.join(distDir, "tools", "preflight.js"))});
+     const { chromium } = require("@openvidstudio/capture");
+     (async () => {
+       let realPath = null;
+       try { realPath = chromium.executablePath(); } catch {}
+       const r = await runPreflight({ projectRoot: ${JSON.stringify(preflightRoot)} });
+       console.log(JSON.stringify({ realPath, check: r.checks.find((c) => c.name === "chromium") }));
+     })();`,
+    "utf8",
+  );
+  const runProbe = (browsersPath) => {
+    const env = { ...process.env };
+    if (browsersPath === undefined) delete env.PLAYWRIGHT_BROWSERS_PATH;
+    else env.PLAYWRIGHT_BROWSERS_PATH = browsersPath;
+    const out = execFileSync("node", [probeScript], { env, encoding: "utf8" });
+    return JSON.parse(out.trim().split("\n").pop());
+  };
+  try {
+
+  const { realPath: defaultRealPath, check: defaultCheck } = runProbe(undefined);
+  check(
+    "with no PLAYWRIGHT_BROWSERS_PATH, preflight resolves Chromium via the same playwright capture uses",
+    defaultCheck.ok === (defaultRealPath !== null && fs.existsSync(defaultRealPath)) &&
+      /playwright \d+\.\d+\.\d+/.test(defaultCheck.detail),
+  );
+
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a5-empty-"));
+  const { check: emptyCheck } = runProbe(emptyDir);
+  check(
+    "an empty custom PLAYWRIGHT_BROWSERS_PATH fails with the resolved (not-found) path and the exact fix command",
+    emptyCheck.ok === false && emptyCheck.detail.includes(emptyDir) && emptyCheck.fix === "npx playwright install chromium",
+  );
+
+  if (defaultRealPath && fs.existsSync(defaultRealPath)) {
+    const buildDirName = defaultRealPath.split(path.sep).find((p) => /^chromium[_-]/.test(p));
+    const cacheRoot = buildDirName ? defaultRealPath.slice(0, defaultRealPath.indexOf(buildDirName) - 1) : null;
+    if (buildDirName && cacheRoot) {
+      const customDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a5-custom-"));
+      fs.cpSync(path.join(cacheRoot, buildDirName), path.join(customDir, buildDirName), { recursive: true });
+      const { check: customCheck } = runProbe(customDir);
+      check(
+        "the same build copied under a custom PLAYWRIGHT_BROWSERS_PATH is found there (false 'no chromium' fixed)",
+        customCheck.ok === true && customCheck.detail.includes(customDir),
+      );
+    } else {
+      skip("Part 41: custom PLAYWRIGHT_BROWSERS_PATH positive case", "could not parse the default build's cache dir");
+    }
+  } else {
+    skip("Part 41: custom PLAYWRIGHT_BROWSERS_PATH positive case", "no default Chromium build resolved on this machine to copy");
+  }
+  } finally {
+    fs.rmSync(probeScript, { force: true });
+  }
+}
+
+console.log("\n== Part 42: README's tool count matches what actually gets registered (A12) ==");
+{
+  const { createMcpServer } = require(path.join(distDir, "server.js"));
+  const countTools = (config) => Object.keys(createMcpServer(config)._registeredTools).length;
+  const withoutHiggsfield = countTools(undefined);
+  const withHiggsfield = countTools({
+    hasHiggsfield: true,
+    targetDurationSeconds: 60,
+    videoConfig: { fps: 30, width: 1920, height: 1080 },
+    capture: { appUrl: "http://localhost:3000", width: 1440, height: 900, settleMs: 1200 },
+    narration: { engine: "edge-tts", voice: "en-US-AndrewNeural" },
+  });
+  check("passing hasHiggsfield registers exactly one more tool", withHiggsfield === withoutHiggsfield + 1);
+
+  const readmeText = fs.readFileSync(path.join(monorepoRoot, "README.md"), "utf8");
+  const NUMBER_WORDS = {
+    twentyeight: 28, twentynine: 29, thirty: 30, thirtyone: 31, thirtytwo: 32,
+    thirtythree: 33, thirtyfour: 34, thirtyfive: 35, thirtysix: 36,
+  };
+  const wordToNumber = (w) => NUMBER_WORDS[w.toLowerCase().replace(/-/g, "")];
+  const m = /through (\w[\w-]*) tools, (\w[\w-]*) with the Higgsfield tier enabled/.exec(readmeText);
+  check("README's Quick start tool-count sentence is still in the expected shape to check", !!m);
+  if (m) {
+    const [, withoutWord, withWord] = m;
+    check(
+      `README says "${withoutWord}" tools, actual registered count without Higgsfield is ${withoutHiggsfield}`,
+      wordToNumber(withoutWord) === withoutHiggsfield,
+    );
+    check(
+      `README says "${withWord}" with Higgsfield, actual registered count is ${withHiggsfield}`,
+      wordToNumber(withWord) === withHiggsfield,
+    );
+  }
+}
+
+console.log("\n== Part 43: find_music_bed fetches only the requested catalog, degrades gracefully on \"any\" (A12) ==");
+{
+  const githubReachable = await fetch("https://api.github.com/", { signal: AbortSignal.timeout(5000) })
+    .then((r) => r.status < 500)
+    .catch(() => false);
+
+  if (githubReachable) {
+    const { runFindMusicBed } = require(path.join(distDir, "tools", "musicLibrary.js"));
+    const musicRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a12-music-"));
+
+    const lofiOnly = await runFindMusicBed({ projectRoot: musicRoot, source: "lofi", limit: 3 });
+    check("source: \"lofi\" returns only lofi candidates", lofiOnly.candidates.every((c) => c.source === "lofi"));
+    check("...and nothing from cc0 got fetched", lofiOnly.categories.cc0.length === 0);
+    const indexAfterLofi = JSON.parse(fs.readFileSync(path.join(musicRoot, "output", "music-index.json"), "utf8"));
+    check("the cache records only lofi as fetched", JSON.stringify(indexAfterLofi.sourcesFetched) === JSON.stringify(["lofi"]));
+
+    // lofi is now cached; block all network and ask for "any" -- cc0 has to be fetched
+    // fresh (not cached yet) and can't be, so this must degrade, not fail outright.
+    const blockedEnv = { HTTPS_PROXY: "http://127.0.0.1:9", HTTP_PROXY: "http://127.0.0.1:9" };
+    const savedProxy = { HTTPS_PROXY: process.env.HTTPS_PROXY, HTTP_PROXY: process.env.HTTP_PROXY, NODE_USE_ENV_PROXY: process.env.NODE_USE_ENV_PROXY };
+    process.env.NODE_USE_ENV_PROXY = "1";
+    Object.assign(process.env, blockedEnv);
+    // Undici (Node's fetch) also caches its dispatcher/proxy agent at first use within a
+    // process, same class of issue as playwright's path resolution in Part 41 -- so this
+    // specific case runs in its own child process rather than relying on the env mutation
+    // taking effect on an already-initialized fetch in this long-lived process.
+    const probeScript = path.join(packageRoot, ".a12-probe-music.cjs");
+    fs.writeFileSync(
+      probeScript,
+      `const { runFindMusicBed } = require(${JSON.stringify(path.join(distDir, "tools", "musicLibrary.js"))});
+       runFindMusicBed({ projectRoot: ${JSON.stringify(musicRoot)}, source: "any", limit: 2 })
+         .then((r) => console.log(JSON.stringify(r)))
+         .catch((e) => { console.log(JSON.stringify({ threw: String(e.message || e) })); });`,
+      "utf8",
+    );
+    try {
+      const out = execFileSync("node", [probeScript], { env: { ...process.env }, encoding: "utf8" });
+      const degraded = JSON.parse(out.trim().split("\n").pop());
+      check(
+        "source: \"any\" with cc0 unreachable still succeeds, using lofi's cache",
+        !degraded.threw && Array.isArray(degraded.candidates) && degraded.candidates.length > 0,
+      );
+      check(
+        "...and reports a warning naming cc0 specifically, not a generic failure",
+        Array.isArray(degraded.warnings) && degraded.warnings.some((w) => w.includes("cc0") || w.includes("CC0-1.0-Music")),
+      );
+    } finally {
+      fs.rmSync(probeScript, { force: true });
+      for (const [k, v] of Object.entries(savedProxy)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  } else {
+    skip("Part 43: find_music_bed source-gating and degradation (entire section)", "api.github.com is not reachable from this environment");
+  }
+}
+
+console.log("\n== Part 44: render.browserExecutable reuses a configured browser instead of Remotion's own download (A12) ==");
+{
+  const { buildRenderCommand } = require(path.join(distDir, "tools", "renderVideo.js"));
+  const { buildSegmentRenderArgs } = require(path.join(distDir, "renderCache.js"));
+  const fakeExe = "C:/fake/chrome.exe";
+
+  check(
+    "buildRenderCommand adds --browser-executable when configured",
+    buildRenderCommand("Demo", "out.mp4", { browserExecutable: fakeExe }).args.includes(`--browser-executable=${fakeExe}`),
+  );
+  check(
+    "buildSegmentRenderArgs adds it too, for the incremental path",
+    buildSegmentRenderArgs("Demo", "seg.mp4", 0, 29, { browserExecutable: fakeExe }).args.includes(`--browser-executable=${fakeExe}`),
+  );
+  check(
+    "omitted entirely when not configured -- unset stays Remotion's default behavior",
+    !buildRenderCommand("Demo", "out.mp4", {}).args.some((a) => a.startsWith("--browser-executable")) &&
+      !buildSegmentRenderArgs("Demo", "seg.mp4", 0, 29, {}).args.some((a) => a.startsWith("--browser-executable")),
+  );
+
+  const { runPreflight } = require(path.join(distDir, "tools", "preflight.js"));
+  const { writeConfig } = require(path.join(distDir, "config.js"));
+  const beRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a12-browserexec-"));
+
+  const noConfig = await runPreflight({ projectRoot: beRoot });
+  check(
+    "preflight adds no render.browserExecutable check when it isn't configured",
+    !noConfig.checks.some((c) => c.name === "render.browserExecutable"),
+  );
+
+  writeConfig(beRoot, { render: { browserExecutable: path.join(beRoot, "does-not-exist.exe") } });
+  const missingConfigured = await runPreflight({ projectRoot: beRoot });
+  const missingCheck = missingConfigured.checks.find((c) => c.name === "render.browserExecutable");
+  check(
+    "a configured but missing render.browserExecutable fails preflight with that exact path named",
+    missingCheck?.ok === false && missingCheck.detail.includes("does-not-exist.exe"),
+  );
+
+  const realExistingFile = path.join(beRoot, "stand-in.exe");
+  fs.writeFileSync(realExistingFile, "");
+  writeConfig(beRoot, { render: { browserExecutable: realExistingFile } });
+  const presentConfigured = await runPreflight({ projectRoot: beRoot });
+  const presentCheck = presentConfigured.checks.find((c) => c.name === "render.browserExecutable");
+  check("an existing configured path passes preflight", presentCheck?.ok === true);
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

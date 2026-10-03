@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "../config";
-import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
+import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, pascalCase } from "../util";
 import { runTool } from "./mcp";
 
 export interface StitchCompositionInput {
@@ -93,6 +93,14 @@ interface BeatLike {
   id: string;
   start: number;
   duration: number;
+  /**
+   * C5: an explicit scene file for this beat, relative to the video directory (e.g.
+   * "./scenes/Whatever.tsx"), for a hand-authored bespoke scene that doesn't live at
+   * the `./scenes/<PascalId>` convention scaffold_scene writes to. The exported
+   * component name is still expected to be pascalCase(id), same as the convention
+   * path -- only the file location changes.
+   */
+  scene?: string;
 }
 
 /**
@@ -155,6 +163,18 @@ ${comps}
 `;
 }
 
+/**
+ * Import specifier for a beat's scene: its own `scene` override (extension stripped,
+ * a leading "./" added if it names a bare relative path) or the `./scenes/<PascalId>`
+ * convention scaffold_scene writes to. runStitchComposition validates `b.scene` stays
+ * inside the video directory before this ever sees it.
+ */
+function sceneImportPath(b: BeatLike): string {
+  if (!b.scene) return `./scenes/${pascalCase(b.id)}`;
+  const normalized = b.scene.replace(/\\/g, "/").replace(/\.(tsx|ts|jsx|js)$/, "");
+  return normalized.startsWith("./") || normalized.startsWith("../") ? normalized : `./${normalized}`;
+}
+
 function renderDemoTsx(opts: {
   componentName: string;
   beats: BeatLike[];
@@ -167,7 +187,7 @@ function renderDemoTsx(opts: {
 }): string {
   const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, hasOverrides } = opts;
   const sceneImports = beats
-    .map((b) => `import { ${pascalCase(b.id)} } from "./scenes/${pascalCase(b.id)}";`)
+    .map((b) => `import { ${pascalCase(b.id)} } from "${sceneImportPath(b)}";`)
     .join("\n");
   const sceneMapLines = beats.map((b) => `  ${JSON.stringify(b.id)}: ${pascalCase(b.id)},`).join("\n");
 
@@ -289,6 +309,9 @@ export function runStitchComposition(input: StitchCompositionInput): StitchCompo
   const beats = beatsData.beats;
   if (!Array.isArray(beats) || beats.length === 0) {
     throw new Error(`${beatsPath} has no beats.`);
+  }
+  for (const b of beats) {
+    if (b.scene) sanitizeRelativeOutPath(videoDir, b.scene, `beat "${b.id}"'s scene`);
   }
 
   const config = loadConfig(projectRoot);

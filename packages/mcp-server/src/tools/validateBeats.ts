@@ -127,6 +127,15 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       expectedStart += duration as number;
     }
 
+    // C5: an explicit scene file path, for a hand-authored bespoke scene that doesn't live
+    // at stitch_composition's `./scenes/<PascalId>` convention. Shape-checked only -- whether
+    // the file actually exists is stitch_composition's own concern at stitch time, not
+    // validate_beats's (this runs on drafted beats.json, often before a scene is written).
+    const scene = beat.scene;
+    if (scene !== undefined && (typeof scene !== "string" || scene.length === 0)) {
+      errors.push(`${label}: "scene" must be a non-empty string if present (a path relative to the video directory)`);
+    }
+
     const vo = beat.vo;
     const hasVo = typeof vo === "string" && vo.length > 0;
     if (narration === "voice") {

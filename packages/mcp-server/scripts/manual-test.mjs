@@ -3589,6 +3589,363 @@ console.log("\n== Part 48: plan_production's real MCP elicitation (B) ==");
   );
 }
 
+console.log("\n== Part 49: scaffold_scene modes -- starter and blank (C5) ==");
+{
+  const c5Root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c5-scaffold-"));
+  const videoDir = path.join(c5Root, "src", "videos", "c5-demo");
+  fs.mkdirSync(videoDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      beats: [
+        { id: "alpha-shot", start: 0, duration: 90, vo: "Alpha narration line.", visual: { description: "alpha shot" } },
+        { id: "beta-shot", start: 90, duration: 90, vo: "Beta narration line.", visual: { description: "beta shot" } },
+        { id: "gamma-shot", start: 180, duration: 90, vo: "Gamma narration line.", visual: { description: "gamma shot" } },
+      ],
+    }),
+  );
+
+  // mode: "starter", no design.ts/facts.json on disk yet.
+  const alpha = runScaffoldScene({ projectRoot: c5Root, videoName: "c5-demo", beatId: "alpha-shot", kind: "dom-demo", mode: "starter" });
+  check("starter mode reports written: true", alpha.written === true);
+  check("starter mode's result names itself, not a template name", alpha.template === "starter");
+  check("starter mode wrote the file at the usual scenes/<PascalId>.tsx path", fs.existsSync(path.join(videoDir, "scenes", "AlphaShot.tsx")));
+  const alphaSrc = fs.readFileSync(alpha.path, "utf8");
+  check("starter file imports CinematicScene/Layer/E from core", /import \{ CinematicScene, Layer, E \} from "@openvidstudio\/core";/.test(alphaSrc));
+  check("starter file carries the beat's own VO as a comment, not on screen", alphaSrc.includes("Alpha narration line."));
+  check("starter file does NOT import design (no design.ts exists yet)", !alphaSrc.includes('from "../design"'));
+  check("starter file does NOT import facts (no facts.json exists yet)", !alphaSrc.includes('from "../facts.json"'));
+  check("starter file's camera keyframes never freeze (two distinct keyframes)", /frame: 0,.*scale: 1\.04/.test(alphaSrc.replace(/\s+/g, " ")) && alphaSrc.includes("E.drift"));
+
+  // Now add design.ts and facts.json, and scaffold a second beat in starter mode.
+  fs.writeFileSync(path.join(videoDir, "design.ts"), 'export const design = { motif: "geometric" };\n');
+  fs.writeFileSync(path.join(videoDir, "facts.json"), '{"beats":{}}\n');
+  const beta = runScaffoldScene({ projectRoot: c5Root, videoName: "c5-demo", beatId: "beta-shot", kind: "dom-demo", mode: "starter" });
+  const betaSrc = fs.readFileSync(beta.path, "utf8");
+  check("starter mode imports design once design.ts exists on disk", betaSrc.includes('import { design } from "../design";'));
+  check("starter mode imports facts once facts.json exists on disk", betaSrc.includes('import facts from "../facts.json";'));
+
+  // mode: "blank" on a fresh beat: nothing written, honest result shape.
+  const gammaBlank = runScaffoldScene({ projectRoot: c5Root, videoName: "c5-demo", beatId: "gamma-shot", kind: "dom-demo", mode: "blank" });
+  check("blank mode reports written: false", gammaBlank.written === false);
+  check("blank mode writes no file", !fs.existsSync(path.join(videoDir, "scenes", "GammaShot.tsx")));
+  check("blank mode still names the expected path and component name", gammaBlank.path.endsWith(path.join("scenes", "GammaShot.tsx")) && gammaBlank.componentName === "GammaShot");
+  check("blank mode's notes point the agent at the expected export name", gammaBlank.notes.some((n) => n.includes("GammaShot")));
+
+  // mode: "blank" on a beat that already has a real starter-written file: must never clobber,
+  // and must never throw the "already exists" refusal that template/starter mode would.
+  const beforeClobberCheck = fs.readFileSync(path.join(videoDir, "scenes", "AlphaShot.tsx"), "utf8");
+  const alphaBlank = runScaffoldScene({ projectRoot: c5Root, videoName: "c5-demo", beatId: "alpha-shot", kind: "dom-demo", mode: "blank" });
+  check("blank mode on an already-scaffolded beat still reports written: false, never throws", alphaBlank.written === false);
+  check(
+    "...and never touches the real file already there",
+    fs.readFileSync(path.join(videoDir, "scenes", "AlphaShot.tsx"), "utf8") === beforeClobberCheck,
+  );
+}
+
+console.log("\n== Part 50: stitch_composition's per-beat scene override, and its shape check (C5) ==");
+{
+  const c5StitchRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c5-stitch-"));
+  const videoDir = path.join(c5StitchRoot, "src", "videos", "c5-stitch");
+  const scenesDir = path.join(videoDir, "scenes");
+  const customDir = path.join(videoDir, "custom-scenes");
+  fs.mkdirSync(scenesDir, { recursive: true });
+  fs.mkdirSync(customDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(scenesDir, "ConventionalShot.tsx"),
+    `import React from "react";\nexport const ConventionalShot: React.FC = () => null;\n`,
+  );
+  fs.writeFileSync(
+    path.join(customDir, "CustomPathShot.tsx"),
+    `import React from "react";\nexport const CustomPathShot: React.FC = () => null;\n`,
+  );
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      beats: [
+        { id: "conventional-shot", start: 0, duration: 90 },
+        { id: "custom-path-shot", start: 90, duration: 90, scene: "./custom-scenes/CustomPathShot.tsx" },
+      ],
+    }),
+  );
+
+  const stitched = runStitchComposition({ projectRoot: c5StitchRoot, videoName: "c5-stitch" });
+  check("stitch_composition succeeds with a mix of conventional and overridden scene paths", stitched.written === true);
+  const demoSrc = fs.readFileSync(path.join(videoDir, "C5StitchDemo.tsx"), "utf8");
+  check(
+    "a beat with no scene override still imports from the ./scenes/<PascalId> convention",
+    demoSrc.includes('import { ConventionalShot } from "./scenes/ConventionalShot";'),
+  );
+  check(
+    "a beat with a scene override imports from that exact path instead, extension stripped",
+    demoSrc.includes('import { CustomPathShot } from "./custom-scenes/CustomPathShot";'),
+  );
+  check(
+    "...and the custom path is never imported from the conventional scenes/ location",
+    !demoSrc.includes('"./scenes/CustomPathShot"'),
+  );
+
+  // Path-traversal guard: a scene override that escapes the video directory must throw,
+  // not silently generate an import pointing outside the project.
+  const escapeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c5-stitch-escape-"));
+  const escapeVideoDir = path.join(escapeRoot, "src", "videos", "escape-demo");
+  fs.mkdirSync(escapeVideoDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(escapeVideoDir, "beats.json"),
+    JSON.stringify({ fps: 30, beats: [{ id: "escaping-shot", start: 0, duration: 90, scene: "../../../outside" }] }),
+  );
+  let escapeThrew = false;
+  let escapeMessage = "";
+  try {
+    runStitchComposition({ projectRoot: escapeRoot, videoName: "escape-demo" });
+  } catch (err) {
+    escapeThrew = true;
+    escapeMessage = String(err.message);
+  }
+  check(
+    `a beat's scene path escaping the video directory throws instead of generating a bad import (got: ${escapeMessage || "no throw"})`,
+    escapeThrew && /escaping-shot/.test(escapeMessage) && /project root/.test(escapeMessage),
+  );
+
+  const { validateBeatsLogic: validateC5SceneBeats } = require(path.join(distDir, "tools", "validateBeats.js"));
+  const sceneBeat = (scene) => ({
+    fps: 30,
+    // 12 words over 150 frames at 30fps (5.0s) is 2.4 words/sec, inside SCRIPT.md's
+    // 2.3-2.9 budget -- this is a fixture for the scene field, not a VO-pacing test.
+    beats: [{ id: "b1", start: 0, duration: 150, vo: "A line that holds the pace this beat needs for its length.", scene }],
+  });
+  check("validate_beats accepts a beat with a real, non-empty scene override", validateC5SceneBeats(sceneBeat("./scenes/B1.tsx")).valid);
+  check(
+    "validate_beats rejects an empty-string scene override",
+    !validateC5SceneBeats(sceneBeat("")).valid && validateC5SceneBeats(sceneBeat("")).errors.some((e) => e.includes("scene")),
+  );
+  check(
+    "validate_beats rejects a non-string scene override",
+    !validateC5SceneBeats(sceneBeat(123)).valid && validateC5SceneBeats(sceneBeat(123)).errors.some((e) => e.includes("scene")),
+  );
+  check("validate_beats doesn't require scene at all (omitted is fine)", validateC5SceneBeats(sceneBeat(undefined)).valid);
+}
+
+console.log("\n== Part 51: write_brief -- validation and the two-file write (C1) ==");
+{
+  const { validateBriefLogic, runWriteBrief } = require(path.join(distDir, "tools", "writeBrief.js"));
+
+  const validBrief = {
+    creativeLevel: "mid",
+    logline: "A flashcard app that remembers what you forget.",
+    audience: "Technical interview candidates short on review time.",
+    feeling: "Relieved, like the hard part is already handled.",
+    storyDevice: { device: "before and after", reason: "the product's whole pitch is a before/after of review time." },
+    arc: {
+      hook: "A candidate staring at a pile of unreviewed cards.",
+      tension: "The pile keeps growing faster than they can clear it.",
+      turn: "Loomcard reorders the pile by what they are about to forget.",
+      proof: "A real review session, cards reordered live.",
+      payoff: "The pile is gone, replaced by a clean streak counter.",
+      cta: "Start a deck free.",
+    },
+    designSystem: {
+      path: "src/videos/loomcard/design.ts",
+      paletteRationale: "extract_brand found a cool blue/teal pair from the logo, kept as the two accent roles.",
+      motif: "rounded-soft",
+      motifRationale: "the product's own card corners are heavily rounded.",
+      motionRationale: "a calm drift, nothing punchy, matches the relieved feeling.",
+    },
+    music: {
+      bpm: 100,
+      key: "A minor",
+      sectionMap: [
+        { label: "intro", startBar: 1, endBar: 4 },
+        { label: "groove", startBar: 5, endBar: 16 },
+      ],
+      impactPoints: [{ name: "turn", bar: 9, note: 'beat "turn" starts at bar 9' }],
+    },
+    shotList: [
+      { beatId: "hook", real: true, provenance: "capture_screenshot of the empty-state pile", focalPoint: "the pile count" },
+      {
+        beatId: "turn", real: false, provenance: "dom-demo reorder animation",
+        whyConstructed: "the real reorder is instant, slowed down here for legibility", focalPoint: "the reordering motion",
+      },
+    ],
+  };
+
+  check("a fully-filled brief passes validation", validateBriefLogic(validBrief).valid);
+
+  const missingLevel = { ...validBrief, creativeLevel: "extreme" };
+  check(
+    "an invalid creativeLevel is rejected, naming the field",
+    !validateBriefLogic(missingLevel).valid && validateBriefLogic(missingLevel).errors.some((e) => e.includes("creativeLevel")),
+  );
+
+  const missingPayoff = { ...validBrief, arc: { ...validBrief.arc, payoff: "" } };
+  check(
+    "a blank arc.payoff is rejected, naming the exact nested field",
+    !validateBriefLogic(missingPayoff).valid && validateBriefLogic(missingPayoff).errors.some((e) => e === "arc.payoff must be a non-empty string"),
+  );
+
+  const backwardsSection = {
+    ...validBrief,
+    music: { ...validBrief.music, sectionMap: [{ label: "intro", startBar: 10, endBar: 2 }] },
+  };
+  check(
+    "a section with endBar before startBar is rejected",
+    !validateBriefLogic(backwardsSection).valid && validateBriefLogic(backwardsSection).errors.some((e) => e.includes("endBar")),
+  );
+
+  const unexplainedConstructed = {
+    ...validBrief,
+    shotList: [{ beatId: "hook", real: false, provenance: "built from scratch", focalPoint: "x" }],
+  };
+  check(
+    "a constructed shot with no whyConstructed is rejected",
+    !validateBriefLogic(unexplainedConstructed).valid &&
+      validateBriefLogic(unexplainedConstructed).errors.some((e) => e.includes("whyConstructed")),
+  );
+
+  const emDashed = { ...validBrief, feeling: "Relieved—like the hard part is handled." };
+  check(
+    "an em dash anywhere in the brief is caught, not just in top-level fields",
+    !validateBriefLogic(emDashed).valid && validateBriefLogic(emDashed).errors.some((e) => /em dash/.test(e)),
+  );
+
+  const unexplainedSample = {
+    ...validBrief,
+    sampleContent: [{ beatId: "hook", whatItIs: "a fictional app" }],
+  };
+  check(
+    "a sampleContent entry missing whyConstructed is rejected",
+    !validateBriefLogic(unexplainedSample).valid && validateBriefLogic(unexplainedSample).errors.some((e) => e.includes("whyConstructed")),
+  );
+
+  // The real two-file write.
+  const briefRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c1-brief-"));
+  const writeResult = runWriteBrief({
+    projectRoot: briefRoot,
+    videoName: "loomcard",
+    briefMarkdown: "Why this story device: the product's whole pitch IS a before/after.",
+    briefJson: validBrief,
+  });
+  check("a valid brief writes both files", writeResult.written === true);
+  const briefMdPath = path.join(briefRoot, "src", "videos", "loomcard", "brief.md");
+  const briefJsonPath = path.join(briefRoot, "src", "videos", "loomcard", "brief.json");
+  check("brief.md exists, written verbatim", fs.existsSync(briefMdPath) && fs.readFileSync(briefMdPath, "utf8").startsWith("Why this story device"));
+  check("brief.json exists, parses back to the same creativeLevel", fs.existsSync(briefJsonPath) && JSON.parse(fs.readFileSync(briefJsonPath, "utf8")).creativeLevel === "mid");
+
+  const invalidWriteRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c1-brief-invalid-"));
+  const invalidWrite = runWriteBrief({
+    projectRoot: invalidWriteRoot,
+    videoName: "loomcard",
+    briefMarkdown: "doesn't matter",
+    briefJson: missingPayoff,
+  });
+  check("an invalid brief returns { valid: false, errors } instead of writing", invalidWrite.written !== true && Array.isArray(invalidWrite.errors));
+  check(
+    "...and writes neither file",
+    !fs.existsSync(path.join(invalidWriteRoot, "src", "videos", "loomcard", "brief.md")) &&
+      !fs.existsSync(path.join(invalidWriteRoot, "src", "videos", "loomcard", "brief.json")),
+  );
+}
+
+console.log("\n== Part 52: C4's new core primitives render for real, together (C4) ==");
+if (fs.existsSync(templateNodeModules)) {
+  const { runInitProject } = require(path.join(distDir, "tools", "initProject.js"));
+  const c4Root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c4-render-"));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      runInitProject({ name: "c4check", projectRoot: c4Root });
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      console.log(`  (init_project hit ${err.code ?? err.message}, retrying: attempt ${attempt})`);
+      fs.rmSync(c4Root, { recursive: true, force: true });
+      fs.mkdirSync(c4Root, { recursive: true });
+    }
+  }
+  fs.symlinkSync(templateNodeModules, path.join(c4Root, "node_modules"), "junction");
+
+  const videoDir = path.join(c4Root, "src", "videos", "c4check");
+  const customDir = path.join(videoDir, "custom-scenes");
+  fs.mkdirSync(customDir, { recursive: true });
+  // One scene, one real import of a representative slice across all four of C4's new
+  // files (pixel.tsx, kinetic.tsx, atmosphere.tsx, panels.tsx), composed together the way
+  // a bespoke peak/mid scene actually would -- proving they compile AND render real,
+  // non-blank pixels as a set, not just individually in isolation.
+  fs.writeFileSync(
+    path.join(customDir, "BespokeC4Check.tsx"),
+    `import React from "react";
+import {
+  CinematicScene, Layer, E, color,
+  Atmosphere, Words, DotText, PixelLogo,
+  Window, JsonView, ToolChip, Check, Pill, Glass, ChapterHud,
+} from "@openvidstudio/core";
+
+export const BespokeC4Check: React.FC = () => {
+  const logoShapes = [
+    { x: 0, y: 0, width: 10, height: 10, color: color.accent },
+    { x: 14, y: 0, width: 10, height: 10, color: color.accentAlt },
+    { x: 7, y: 14, width: 10, height: 10, color: color.success },
+  ];
+  return (
+    <CinematicScene
+      camera={[
+        { frame: 0, x: 960, y: 540, scale: 1.04 },
+        { frame: 150, x: 960, y: 540, scale: 1.1, easing: E.drift },
+      ]}
+      overlay={<ChapterHud chapters={[{ label: "check" }, { label: "done" }]} activeIndex={0} fillDurationInFrames={150} />}
+    >
+      <Layer depth={0}>
+        <Atmosphere />
+        <div style={{ position: "absolute", left: 140, top: 140 }}>
+          <PixelLogo shapes={logoShapes} at={0} scale={6} build="none" />
+        </div>
+        <div style={{ position: "absolute", left: 140, top: 340 }}>
+          <Words text="Primitives render for real" at={0} />
+        </div>
+        <div style={{ position: "absolute", left: 140, top: 460 }}>
+          <DotText text="C4" at={0} build="none" />
+        </div>
+        <div style={{ position: "absolute", left: 1100, top: 160, display: "flex", flexDirection: "column", gap: 20 }}>
+          <Window title="status.json" width={620} height={260}>
+            <JsonView value={{ ok: true, components: 4 }} at={0} />
+          </Window>
+          <div style={{ display: "flex", gap: 14 }}>
+            <ToolChip name="render_still" at={0} doneAt={0} />
+            <Pill color={color.success}>verified</Pill>
+          </div>
+          <Glass>
+            <Check size={28} at={0} />
+          </Glass>
+        </div>
+      </Layer>
+    </CinematicScene>
+  );
+};
+`,
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      beats: [{ id: "check", start: 0, duration: 150, scene: "./custom-scenes/BespokeC4Check.tsx" }],
+    }),
+  );
+
+  const c4Stitch = runStitchComposition({ projectRoot: c4Root, videoName: "c4check" });
+  check("C4 check composition stitches (scene override + new primitives all resolve as real imports)", c4Stitch.written === true);
+
+  const c4OutRel = path.join("out", "c4-check.mp4");
+  const c4Render = await runRenderVideo({ projectRoot: c4Root, videoName: "c4check", outPath: c4OutRel, skipBrandLock: true });
+  check(
+    "render_video renders the new primitives for real, no React/CSS crash, a real file lands on disk",
+    c4Render.success === true && fs.existsSync(c4Render.outPath) && fs.statSync(c4Render.outPath).size > 20000,
+  );
+} else {
+  skip("Part 52: C4 primitives real render", "no resolvable node_modules to scaffold a renderable project from");
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

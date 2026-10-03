@@ -42,16 +42,44 @@ silently broken while writing a scene:
   frozen frame is a QC fail.
 - **No em dashes**, on screen or in VO, anywhere.
 
-## Before you hand-write a scene
+## Before you write a scene: read the brief first
 
-`scaffold_scene` emits a scene that renders, using that beat's own copy and
-duration. Start from it and edit the content rather than composing a scene
-from primitives: it already has correct camera keyframes, a safe content
-width, and the right shape for the beat's capture method.
+Read `src/videos/<name>/brief.json` (and `brief.md`) before writing a single
+scene. It names the creative level this video is being made at, and that
+decides how you get to a scene file:
 
-Then run `validate_scenes`. The commonest mistake in this pipeline is
-invisible: content laid out at full stage width gets cropped once the camera
-pushes in, and the render does not warn.
+- **peak and mid: author scenes.** Compose from `@openvidstudio/core`'s
+  primitive library (`Words`, `PixelLogo`, `DotText`, `ChapterHud`,
+  `Window`, and the rest -- see `./docs/API.md`) against the video's
+  own `src/videos/<name>/design.ts` (its `DesignSystem`: palette roles,
+  type scale, motif, motion personality). `scaffold_scene` with `mode:
+  "starter"` gives you a scene file already wired to that design system
+  and the beat's real facts, with no layout imposed, as a faster starting
+  point than a blank file; `mode: "blank"` registers the beat for
+  `stitch_composition` without writing anything, if you'd rather start
+  from nothing. Either way, the structure, pacing and composition are
+  your creative decisions, not a template's.
+- **literal, or a tight time budget: `scaffold_scene` with `mode:
+  "template"` (the default)** is the fast path: a scene that renders
+  immediately, using that beat's own copy and duration, with correct
+  camera keyframes and a safe content width already handled. Start from
+  it and edit the content. This is a shortcut for when the brief calls
+  for exactly what's specified and nothing more, not the default way to
+  build a scene at every level.
+
+Whichever path, every scene still has to pass `STYLE.md`'s hard rules (no
+linear easing, `CinematicScene` always, motion never stops, no em dashes)
+and claim-obligates-visual (`SCRIPT.md`).
+
+Then run `validate_scenes`. It reads the scene source statically: camera
+scale against the content widths declared in the file, a camera that
+never moves, missing capture assets, a settle-sidecar timeout, leftover
+TODOs, a beat with no narration file. The commonest mistake in this
+pipeline is invisible otherwise: content laid out at full stage width
+gets cropped once the camera pushes in, and a plain render does not
+warn. A static read can still miss a real-render-only problem (the
+validator's own source says so plainly); render a still and look
+whenever a scene's framing is at all in doubt.
 
 ## Components
 

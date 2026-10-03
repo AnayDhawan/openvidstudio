@@ -39,6 +39,13 @@ export {
 } from "./tokens";
 export type { Brand } from "./tokens";
 
+// Design system as code (C2)
+export {
+  defineDesignSystem, contrastRatio,
+  DEFAULT_TYPE_SCALE, DEFAULT_GRID, DEFAULT_MOTION, DEFAULT_TEXTURE, DEFAULT_TRANSITIONS,
+} from "./designSystem";
+export type { DesignSystem, TypeScale, LayoutGrid, MotionPersonality, CameraEnergy, Motif, Texture } from "./designSystem";
+
 // Scene wrapper
 export { CinematicScene } from "./CinematicScene";
 

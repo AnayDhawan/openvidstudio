@@ -71,8 +71,9 @@ a rule here, it fails QC.
   #3ECF8E. Warn: #F5A623.
 - Light scenes: bg #F4F6F9, cards #FFFFFF, shadow rgba(15,23,42,0.12)
   large radius.
-- Fonts: Inter (UI), JetBrains Mono (terminal/code) via
-  `@remotion/google-fonts`.
+- Fonts: Inter (UI), JetBrains Mono (terminal/code), bundled locally (see
+  `packages/core/src/localFonts.ts`) rather than fetched from Google Fonts at render
+  time, so a render with no network access still gets the real glyphs.
 - Grain: 4-6% opacity, animated (re-seeded translate per frame). Vignette:
   25-40% edge darkening.
 

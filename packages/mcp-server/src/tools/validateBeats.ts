@@ -15,6 +15,7 @@ const MAX_PACE = 2.9;
 const MAX_READING_WORDS_PER_SEC = 3.5;
 const READING_OVERHEAD_SEC = 0.8;
 const NARRATION_MODES = ["voice", "none"] as const;
+const CREATIVE_LEVELS = ["peak", "mid", "literal"] as const;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;
 const TRANSITIONS = ["cut", "whip", "fade"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
@@ -52,6 +53,30 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     errors.push(`narration must be one of ${NARRATION_MODES.map((n) => `"${n}"`).join(", ")} (omit for "voice")`);
   }
   const narration = narrationRaw === "none" ? "none" : "voice";
+
+  // Mirrored from openvidstudio.config.json's production field (PLANNING.md §0) so a tool
+  // reading beats.json alone still knows the level a video was planned at. Shape-checked
+  // only: this file doesn't enforce what a level implies about content, that's the agent's
+  // job at authoring time (plan_production, scaffold_scene's template-vs-custom choice).
+  if (root.production !== undefined) {
+    if (typeof root.production !== "object" || root.production === null || Array.isArray(root.production)) {
+      errors.push(`production must be an object: { creativeLevel?, timeBudgetMinutes? }`);
+    } else {
+      const production = root.production as Record<string, unknown>;
+      if (
+        production.creativeLevel !== undefined &&
+        !(CREATIVE_LEVELS as readonly string[]).includes(production.creativeLevel as string)
+      ) {
+        errors.push(`production.creativeLevel must be one of ${CREATIVE_LEVELS.map((l) => `"${l}"`).join(", ")}`);
+      }
+      if (
+        production.timeBudgetMinutes !== undefined &&
+        (typeof production.timeBudgetMinutes !== "number" || production.timeBudgetMinutes <= 0)
+      ) {
+        errors.push(`production.timeBudgetMinutes must be a positive number`);
+      }
+    }
+  }
 
   if (!Array.isArray(root.beats)) {
     return { valid: false, errors: ["beatsJson.beats must be an array"] };
@@ -395,7 +420,10 @@ export function registerValidateBeats(server: McpServer): void {
         "for dom-demo). Top-level narration (\"voice\" or \"none\", \"voice\" assumed if omitted) controls " +
         "whether vo is required and pace-checked at all: under \"none\", vo is optional and unpaced, and an " +
         "optional per-beat onScreenText is checked instead against a reading-time budget (about 3.5 words/sec " +
-        "plus 0.8s overhead) rather than a spoken-pace budget. waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), " +
+        "plus 0.8s overhead) rather than a spoken-pace budget. Top-level production (optional: { creativeLevel " +
+        "(\"peak\"/\"mid\"/\"literal\"), timeBudgetMinutes }), mirrored from openvidstudio.config.json by " +
+        "plan_production (PLANNING.md §0), is shape-checked only -- what a level implies about content is the " +
+        "agent's job, not this tool's. waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), " +
         "reducedMotion (boolean), and deterministic (boolean) are type-checked if present on a screenshot/" +
         "recording beat. For screenshot/" +
         "recording beats, every interactions[] entry is also validated against " +

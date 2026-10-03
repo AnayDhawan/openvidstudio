@@ -1,10 +1,60 @@
 # PLANNING.md: guided intake to beats.json
 
 This is step 0 of building any video with openvidstudio. Read this before
-touching `beats.json`. It defines: the intake question set, how to handle
-free-form pasted material instead, the per-feature capture-method decision
-tree, the full `captureMethod` field spec, and the mandatory approval gate
-before anything gets written to disk.
+touching `beats.json`. It defines: the production-mode intake (creative level,
+time budget), the fixed intake question set, how to handle free-form pasted
+material instead, the per-feature capture-method decision tree, the full
+`captureMethod` field spec, and the mandatory approval gate before anything
+gets written to disk.
+
+## 0. Creative level and time budget (added 2026-10, ask this first)
+
+Before §1's fixed questions, before drafting anything: ask two questions.
+
+1. **Creative level**, one of:
+   - **peak**: full creative liberty. A cold-open hook, tension, a problem,
+     a reveal, chapters, a payoff, an optional twist. A bespoke design
+     system and motion language derived from the brand. An original,
+     arc-matched score. Custom scenes, not templates. Three or more
+     rounds of stills review.
+   - **mid**: strong defaults. The arc from §3 below (hook, problem, demo
+     x2-3, differentiator, cta). The built-in `pulse-bed.mp3` or a CC0
+     track. A mix of templates and the occasional custom scene where a
+     template genuinely falls short. One or two review rounds.
+   - **literal**: do exactly what's specified. No added beats, no
+     embellished copy, no effects beyond this doc's own hard rules. When
+     the spec is ambiguous, ask rather than invent.
+2. **Time budget**: 15 minutes, 1 hour, 3 hours, no limit, or a number of
+   minutes. This is the wall-clock time the dev is willing to wait for the
+   finished video, not a deadline for the conversation.
+
+**How to ask.** Check whether the connected MCP client supports elicitation
+(a server-initiated structured prompt back to the user). If it does, use it
+for these two questions. If it doesn't, ask them directly in conversation,
+the same as every other intake question in this file; there is no
+behavioral difference downstream, only in how the question reaches the dev.
+
+**Then call `plan_production`** with the level, the budget, and a target
+duration (from §1.3 below, or a sensible default if that hasn't been asked
+yet). It returns a concrete plan (arc, how many beats get a bespoke scene
+versus a template, the score strategy, how many stills-QC rounds, the
+render passes) and a time estimate per phase, based on this machine's real
+measured render speed. Persisted as `production: { creativeLevel,
+timeBudgetMinutes }` in `openvidstudio.config.json`, and mirrored into that
+video's `beats.json` so a tool reading the manifest alone still knows the
+level.
+
+**Show the plan and its estimate at the approval gate** (§5), alongside the
+drafted `beats.json`. If `plan_production` reports `fitsBudget: false`,
+show `cutFirst` (what gets dropped, cheapest first) and let the dev choose,
+rather than silently downgrading the level or the duration. If it reports
+an `infeasibleWarning` (even one final render doesn't fit), say so plainly
+and offer the concrete alternatives it names (a shorter target duration,
+draft-only quality, a longer budget) instead of proceeding anyway.
+
+In `literal` mode, this step still happens (the time budget still matters
+for render passes), but the arc and scene mix are fixed by the dev's own
+spec, not by the level's defaults.
 
 ## 1. Fixed intake question set
 

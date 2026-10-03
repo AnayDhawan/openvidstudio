@@ -37,7 +37,7 @@ is your app, captured live.
   actually running app; the UI, the product text, and the layout are all ground truth.
 - **Your agent drives** - no separate app, no timeline editor, no manual keyframing.
   Claude Code, Cursor, ChatGPT, or anything that speaks MCP runs the whole pipeline
-  through thirty-three tools, thirty-four with the Higgsfield tier enabled.
+  through thirty-four tools, thirty-five with the Higgsfield tier enabled.
 - **A directed video, not a screen recording** - push-ins, drift, shallow depth of
   field, an oversized cursor, narration, and a synthesized music bed turn plain
   captures into something you'd ship.
@@ -59,7 +59,7 @@ is your app, captured live.
 
 | Area | What it does | Key tools |
 | --- | --- | --- |
-| **Project setup** | Scaffolds the project shell and checks the machine before anything runs | `init_project` · `preflight` |
+| **Project setup** | Scaffolds the project shell, checks the machine, and plans the production (creative level, time budget) before anything runs | `init_project` · `preflight` · `plan_production` |
 | **Beats** | Plans, validates, and commits the narration-and-shot skeleton the whole render is built from | `plan_beats` · `validate_beats` · `write_beats_file` |
 | **Capture** | Zoom-compensated browser, desktop, mobile, and terminal capture of the real running app | `capture_screenshot` · `capture_screen_recording` · `capture_desktop` · `capture_mobile` · `capture_terminal` |
 | **Shot planning** | Ranks what the video should show from the repo's own emphasis, with evidence per pick | `plan_shots` |
@@ -154,7 +154,7 @@ package and ignore the rest.
 ```
 
 Drop that into your MCP client's config, which for Claude Code is `.mcp.json`, and
-restart the client. Thirty-three tools should appear.
+restart the client. Thirty-four tools should appear.
 
 Then paste this to your agent, from inside the repo you want a video of:
 
@@ -271,7 +271,7 @@ openvidstudio/
 ├── packages/
 │   ├── capture/        # @openvidstudio/capture: browser, desktop, mobile, terminal capture, no Remotion dependency
 │   ├── core/            # Remotion compositions, scene templates, render pipeline
-│   ├── mcp-server/       # @openvidstudio/mcp-server: the 33-34 MCP tools an agent calls
+│   ├── mcp-server/       # @openvidstudio/mcp-server: the 34-35 MCP tools an agent calls
 │   └── docs/             # PLANNING · OVERVIEW · PIPELINE · STYLE · CAPTURE · SCRIPT · API · NARRATION · PRESETS · HIGGSFIELD
 ├── templates/
 │   └── default/           # Starter project scaffolded by init_project

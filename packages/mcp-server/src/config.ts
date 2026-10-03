@@ -41,6 +41,22 @@ export interface RenderConfig {
   browserExecutable?: string;
 }
 
+export type CreativeLevel = "peak" | "mid" | "literal";
+
+export interface ProductionConfig {
+  /**
+   * peak: full creative liberty (bespoke story, design system, motion language, score).
+   * mid: strong defaults, template-leaning, lighter review. literal: do exactly what was
+   * specified, nothing added. Set once per video by plan_production's intake, mirrored
+   * into that video's beats.json so a tool reading beats.json alone (not this config)
+   * still knows the level. No default: unlike every other section here, there's no sane
+   * guess for this one, it has to come from asking.
+   */
+  creativeLevel?: CreativeLevel;
+  /** Wall-clock minutes the user is willing to wait for the finished video. Also no default. */
+  timeBudgetMinutes?: number;
+}
+
 export interface OpenvidstudioConfig {
   hasHiggsfield: boolean;
   targetDurationSeconds: number;
@@ -48,6 +64,7 @@ export interface OpenvidstudioConfig {
   capture: CaptureConfig;
   narration: NarrationConfig;
   render: RenderConfig;
+  production: ProductionConfig;
 }
 
 export interface ConfigPatch {
@@ -57,6 +74,7 @@ export interface ConfigPatch {
   capture?: Partial<CaptureConfig>;
   narration?: Partial<NarrationConfig>;
   render?: Partial<RenderConfig>;
+  production?: Partial<ProductionConfig>;
 }
 
 /**
@@ -74,6 +92,7 @@ export const DEFAULT_CONFIG: OpenvidstudioConfig = {
   capture: { appUrl: "http://localhost:3000", width: 1440, height: 900, settleMs: 1200 },
   narration: { engine: "edge-tts", voice: "en-US-AndrewNeural" },
   render: {},
+  production: {},
 };
 
 export const CONFIG_FILE_NAME = "openvidstudio.config.json";
@@ -93,6 +112,7 @@ export function loadConfig(projectRoot: string): OpenvidstudioConfig {
       capture: { ...DEFAULT_CONFIG.capture },
       narration: { ...DEFAULT_CONFIG.narration },
       render: { ...DEFAULT_CONFIG.render },
+      production: { ...DEFAULT_CONFIG.production },
     };
   }
 
@@ -123,6 +143,10 @@ export function loadConfig(projectRoot: string): OpenvidstudioConfig {
     },
     render: {
       browserExecutable: raw.render?.browserExecutable ?? DEFAULT_CONFIG.render.browserExecutable,
+    },
+    production: {
+      creativeLevel: raw.production?.creativeLevel ?? DEFAULT_CONFIG.production.creativeLevel,
+      timeBudgetMinutes: raw.production?.timeBudgetMinutes ?? DEFAULT_CONFIG.production.timeBudgetMinutes,
     },
   };
 }
@@ -155,6 +179,10 @@ export function writeConfig(projectRoot: string, patch: ConfigPatch): Openvidstu
     },
     render: {
       browserExecutable: patch.render?.browserExecutable ?? existing.render.browserExecutable,
+    },
+    production: {
+      creativeLevel: patch.production?.creativeLevel ?? existing.production.creativeLevel,
+      timeBudgetMinutes: patch.production?.timeBudgetMinutes ?? existing.production.timeBudgetMinutes,
     },
   };
   fs.mkdirSync(projectRoot, { recursive: true });

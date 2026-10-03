@@ -116,8 +116,14 @@ check("openvidstudio.config.json written with merged fields", (() => {
   return cfg.hasHiggsfield === true && cfg.targetDurationSeconds === 45 && cfg.videoConfig.fps === 30;
 })());
 
+// src/Root.tsx is the one deliberate exception (B): init_project seeds preflight's
+// benchmark composition into the registry and immediately regenerates Root.tsx from it
+// (see initProject.ts), so the scaffolded copy is bigger than the bundled template's bare
+// `return null;` starting point by design, not a copy failure.
+const EXPECTED_TO_DIFFER = new Set([path.join("src", "Root.tsx")]);
 let allBundledFilesCopied = true;
 for (const rel of bundledFileList) {
+  if (EXPECTED_TO_DIFFER.has(rel)) continue;
   const src = path.join(bundledTemplateDir, rel);
   const dst = path.join(tmpRoot, rel);
   if (!fs.existsSync(dst) || fs.statSync(src).size !== fs.statSync(dst).size) {
@@ -126,10 +132,14 @@ for (const rel of bundledFileList) {
   }
 }
 check(
-  `every file in packages/mcp-server/templates/default (${bundledFileList.length} files) was copied into the scaffolded project`,
+  `every file in packages/mcp-server/templates/default (${bundledFileList.length} files, Root.tsx excepted) was copied into the scaffolded project`,
   allBundledFilesCopied,
 );
 check("src/videos/demo/scenes/ was created", fs.existsSync(path.join(tmpRoot, "src", "videos", "demo", "scenes")));
+check(
+  "src/Root.tsx was regenerated to register the preflight benchmark composition (B)",
+  fs.readFileSync(path.join(tmpRoot, "src", "Root.tsx"), "utf8").includes("PreflightBenchmark"),
+);
 
 console.log("\n== Part 2: write_beats_file -> scaffold_scene x3 -> stitch_composition ==");
 
@@ -3367,6 +3377,76 @@ console.log("\n== Part 44: render.browserExecutable reuses a configured browser 
   const presentConfigured = await runPreflight({ projectRoot: beRoot });
   const presentCheck = presentConfigured.checks.find((c) => c.name === "render.browserExecutable");
   check("an existing configured path passes preflight", presentCheck?.ok === true);
+}
+
+console.log("\n== Part 45: preflight's render benchmark (B) ==");
+{
+  const { buildBenchmarkArgs, parseBenchmarkSeconds } = require(path.join(distDir, "tools", "preflight.js"));
+
+  const args = buildBenchmarkArgs("C:\\proj", { frames: 60 });
+  check(
+    "buildBenchmarkArgs targets the seeded benchmark composition at the right frame range",
+    args.includes("OvsPreflightBenchmark") && args.includes("--frames=0-59"),
+  );
+  const withBrowser = buildBenchmarkArgs("C:\\proj", { frames: 60, browserExecutable: "C:/fake/chrome.exe" });
+  check(
+    "...and passes --browser-executable through when configured",
+    withBrowser.includes("--browser-executable=C:/fake/chrome.exe"),
+  );
+
+  const sample =
+    "Rendering (1 out of 1 runs) \u001b[34m\u2501\u2501\u001b[39m 100.00% \n\n" +
+    "    Time (\u001b[32mmean\u001b[39m \u00b1 \u001b[32m\u03c3\u001b[39m):         \u001b[32m12.84177s\u001b[39m \u00b1 \u001b[32m0.00000s\u001b[39m\n" +
+    "    Range (\u001b[34mmin\u001b[39m ... \u001b[31mmax\u001b[39m):     \u001b[34m12.84177s\u001b[39m ... \u001b[31m12.84177s\u001b[39m \t \u001b[90m1 runs\u001b[39m\n";
+  check(
+    "parseBenchmarkSeconds reads the real ANSI-coloured CLI output remotion benchmark prints",
+    parseBenchmarkSeconds(sample) === 12.84177,
+  );
+  check("...and returns null on unrecognized output rather than throwing", parseBenchmarkSeconds("nothing here") === null);
+
+  if (fs.existsSync(templateNodeModules)) {
+    const { runPreflight } = require(path.join(distDir, "tools", "preflight.js"));
+    const benchRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-b-bench-"));
+    const { runInitProject } = require(path.join(distDir, "tools", "initProject.js"));
+    // copyTemplateTree copies ~1700 small files; on Windows a transient ENOENT here (seen in
+    // practice after many prior Parts' own rapid file I/O in the same run, never reproduced
+    // in isolation) is filesystem contention, not a real failure -- retry a couple of times
+    // before treating it as one.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        runInitProject({ name: "bench", projectRoot: benchRoot });
+        break;
+      } catch (err) {
+        if (attempt >= 3) throw err;
+        console.log(`  (init_project hit ${err.code ?? err.message}, retrying: attempt ${attempt})`);
+        fs.rmSync(benchRoot, { recursive: true, force: true });
+        fs.mkdirSync(benchRoot, { recursive: true });
+      }
+    }
+    // Same junction-to-the-monorepo's-own-template-node_modules trick Part 4 uses, so this
+    // doesn't need its own real npm install just to resolve the remotion CLI.
+    fs.symlinkSync(templateNodeModules, path.join(benchRoot, "node_modules"), "junction");
+
+    const rootTsx = fs.readFileSync(path.join(benchRoot, "src", "Root.tsx"), "utf8");
+    check(
+      "init_project seeds the benchmark composition into Root.tsx before any video is stitched",
+      rootTsx.includes("PreflightBenchmark") && rootTsx.includes('id="OvsPreflightBenchmark"'),
+    );
+
+    const withoutBenchmark = await runPreflight({ projectRoot: benchRoot });
+    check("benchmark: false (default) returns no benchmarkResult", withoutBenchmark.benchmarkResult === undefined);
+
+    const withBenchmark = await runPreflight({ projectRoot: benchRoot, benchmark: true });
+    check(
+      "benchmark: true renders the seeded composition for real and reports a plausible fps and cpuCount",
+      withBenchmark.benchmarkResult?.ok === true &&
+        withBenchmark.benchmarkResult.fps > 0 &&
+        withBenchmark.benchmarkResult.fps < 1000 &&
+        withBenchmark.benchmarkResult.cpuCount === os.cpus().length,
+    );
+  } else {
+    skip("Part 45: real benchmark render", "no resolvable node_modules to scaffold a benchmarkable project from");
+  }
 }
 
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);

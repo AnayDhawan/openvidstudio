@@ -2899,6 +2899,268 @@ if (qcFfmpegAvailable) {
   skip("Part 38: qc_extract_frames end-frame extraction (entire section)", "ffmpeg not found on PATH");
 }
 
+ 
+console.log("\n== Part 39: docs_drift re-captures at the sidecar's own viewport, never the reference PNG's pixel size (A3) ==");
+
+if (browserAvailable) {
+  const http = await import("node:http");
+  const { runDocsDrift } = require(path.join(distDir, "tools", "docsDrift.js"));
+  const { runCaptureScreenshot } = require(path.join(distDir, "tools", "captureScreenshot.js"));
+  const sharpA3 = require("sharp");
+
+  // A page whose look genuinely depends on the CSS viewport width, with the breakpoint
+  // chosen so the bug and the fix disagree: captured at 800x600 CSS (dsf 2, the default),
+  // the PNG on disk is 1600x1200. 800 is below the 1200px breakpoint (blue); 1600 is above
+  // it (green). The old docs_drift read the PNG's pixel size (1600x1200) back as the
+  // viewport to re-navigate to, which crosses the breakpoint on a page that never actually
+  // changed -- exactly the shape of the real bug report (a 1440x900/dsf:2 capture, a
+  // 2880x1800 PNG, re-navigated to a 2880-wide viewport, a completely different layout).
+  const pageHtml = `<!doctype html><html><head><style>
+    body { margin: 0; }
+    #stage { width: 100vw; height: 100vh; background: #3355ff; }
+    @media (min-width: 1200px) { #stage { background: #22aa55; } }
+  </style></head><body><div id="stage"></div></body></html>`;
+  const a3Server = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(pageHtml);
+  });
+  await new Promise((resolve) => a3Server.listen(0, "127.0.0.1", resolve));
+  const a3Url = `http://127.0.0.1:${a3Server.address().port}/`;
+  const a3Root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a3-test-"));
+
+  try {
+    const a3Beats = {
+      fps: 30,
+      title: "A3",
+      beats: [
+        {
+          id: "narrow",
+          start: 0,
+          duration: 90,
+          vo: "The task board looks the same as before.",
+          visual: { captureMethod: "screenshot", url: a3Url, interactions: [] },
+        },
+      ],
+    };
+    const a3Write = runWriteBeatsFile({ projectRoot: a3Root, videoName: "a3", beatsJson: a3Beats });
+    check("the A3 fixture passes validate_beats", a3Write.written === true);
+
+    const narrowCap = await runCaptureScreenshot({
+      projectRoot: a3Root,
+      beatId: "narrow",
+      url: a3Url,
+      viewport: { width: 800, height: 600 },
+    });
+    check(
+      "captured at 800x600 CSS, 1600x1200 real pixels (dsf 2 default)",
+      narrowCap.width === 800 && narrowCap.height === 600 && narrowCap.pixelWidth === 1600 && narrowCap.pixelHeight === 1200,
+    );
+
+    const narrowRefRel = path.join("public", "images", "narrow.png");
+    const narrowSidecarPath = path.join(a3Root, `${narrowRefRel}.capture.json`);
+    check("capture_screenshot wrote a .capture.json sidecar next to it", fs.existsSync(narrowSidecarPath));
+    const narrowSidecar = JSON.parse(fs.readFileSync(narrowSidecarPath, "utf8"));
+    check(
+      "...recording the CSS viewport actually requested, not the pixel size, plus scale/url/capturedAt",
+      narrowSidecar.viewport.width === 800 &&
+        narrowSidecar.viewport.height === 600 &&
+        narrowSidecar.deviceScaleFactor === 2 &&
+        narrowSidecar.url === a3Url &&
+        typeof narrowSidecar.capturedAt === "string",
+    );
+
+    // The regression pin: if docs_drift ever again read the reference PNG's pixel size as
+    // the viewport instead of this sidecar, #stage would flip blue->green across the
+    // breakpoint and this would report drift on a page that never changed.
+    const a3Clean = await runDocsDrift({ projectRoot: a3Root, videoName: "a3" });
+    check(
+      "an unchanged page whose pixel size crosses a CSS breakpoint the real viewport doesn't reports no drift",
+      a3Clean.ok === true && a3Clean.checked === 1 && a3Clean.findings[0].changedRatio === 0,
+    );
+
+    // Previously: an explicit viewport binding still failed with "different size than the
+    // reference", because the recapture context never matched the reference's own scale.
+    const a3Explicit = await runDocsDrift({
+      projectRoot: a3Root,
+      videoName: "a3",
+      bindings: [{ beatId: "narrow", url: a3Url, viewport: { width: 800, height: 600 }, referencePath: narrowRefRel }],
+    });
+    check(
+      "an explicit viewport binding now succeeds instead of 'different size than the reference'",
+      a3Explicit.ok === true && a3Explicit.findings[0].reason === "within both thresholds",
+    );
+
+    // Legacy asset, no sidecar: falls back to the one narrow, checkable guess (the pixel
+    // size is exactly double a common viewport -- 1600x1000, the tool's own default) rather
+    // than refusing outright.
+    const legacyRefRel = path.join("public", "images", "legacy.png");
+    await runCaptureScreenshot({ projectRoot: a3Root, beatId: "narrow", url: a3Url, outPath: legacyRefRel });
+    fs.rmSync(path.join(a3Root, `${legacyRefRel}.capture.json`)); // simulate a pre-sidecar asset
+    const a3Legacy = await runDocsDrift({
+      projectRoot: a3Root,
+      videoName: "a3",
+      bindings: [{ beatId: "legacy", url: a3Url, referencePath: legacyRefRel }],
+    });
+    check(
+      "a legacy reference with no sidecar, at a common viewport's exact double, falls back cleanly",
+      a3Legacy.ok === true && a3Legacy.findings[0].changedRatio === 0,
+    );
+
+    // An oddball legacy size the heuristic can't safely guess: refuses rather than guessing
+    // wrong, same as the bug this binding exists to prevent.
+    const oddballRefRel = path.join("public", "images", "oddball.png");
+    await sharpA3({ create: { width: 777, height: 533, channels: 3, background: { r: 1, g: 2, b: 3 } } })
+      .png()
+      .toFile(path.join(a3Root, oddballRefRel));
+    let a3Refusal = "";
+    try {
+      await runDocsDrift({ projectRoot: a3Root, videoName: "a3", bindings: [{ beatId: "oddball", url: a3Url, referencePath: oddballRefRel }] });
+    } catch (err) {
+      a3Refusal = String(err?.message ?? err);
+    }
+    check(
+      "a legacy reference at an uncommon size refuses to guess rather than guessing wrong",
+      a3Refusal.includes("no safe way to guess the viewport"),
+    );
+  } finally {
+    a3Server.close();
+    fs.rmSync(a3Root, { recursive: true, force: true });
+  }
+} else {
+  skip("Part 39: docs_drift sidecar viewport binding (A3, entire section)", "real Chromium is not available in this environment");
+}
+
+console.log("\n== Part 40: extract_brand finds a palette in the logo when there are no CSS design tokens (A10) ==");
+
+{
+  const { runExtractBrand } = require(path.join(distDir, "tools", "extractBrand.js"));
+
+  // The graded case: openvidstudio's own repo root, which has no globals.css/Tailwind
+  // config at all, but brand/logo-lockup.svg visibly carries a real palette.
+  const ownResult = await runExtractBrand({
+    projectRoot: fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-own-")),
+    sourceRepo: monorepoRoot,
+    dryRun: true,
+  });
+  const ownColors = new Set(ownResult.found.map((f) => f.value));
+  check(
+    "extract_brand against this repo's own root finds all four logo colours",
+    ["#8b5cf6", "#f87171", "#3b82f6", "#2dd4bf"].every((c) => ownColors.has(c)),
+  );
+  check(
+    "...every one of them sourced from the logo SVG specifically",
+    ownResult.found.filter((f) => ["#8b5cf6", "#f87171", "#3b82f6", "#2dd4bf"].includes(f.value)).every((f) => f.from === "brand/logo-lockup.svg"),
+  );
+  check("...and the background rect is picked up as bg0", ownColors.has("#0a0a0a"));
+  check("...with the note naming the logo, not a CSS file", ownResult.note.includes("from the logo"));
+
+  // A synthetic repo with a deterministic ranking (area, not just count), so the rank ->
+  // role mapping (accent, accentAlt, success, danger) can be pinned exactly rather than
+  // just checked for "contains these colours somewhere".
+  const svgRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-svg-"));
+  const brandDir = path.join(svgRepo, "brand");
+  fs.mkdirSync(brandDir, { recursive: true });
+  // viewBox 0 0 100 100: a full-bleed background rect, then four accent rects of
+  // decreasing area (40000, 30000, 20000, 10000px^2) so rank order is unambiguous. Nothing
+  // else in this SVG, so there is no tie at the top of the ranking to resolve by accident.
+  fs.writeFileSync(
+    path.join(brandDir, "logo-mark.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
+      `<rect x="0" y="0" width="100" height="100" fill="#111111"/>` + // full-bleed -> bg0
+      `<rect x="0" y="0" width="200" height="200" fill="#00ff00"/>` + // area 40000 (rank 1)
+      `<rect x="0" y="0" width="200" height="150" fill="#ff0000"/>` + // area 30000 (rank 2)
+      `<rect x="0" y="0" width="200" height="100" fill="#0000ff"/>` + // area 20000 (rank 3)
+      `<rect x="0" y="0" width="100" height="100" fill="#ffff00"/>` + // area 10000 (rank 4)
+      `</svg>`,
+    "utf8",
+  );
+  const svgResult = await runExtractBrand({
+    projectRoot: fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-svg-out-")),
+    sourceRepo: svgRepo,
+    dryRun: true,
+  });
+  const svgByToken = Object.fromEntries(svgResult.found.map((f) => [f.token, f.value]));
+  check("a full-bleed rect (exactly the viewBox size) becomes bg0", svgByToken.bg0 === "#111111");
+  check(
+    "the four accent colours rank by total area into accent/accentAlt/success/danger, in that order",
+    svgByToken.accent === "#00ff00" && svgByToken.accentAlt === "#ff0000" && svgByToken.success === "#0000ff" && svgByToken.danger === "#ffff00",
+  );
+  check(
+    "every logo-derived finding names the logo file, not a CSS file",
+    svgResult.found.every((f) => f.from === "brand/logo-mark.svg"),
+  );
+  fs.rmSync(svgRepo, { recursive: true, force: true });
+
+  // A large rect that is NOT full-bleed (offset from the origin) must not be mistaken for
+  // the background just because it has the most area -- only an exact x=0,y=0,full-size
+  // match counts, matching a real page's body background rather than a big decorative panel.
+  const offsetRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-offset-"));
+  fs.mkdirSync(path.join(offsetRepo, "brand"), { recursive: true });
+  fs.writeFileSync(
+    path.join(offsetRepo, "brand", "logo-mark.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">` +
+      `<rect x="10" y="10" width="90" height="90" fill="#abcabc"/>` + // biggest shape, but not full-bleed
+      `<rect x="0" y="0" width="10" height="10" fill="#defdef"/>` +
+      `</svg>`,
+    "utf8",
+  );
+  const offsetResult = await runExtractBrand({
+    projectRoot: fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-offset-out-")),
+    sourceRepo: offsetRepo,
+    dryRun: true,
+  });
+  check(
+    "an offset (non-full-bleed) rect is never treated as the background, however large",
+    !offsetResult.found.some((f) => f.token === "bg0") && offsetResult.found.some((f) => f.token === "accent" && f.value === "#abcabc"),
+  );
+  fs.rmSync(offsetRepo, { recursive: true, force: true });
+
+  // A repo with CSS custom properties present: the SVG fallback must stay OFF, since a real
+  // design token is a more reliable source than pixels ever are.
+  const cssRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-css-"));
+  fs.mkdirSync(path.join(cssRepo, "src", "app"), { recursive: true });
+  fs.writeFileSync(
+    path.join(cssRepo, "src", "app", "globals.css"),
+    `:root { --accent: #123456; }`,
+    "utf8",
+  );
+  fs.mkdirSync(path.join(cssRepo, "brand"), { recursive: true });
+  fs.writeFileSync(
+    path.join(cssRepo, "brand", "logo-mark.svg"),
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#654321"/></svg>`,
+    "utf8",
+  );
+  const cssResult = await runExtractBrand({
+    projectRoot: fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-css-out-")),
+    sourceRepo: cssRepo,
+    dryRun: true,
+  });
+  check(
+    "a repo with a real CSS token never falls back to logo pixels",
+    cssResult.found.some((f) => f.value === "#123456") && !cssResult.found.some((f) => f.value === "#654321"),
+  );
+  fs.rmSync(cssRepo, { recursive: true, force: true });
+
+  // @fontsource/* package.json fallback, for a repo with no CSS var and no next/font import.
+  const fontRepo = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-font-"));
+  fs.writeFileSync(
+    path.join(fontRepo, "package.json"),
+    JSON.stringify({ dependencies: { "@fontsource/inter": "^5.0.0", "@fontsource/jetbrains-mono": "^5.0.0" } }),
+    "utf8",
+  );
+  const fontResult = await runExtractBrand({
+    projectRoot: fs.mkdtempSync(path.join(os.tmpdir(), "ovs-a10-font-out-")),
+    sourceRepo: fontRepo,
+    dryRun: true,
+  });
+  check(
+    "@fontsource/* dependencies resolve real font names when nothing else did",
+    fontResult.fonts.ui === "Inter" && fontResult.fonts.mono === "JetBrains Mono" && fontResult.fonts.from === "package.json (@fontsource)",
+  );
+  fs.rmSync(fontRepo, { recursive: true, force: true });
+}
+
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

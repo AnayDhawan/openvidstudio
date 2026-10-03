@@ -68,7 +68,17 @@ export interface StitchCompositionResult {
   languages: LanguageComposition[];
 }
 
-interface RegistryEntry {
+/**
+ * The registry videoName init_project seeds preflight's benchmark composition under
+ * (preflight.ts) -- never a real video's name, so this entry survives every real video's
+ * stitch_composition call (whose registry filter is `entries.filter(e => e.videoName !==
+ * thisVideoName)`) untouched.
+ */
+export const PREFLIGHT_BENCHMARK_VIDEO_NAME = "__preflight__";
+/** The registry entry's own composition id, what preflight's benchmark actually renders. */
+export const PREFLIGHT_BENCHMARK_COMPOSITION_ID = "OvsPreflightBenchmark";
+
+export interface RegistryEntry {
   id: string;
   videoName: string;
   componentName: string;
@@ -94,23 +104,23 @@ interface BeatLike {
  * part of openvidstudio.config.json: that shape is pinned for Task 5 to depend on,
  * this is internal bookkeeping local to this one tool.
  */
-function registryPath(projectRoot: string): string {
+export function registryPath(projectRoot: string): string {
   return path.join(projectRoot, "src", "videos", ".registry.json");
 }
 
-function readRegistry(projectRoot: string): RegistryEntry[] {
+export function readRegistry(projectRoot: string): RegistryEntry[] {
   const p = registryPath(projectRoot);
   if (!fs.existsSync(p)) return [];
   return JSON.parse(fs.readFileSync(p, "utf8")) as RegistryEntry[];
 }
 
-function writeRegistry(projectRoot: string, entries: RegistryEntry[]): void {
+export function writeRegistry(projectRoot: string, entries: RegistryEntry[]): void {
   const p = registryPath(projectRoot);
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(entries, null, 2) + "\n", "utf8");
 }
 
-function renderRootTsx(entries: RegistryEntry[], hasBrand: boolean): string {
+export function renderRootTsx(entries: RegistryEntry[], hasBrand: boolean): string {
   const imports = entries.map((e) => `import { ${e.componentName} } from "${e.importPath}";`).join("\n");
   // Brand has to evaluate before any scene module, because applyBrand mutates the
   // shared token objects rather than replacing them. Import order is evaluation order.

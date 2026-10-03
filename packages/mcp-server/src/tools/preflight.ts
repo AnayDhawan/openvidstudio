@@ -1,11 +1,13 @@
 import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { chromium, resolvedPlaywrightVersion } from "@openvidstudio/capture";
-import { resolveProjectRoot } from "../util";
+import { resolveProjectRoot, spawnCapture } from "../util";
 import { loadConfig } from "../config";
+import { PREFLIGHT_BENCHMARK_COMPOSITION_ID } from "./stitchComposition";
 import { runTool } from "./mcp";
 
 /**
@@ -20,6 +22,25 @@ export interface PreflightInput {
   projectRoot?: string;
   /** Overrides the app url in openvidstudio.config.json. */
   appUrl?: string;
+  /**
+   * Also render ~60 frames of a fixed benchmark composition (seeded by init_project,
+   * see stitchComposition.ts's PREFLIGHT_BENCHMARK_VIDEO_NAME) and report real frames/sec
+   * plus CPU count. Off by default: a routine "are my deps installed" preflight call
+   * should stay fast, this costs a real ~10-20s render. plan_production turns it on when
+   * it actually needs a measured fps to base a time estimate on.
+   */
+  benchmark?: boolean;
+}
+
+export interface BenchmarkResult {
+  ok: boolean;
+  /** Frames actually timed (the composition's own first N frames, N = framesRequested unless the composition is shorter). */
+  framesTimed: number;
+  secondsElapsed: number;
+  fps: number;
+  cpuCount: number;
+  /** Present only when ok is false: why no measurement came back. */
+  error?: string;
 }
 
 export interface Check {
@@ -37,6 +58,8 @@ export interface PreflightResult {
   platform: string;
   checks: Check[];
   blockers: string[];
+  /** Present only when input.benchmark was true. */
+  benchmarkResult?: BenchmarkResult;
 }
 
 function which(cmd: string): string | null {
@@ -50,6 +73,70 @@ function platformFix(win: string, mac: string, linux: string): string {
   if (process.platform === "win32") return win;
   if (process.platform === "darwin") return mac;
   return linux;
+}
+
+const BENCHMARK_FRAMES = 60;
+
+/** Pure argv builder, unit-testable without spawning a real process. */
+export function buildBenchmarkArgs(
+  projectRoot: string,
+  opts: { frames?: number; browserExecutable?: string } = {},
+): string[] {
+  const frames = opts.frames ?? BENCHMARK_FRAMES;
+  const args = [
+    "remotion",
+    "benchmark",
+    path.join(projectRoot, "src", "index.ts"),
+    PREFLIGHT_BENCHMARK_COMPOSITION_ID,
+    `--frames=0-${frames - 1}`,
+    "--width=1920",
+    "--height=1080",
+    "--runs=1",
+  ];
+  if (opts.browserExecutable) args.push(`--browser-executable=${opts.browserExecutable}`);
+  return args;
+}
+
+/**
+ * Strips ANSI colour codes (the CLI has no machine-readable output mode) and reads the
+ * "Time (mean ± σ): X.XXXXXs" summary line `remotion benchmark` always prints at the end
+ * of a run.
+ */
+export function parseBenchmarkSeconds(stdout: string): number | null {
+  // eslint-disable-next-line no-control-regex
+  const plain = stdout.replace(/\x1b\[[0-9;]*m/g, "");
+  const m = /Time \(mean[^)]*\):\s+([\d.]+)s/.exec(plain);
+  return m ? Number.parseFloat(m[1]) : null;
+}
+
+async function runBenchmark(projectRoot: string, browserExecutable?: string): Promise<BenchmarkResult> {
+  const cpuCount = os.cpus().length;
+  if (!fs.existsSync(path.join(projectRoot, "src", "index.ts"))) {
+    return { ok: false, framesTimed: 0, secondsElapsed: 0, fps: 0, cpuCount, error: "src/index.ts not found -- run init_project first" };
+  }
+  const result = await spawnCapture(
+    process.platform === "win32" ? "npx.cmd" : "npx",
+    buildBenchmarkArgs(projectRoot, { browserExecutable }),
+    projectRoot,
+  );
+  const seconds = parseBenchmarkSeconds(result.stdout) ?? parseBenchmarkSeconds(result.stderr);
+  if (seconds === null || seconds <= 0) {
+    return {
+      ok: false,
+      framesTimed: 0,
+      secondsElapsed: 0,
+      fps: 0,
+      cpuCount,
+      error: `could not parse a benchmark time from remotion's output: ${(result.stderr || result.stdout).slice(-1000)}`,
+    };
+  }
+  return {
+    ok: true,
+    framesTimed: BENCHMARK_FRAMES,
+    secondsElapsed: seconds,
+    fps: Number((BENCHMARK_FRAMES / seconds).toFixed(2)),
+    cpuCount,
+  };
 }
 
 async function urlResponds(url: string, timeoutMs = 4000): Promise<boolean> {
@@ -173,6 +260,11 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
     });
   }
 
+  let benchmarkResult: BenchmarkResult | undefined;
+  if (input.benchmark) {
+    benchmarkResult = await runBenchmark(projectRoot, config.render.browserExecutable);
+  }
+
   const responds = await urlResponds(appUrl);
   checks.push({
     name: "app",
@@ -212,7 +304,13 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
   });
 
   const blockers = checks.filter((c) => !c.ok && c.blocking).map((c) => `${c.name}: ${c.fix ?? c.detail}`);
-  return { ok: blockers.length === 0, platform: process.platform, checks, blockers };
+  return {
+    ok: blockers.length === 0,
+    platform: process.platform,
+    checks,
+    blockers,
+    ...(benchmarkResult ? { benchmarkResult } : {}),
+  };
 }
 
 export function registerPreflight(server: McpServer): void {
@@ -229,10 +327,15 @@ export function registerPreflight(server: McpServer): void {
         "Every failure names the fix with the command for this platform, rather than describing a symptom. " +
         "Run it before init_project on a new machine: without it a missing dependency surfaces several " +
         "steps later, often after a long render has already started. Narration is reported as non blocking, " +
-        "since a silent video still renders.",
+        "since a silent video still renders. Pass benchmark: true to also render ~60 frames of a fixed " +
+        "benchmark composition (init_project seeds it, so this works even before any real video is planned) " +
+        "and report real frames/sec plus CPU count in benchmarkResult -- off by default since it costs a " +
+        "real 10-20s render; plan_production turns it on when it needs a measured fps to base a time " +
+        "estimate on rather than guessing one.",
       inputSchema: {
         projectRoot: z.string().optional(),
         appUrl: z.string().optional(),
+        benchmark: z.boolean().optional(),
       },
     },
     async (input) => runTool("preflight", () => runPreflight(input)),

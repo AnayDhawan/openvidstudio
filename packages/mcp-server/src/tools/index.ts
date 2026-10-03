@@ -3,6 +3,7 @@ import type { OpenvidstudioConfig } from "../config";
 import { registerInitProject } from "./initProject";
 import { registerValidateBeats } from "./validateBeats";
 import { registerWriteBeatsFile } from "./writeBeatsFile";
+import { registerWriteBrief } from "./writeBrief";
 import { registerScaffoldScene } from "./scaffoldScene";
 import { registerStitchComposition } from "./stitchComposition";
 import { registerRenderVideo } from "./renderVideo";
@@ -48,6 +49,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerInitProject(server);
   registerValidateBeats(server);
   registerWriteBeatsFile(server);
+  registerWriteBrief(server);
   registerScaffoldScene(server);
   registerStitchComposition(server);
   registerRenderVideo(server);

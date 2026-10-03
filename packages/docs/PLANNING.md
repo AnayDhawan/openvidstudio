@@ -306,19 +306,62 @@ Set it when the content sits to one side for a reason the manifest cannot see.
 Both forms are validated, because a typo here would be silent: the reformat
 would fall back to the inferred crop and look almost right.
 
+## 4.9. The creative brief (added 2026-10, write_brief)
+
+Once the capture-method decisions above are made, before drafting
+`beats.json` itself: write the creative brief. It is the one place the
+*why* behind the video lives, so a later tool, or a later session, reads
+the reasoning instead of re-deriving it from the beats.
+
+Call `write_brief` with two things, written together:
+
+- `briefMarkdown`: free-form prose, the actual creative reasoning, written
+  verbatim and never validated. Explain the call: why this story device,
+  why this arc shape, why this design motif, anything a future reader
+  would otherwise have to guess at.
+- `briefJson`: structured and validated, mirroring the prose. Required:
+  `creativeLevel` (mirrors §0); `logline`, `audience`, `feeling`;
+  `storyDevice` (`{ device, reason }`, a deliberately chosen device such
+  as a ticking clock, a before/after, a character's day, a mystery
+  reveal, a build-up montage, a "made with itself" twist, or something
+  else entirely, never defaulted); `arc` (`{ hook, tension, turn, proof,
+  payoff, cta }`, the hook must land within 2 seconds per `STYLE.md` and
+  the payoff must resolve the hook); `designSystem` (the WHY behind this
+  video's `src/videos/<name>/design.ts`: palette rationale, motif,
+  motif/motion rationale, never a duplicate of design.ts's actual values,
+  which live only there); `music` (bpm, key, a labeled section arc,
+  impact points); `shotList` (one entry per beat: whether it is a real
+  capture or constructed, and why).
+
+Optional: `styleOverrides` (any `STYLE.md` default this video deliberately
+breaks, and why) and `sampleContent` (any beat whose "real" capture is
+actually of constructed sample content, a fictional app/dataset/repo built
+specifically to film, rather than the real product, and why). A non-empty
+`sampleContent` is not just internal bookkeeping: `write_description` (C9)
+refuses to let it go unmentioned in the shipped description file.
+
+In `literal` mode the brief is still shaped the same way, but should be
+honest about having nothing to add: it restates the dev's own spec rather
+than inventing a story device or arc beyond what was asked for.
+
+Like `write_beats_file`, `write_brief` only enforces schema validity, not
+dev approval. Show the dev both files in full and get explicit approval
+before calling it, merged into the same approval pass as `beats.json`
+itself (§5): one sign-off covering the brief and the beats, not two.
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is
-drafted: show the dev the full file, not a summary, and get explicit
-approval before persisting it. This applies even to a small, obviously
-fine-looking draft.
+drafted (and, per §4.9, the brief alongside it): show the dev the full
+file or files, not a summary, and get explicit approval before persisting
+any of it. This applies even to a small, obviously fine-looking draft.
 
-The `write_beats_file` MCP tool will refuse to write anything
-`validate_beats` hasn't passed, but that's schema/structural
-validation, not dev approval. The human-approval step itself is a protocol
-rule for the calling agent, not something any tool enforces. Skipping it
-because the tool would technically allow the write is a protocol
-violation.
+The `write_beats_file` and `write_brief` MCP tools will refuse to write
+anything `validate_beats`/`validate_brief` hasn't passed, but that's
+schema/structural validation, not dev approval. The human-approval step
+itself is a protocol rule for the calling agent, not something any tool
+enforces. Skipping it because the tool would technically allow the write
+is a protocol violation.
 
 ## 6. Worked example (fictional product, anonymized)
 

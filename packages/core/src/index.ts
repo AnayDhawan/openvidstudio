@@ -76,3 +76,17 @@ export type { CursorKeyframe } from "./CursorActor";
 
 // Repo CTA scene
 export { RepoCta } from "./RepoCta";
+
+// Kinetic text primitives (C4)
+export { Words, useTyped, Caret } from "./kinetic";
+
+// Pixel-grid family: dot-matrix text, logo assembler, wipe transition (C4)
+export { DotText, PixelLogo, PixelWipe } from "./pixel";
+export type { PixelShape } from "./pixel";
+
+// Backgrounds and transition primitives (C4)
+export { Atmosphere, DotGrid, Flash, Black, Letterbox } from "./atmosphere";
+
+// UI chrome: windows, JSON viewer, tool chips, badges, glass panel, chapter HUD (C4)
+export { Window, JsonView, Check, Cross, ToolChip, Pill, Glass, ChapterHud } from "./panels";
+export type { Chapter } from "./panels";

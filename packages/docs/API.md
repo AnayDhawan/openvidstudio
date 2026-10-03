@@ -309,6 +309,241 @@ Use tokens rather than literal hex, so a per-video theme can override them.
 
 ---
 
+## Design system
+
+### `defineDesignSystem(overrides?)`
+
+Builds one video's `DesignSystem`: palette, type scale, layout grid, a signature
+motif, a motion personality, a transition vocabulary and a texture pass. Call it
+once in that video's own `src/videos/<name>/design.ts`:
+
+```ts
+export const design = defineDesignSystem({
+  motif: "pixel-grid",
+  motion: { cameraEnergy: "energetic" },
+});
+```
+
+Anything omitted falls back to the current brand tokens (`color`/`font`, already
+brand-applied if `extract_brand` ran) and STYLE.md's own defaults. The result is a
+plain object, frozen at the point `design.ts` is imported, not a live binding: a
+later `applyBrand` call never reaches into an already-built `DesignSystem`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `color`, `font` | tokens | Seeded from the current brand tokens |
+| `typeScale` | `{ display, headline, body, mono: [min, max] }` | px |
+| `grid` | `{ marginX, marginTop, marginBottom }` | px, at the 1920x1080 stage |
+| `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial"` | Default `"rounded-soft"` |
+| `motion` | `{ easing, staggerMs, cameraEnergy, cutRhythmSeconds }` | `easing` names an `E.*` preset by string, not a function reference, so the system stays JSON-serializable |
+| `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade"]` |
+| `texture` | `{ grainOpacity, vignetteStrength }` | STYLE.md's default ranges |
+
+### `contrastRatio(hexA, hexB)`
+
+WCAG relative-luminance contrast ratio, 1 (no contrast) to 21 (black on white).
+Reach for it directly when a bespoke scene picks a text colour against a
+background the design system doesn't already pair.
+
+Several primitives below take an optional `design?: DesignSystem` prop: pass
+that video's own `design` export and they read palette, motif and motion from
+it instead of the package's global tokens.
+
+---
+
+## Kinetic text
+
+### `Words`
+
+Per-word masked reveal. Never a plain opacity fade (STYLE.md): each word clips
+in from below on its own stagger, and clips back out the same way if `out` is
+set.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `text` | `string` | required | Split on spaces, one reveal per word |
+| `at` | `number` | required | Frame the first word starts |
+| `out` | `number` | | Frame the exit starts. Omit to leave the line on screen |
+| `size` | `number` | `72` | |
+| `weight` | `number` | `800` | |
+| `color` | `string` | `color.textPrimary` | |
+| `accent` | `Record<number, string>` | `{}` | Word index to accent colour, for one word landing harder than the rest |
+| `stagger` | `number` | | Frames between word starts. Explicit value always wins |
+| `design` | `DesignSystem` | | Without `stagger`, reads `design.motion.staggerMs` at the composition's fps; with neither, falls back to 3 frames |
+| `align` | `"left" \| "center" \| "right"` | `"left"` | |
+| `font`, `tracking`, `lineHeight`, `maxWidth`, `glow`, `italic`, `style` | | | |
+
+### `useTyped(text, at, cps?)`
+
+Typewriter hook. Returns `{ visible, done, charFrames, end }`: the visible slice
+of `text` at the current frame, plus the per-character reveal frames, so a
+caller can drive `TypingSfx` off the exact same numbers the visible text uses.
+`cps` defaults to 22 characters per second.
+
+### `Caret`
+
+| Prop | Type | Default |
+|---|---|---|
+| `h` | `number` | `40` |
+| `color` | `string` | `color.textPrimary` |
+| `blink` | `boolean` | `true` |
+
+Blinking text caret, sized to a line height. Pair with `useTyped` for a typed line.
+
+---
+
+## Pixel-grid family
+
+### `DotText`
+
+5x7 dot-matrix text, built pixel by pixel rather than drawn with a font file.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `text` | `string` | required | Uppercased; unsupported characters render as a blank cell |
+| `at` | `number` | required | |
+| `px` | `number` | `14` | px per cell |
+| `colors` | `string[] \| "cycle"` | `"cycle"` | `"cycle"` uses the token/design accent, accentAlt, success, warn four |
+| `solid` | `string` | | Overrides `colors` with one flat colour for every pixel |
+| `build` | `"scatter" \| "wipe" \| "none"` | `"wipe"` | |
+| `out` | `number` | | Frame the exit starts |
+| `glow` | `number` | `0.6` | |
+| `seed` | `number` | `3` | |
+
+### `PixelLogo`
+
+Assembles a pixel-grid logo from its own rect shapes, each flying in from a ring
+around the mark (`build="scatter"`) or rendered flat (`build="none"`). The ring's
+centre and spread come from the shapes' own bounding box, so this works for any
+pixel-grid logo.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `shapes` | `PixelShape[]` | required | `{ x, y, width, height, color }`, the same shape `extract_brand` already produces for an SVG rect |
+| `at` | `number` | required | |
+| `scale` | `number` | `1` | Output px per source (viewBox) unit |
+| `build` | `"scatter" \| "none"` | `"scatter"` | |
+| `glow` | `number` | `0.9` | |
+| `out` | `number` | | Frame the exit starts |
+| `seed` | `number` | `5` | |
+| `style` | `CSSProperties` | | |
+
+### `PixelWipe`
+
+Transition pair, pixel-grid's natural home but usable standalone. Call both
+ends of a cut with the same `cell`/`seed` so the out and the following in read
+as one continuous move across the cut.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `mode` | `"in" \| "out"` | required | `"in"`: starts fully covered, clears. `"out"`: finishes covered at the scene's last frame |
+| `at` | `number` | | Defaults to frame 0 (`in`) or `durationInFrames - dur - 1` (`out`) |
+| `dur` | `number` | `12` | |
+| `cell` | `number` | `60` | |
+| `seed` | `number` | `1` | |
+| `bg`, `tint` | | | Default to `design`'s colours if `design` is passed, else the package tokens |
+| `design` | `DesignSystem` | | Optional; only informs the default tint and background |
+
+---
+
+## Backgrounds and transitions
+
+| Component | Props | Notes |
+|---|---|---|
+| `Atmosphere` | `intensity?` (1), `colors?`, `seed?` (2) | Soft drifting radial colour fields behind everything, one blob per colour |
+| `DotGrid` | `gap?` (36), `color?` (`#ffffff`), `opacity?` (0.05), `w?`, `h?` | Faint texture pass behind a constructed (non-capture) panel |
+| `Flash` | `at`, `color?` (`#ffffff`), `strength?` (0.55), `dur?` (10) | Brief exposure flash on a hard hit |
+| `Black` | `from`, `to?` | Holds solid black. Omit `to` to hold forever |
+| `Letterbox` | `amount?` (1) | Bars for a cinematic moment. `amount` scales the bar height, 1 = full 64px |
+
+---
+
+## UI chrome
+
+### `Window`
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `title` | `string` | | Omit for no title bar |
+| `width` | `number` | required | |
+| `height` | `number` | | |
+| `light` | `boolean` | | Light chrome instead of the dark default, matches `BrowserFrame`'s light mode |
+| `glow` | `string` | | Hex colour for an outer glow, when this window is the shot's focal point |
+| `titleRight` | `ReactNode` | | |
+| `children` | `ReactNode` | required | |
+
+### `JsonView`
+
+Syntax-coloured JSON of a real object, revealed line by line. An actually-rendered
+view, not a screenshot of a JSON blob (the same ground-truth bias as `TerminalReplay`
+being DOM text instead of a recorded terminal).
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `value` | `unknown` | required | `JSON.stringify(value, null, 2)`, line by line |
+| `at` | `number` | `0` | |
+| `perLine` | `number` | `1.2` | Frames between each line's reveal |
+| `fontSize` | `number` | `20` | |
+| `highlight` | `(line, i) => string \| undefined` | | Returns a hex accent to highlight a line with |
+| `maxLines` | `number` | `400` | |
+| `scroll` | `number` | `0` | |
+
+### `Check`, `Cross`
+
+| Prop | Type | Default |
+|---|---|---|
+| `size` | `number` | required |
+| `color` | `string` | `color.success` (`Check`) / `color.danger` (`Cross`) |
+| `at` | `number` | `0`, `Check` only (draws its tick stroke in) |
+
+### `ToolChip`
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `name` | `string` | required | |
+| `at` | `number` | required | |
+| `doneAt` | `number` | | Swaps the spinner for a `Check` once passed |
+| `color` | `string` | `color.accent` | |
+| `size` | `number` | `20` | |
+
+"▸ tool_name" chip: spinner while running, a check once done.
+
+### `Pill`
+
+| Prop | Type | Default |
+|---|---|---|
+| `children` | `ReactNode` | required |
+| `color` | `string` | `color.textSecondary` |
+| `size` | `number` | `18` |
+| `style` | `CSSProperties` | |
+
+### `Glass`
+
+| Prop | Type | Default |
+|---|---|---|
+| `children` | `ReactNode` | required |
+| `style` | `CSSProperties` | |
+| `pad` | `number` | `28` |
+
+Frosted glass panel: `backdrop-filter: blur`, for a floating card over motion.
+
+### `ChapterHud`
+
+Screen space, meant for a scene's `overlay` (like `Caption`), not camera-transformed.
+A dot-matrix chapter number and label top-left, a progress rail bottom.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `chapters` | `Chapter[]` | required | `{ label: string }` |
+| `activeIndex` | `number` | required | |
+| `firstFrame` | `boolean` | `true` | True during this chapter's own opening stretch (plays the label-in and rail fill-in); false just holds the rail filled |
+| `at` | `number` | `4` | |
+| `fillDurationInFrames` | `number` | `90` | Pass the chapter's own duration so the fill lands exactly as it ends |
+| `design` | `DesignSystem` | | Reads `grid.marginBottom` and palette from it when passed |
+| `accentColor` | `string` | | Overrides `design`'s or the token success colour |
+
+---
+
 ## A scene, end to end
 
 ```tsx

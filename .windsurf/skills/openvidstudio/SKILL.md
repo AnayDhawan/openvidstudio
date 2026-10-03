@@ -23,11 +23,25 @@ If the tools are not registered, the server is not installed. Point the user at 
 ## The order
 
 ```
-preflight -> extract_brand -> plan_beats -> [write VO] -> validate_beats -> APPROVAL GATE
-  -> write_beats_file -> capture_screenshot -> scaffold_scene -> validate_scenes
-  -> [plan_sound_effects] -> generate_narration -> stitch_composition -> contact_sheet
-  -> render_video -> qc_extract_frames
+preflight -> plan_production -> extract_brand -> plan_beats -> [write VO] -> validate_beats
+  -> APPROVAL GATE -> write_beats_file -> capture_screenshot -> scaffold_scene
+  -> validate_scenes -> [plan_sound_effects] -> generate_narration -> stitch_composition
+  -> contact_sheet -> render_video -> qc_extract_frames
 ```
+
+## 0. Creative level and time budget
+
+Before intake: ask **creative level** (peak: full creative liberty, bespoke everything.
+mid: strong defaults, templates plus the occasional custom scene. literal: exactly what's
+specified, nothing added) and **time budget** (how long the dev will wait for the
+finished video). Use MCP elicitation if the client supports it, otherwise just ask.
+
+Then `plan_production` with the level, budget, and target duration. It returns the arc,
+the custom-vs-template scene mix, the score strategy, QC rounds, and a time estimate per
+phase, based on a real measured render speed on this machine. Show the plan and its
+estimate at the approval gate alongside the drafted beats. If it reports `fitsBudget:
+false`, show `cutFirst` and let the dev choose what to cut rather than downgrading
+silently. `docs/PLANNING.md` §0 has the full detail.
 
 ## 1. Intake
 

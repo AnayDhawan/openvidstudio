@@ -13,6 +13,7 @@ import { registerCaptureScreenRecording } from "./captureScreenRecording";
 import { registerImportHiggsfieldClip } from "./importHiggsfieldClip";
 import { registerGenerateNarration } from "./generateNarration";
 import { registerPreflight } from "./preflight";
+import { registerPlanProduction } from "./planProduction";
 import { registerPlanBeats } from "./planBeats";
 import { registerValidateScenes } from "./validateScenes";
 import { registerQcCapture } from "./qcCapture";
@@ -56,6 +57,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerCaptureScreenRecording(server);
   registerGenerateNarration(server);
   registerPreflight(server);
+  registerPlanProduction(server);
   registerPlanBeats(server);
   registerValidateScenes(server);
   registerQcCapture(server);

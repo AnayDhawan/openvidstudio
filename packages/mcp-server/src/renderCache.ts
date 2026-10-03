@@ -226,11 +226,14 @@ export function buildSegmentRenderArgs(
   outPath: string,
   firstFrame: number,
   lastFrame: number,
-  opts: { draft?: boolean; concurrency?: number } = {},
+  opts: { draft?: boolean; concurrency?: number; browserExecutable?: string } = {},
 ): { command: string; args: string[] } {
   const args = ["remotion", "render", compositionId, outPath, `--frames=${firstFrame}-${lastFrame}`, "--enforce-audio-track"];
   if (opts.draft) args.push("--scale=0.5", "--crf=32", "--x264-preset=veryfast");
   if (opts.concurrency && opts.concurrency > 0) args.push(`--concurrency=${Math.floor(opts.concurrency)}`);
+  // See buildRenderCommand's matching option (renderVideo.ts): reuses the project's
+  // configured browser instead of Remotion downloading its own.
+  if (opts.browserExecutable) args.push(`--browser-executable=${opts.browserExecutable}`);
   args.push("--log=verbose");
   return { command: process.platform === "win32" ? "npx.cmd" : "npx", args };
 }

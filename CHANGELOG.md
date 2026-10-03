@@ -20,6 +20,61 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`contact_sheet` no longer always fails.** Its filtergraph fed `tile` one input label
+  per frame (`[t0][t1]...tile=...`), but `tile` takes exactly one input stream, so every
+  call errored with "More input link labels specified for filter 'tile' than it has
+  inputs." Every scaled input is now concatenated into one stream first
+  (`concat=n=N:v=1:a=0`), and only that single stream feeds `tile`. Verified with a real
+  ffmpeg run producing correctly-dimensioned 4-beat and 16-beat sheets.
+
+- **`qc_extract_frames`'s end-frame seek no longer lands on the next beat**, and no longer
+  reports a path for a frame it never wrote. Timestamp-based seeking rounds a target frame
+  to a time that accurate-seek can land just past, returning the following frame instead
+  (and, for the last beat, writing nothing at all). Extraction is now by frame index
+  (`select=eq(n,N)`); every output is verified to exist and be non-empty before being
+  reported, with a `midError`/`endError` instead of a phantom path otherwise. Verified with
+  a synthetic 3-beat render: every beat's mid and end stills show their own color, not a
+  neighbor's, including the final beat.
+
+- **`CursorActor`'s click rings no longer follow the cursor past the click.** A ring was
+  drawn at the cursor's live position on every frame it's visible, so a path that kept
+  moving after a click dragged the ring with it (~100px off target in a real repro). Rings
+  now anchor at the cursor's position at its own click frame. Scaffolded recording scenes
+  also now make the cursor arrive ~4 frames before a click and dwell ~7 frames after.
+
+- **`scaffold_scene`'s cta template no longer ships `your-org`/`your-repo` placeholders**
+  when real info is available: owner/name now come from the git remote or package.json's
+  `repository` field, chips from `license` and a simple language guess.
+  `validate_scenes` also no longer false-positives "fewer than two camera keyframes" on
+  `RepoCta` and other components with their own internal camera.
+
+- **`preflight`'s Chromium check no longer guesses fixed OS cache directories.** It ignored
+  `PLAYWRIGHT_BROWSERS_PATH` (a false "no chromium" when browsers lived there instead) and
+  could report OK on a different build than real capture would actually launch (a version
+  mismatch between this server's playwright and an older build the project already had).
+  It now resolves `chromium.executablePath()` from the exact same `@openvidstudio/capture`
+  import real capture uses, checks that path exists, and on failure names the exact
+  resolved (missing) path and the fix command. Verified: passes with browsers only under a
+  custom `PLAYWRIGHT_BROWSERS_PATH`; fails with the right path and fix named when that
+  directory is empty; passes again once the same build is copied there.
+
+- **Four small ones:**
+  - `Drop`, `Bong`, and `SoftClick` are now exported from `@openvidstudio/core`'s index;
+    they existed in `sfx.tsx` but weren't exported, so importing them threw a React error.
+  - README's tool count corrected to the real registered count (33, 34 with Higgsfield);
+    a new check in `manual-test.mjs` fails if the two ever disagree again.
+  - `find_music_bed` fetches only the requested catalog when `source` is `"lofi"` or
+    `"cc0"`; with `"any"` (the default), each catalog is fetched independently, and one
+    failing no longer fails the whole call; the result carries a `warnings` entry naming
+    what degraded, falling back to a stale cached fetch of the failed catalog when one
+    exists. (The earlier report of open-lofi's catalog.json 404ing was a sandbox proxy
+    artifact; it's reachable on a normal network.)
+  - New `render.browserExecutable` config: `render_video` passes it to Remotion as
+    `--browser-executable` so a render reuses an already-installed browser (typically the
+    same Playwright Chromium capture uses) instead of Remotion downloading its own, which
+    fails with no network. `preflight` checks the configured path too, separately from its
+    Playwright Chromium check.
+
 - **`docs_drift` no longer treats a reference screenshot's pixel size as the CSS viewport
   to re-capture at.** A 1440x900 capture at the default 2x scale is a 2880x1800 PNG on
   disk; re-navigating to a 2880-wide viewport is a different, much wider layout, not the
@@ -85,6 +140,18 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   four carry their real colours.
 
 ### Added
+
+- **`render_video` accepts `async: true`, and a new `job_status` tool.** A real render can
+  run 40+ minutes, well past an MCP client's own request timeout (Claude Code's
+  `MCP_TOOL_TIMEOUT`, or the SDK client default), which killed it before it finished. Input
+  is still validated synchronously (a bad call still fails immediately), then the render
+  starts detached and the call returns `{ jobId, estimate }` right away. `job_status` polls
+  for progress (frames rendered, current beat, a log tail) and the eventual result, the
+  same shape a synchronous call would have returned. The synchronous path also now emits
+  real MCP progress notifications for a client that attached a `progressToken`. Verified
+  with a real render through a client enforcing a 3000ms timeout on the initial call: it
+  returned in under 3s with a jobId, and polling reached `status: "done"` with a correct
+  result.
 
 - **Music-only videos: `narration: "none"`, `stitch_composition`'s `musicBed`, and
   `overrides.tsx`.** `validate_beats` required every beat's `vo` and held it to the spoken

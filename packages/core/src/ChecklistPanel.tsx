@@ -2,15 +2,12 @@
 
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
-import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
+import "./localFonts";
 import { pop, SPRING } from "./motion";
 import { Blip } from "./sfx";
 import { color, panelShadow, radius } from "./tokens";
 
-const { fontFamily: uiFamily } = loadInter("normal", {
-  weights: ["500", "700"],
-  subsets: ["latin"],
-});
+const uiFamily = "Inter, system-ui, sans-serif";
 
 export type ChecklistItem = {
   label: string;

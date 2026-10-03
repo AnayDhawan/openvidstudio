@@ -2,6 +2,12 @@
 // scenes in the openvidstudio house style: camera rig, motion helpers, SFX,
 // look pass, design tokens, and the shared scene/UI components.
 
+// Local, offline Inter/JetBrains Mono loading (A2): every scene imports from this
+// index, so importing it here means every render gets bundled fonts with zero
+// network access, instead of the @remotion/google-fonts loaders that used to be
+// scattered across TerminalReplay/RepoCta/ChecklistPanel.
+import "./localFonts";
+
 // Camera + layers
 export { CameraRig, Layer, useCamera } from "./camera";
 export type { CamKeyframe } from "./camera";

@@ -20,6 +20,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Renders no longer require network access.** `TerminalReplay`, `RepoCta`, and
+  `ChecklistPanel` each called a `@remotion/google-fonts` loader at module scope, and
+  every scaffolded scene imports the core index, so any render with no route to
+  fonts.gstatic.com (an offline machine, a corporate proxy) crashed before producing a
+  single frame. Inter (400-900) and JetBrains Mono (400, 700) now ship as bundled woff2
+  files (`templates/default/public/fonts/`, sourced from `@fontsource/inter` and
+  `@fontsource/jetbrains-mono`, regenerate with `packages/core/scripts/gen-fonts.sh`),
+  loaded by a new `packages/core/src/localFonts.ts` via `FontFace` plus
+  `delayRender`/`continueRender`. Every network font loader is gone from core. Verified
+  with a real render, network blocked, of all three components: the delayRender handle
+  clears in under 100ms per frame and the output shows real Inter/JetBrains Mono, not
+  fallback glyphs. CI gained an `offline-render` job
+  (`scripts/offline-render-check.mjs`) that fails if this regresses.
+
 - **`render_video`'s incremental path no longer drifts audio out of sync with video.**
   Each per-beat segment's AAC track ran slightly longer than its video (encoder padding),
   and stream-copying every segment's audio under one concat pass stacked that drift beat

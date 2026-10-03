@@ -4,15 +4,12 @@
 
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
-import { loadFont as loadMono } from "@remotion/google-fonts/JetBrainsMono";
+import "./localFonts";
 import { E, jitter, tween } from "./motion";
 import { Blip, TypingSfx } from "./sfx";
 import { color, font, glow, panelShadow, radius } from "./tokens";
 
-const { fontFamily: monoFamily } = loadMono("normal", {
-  weights: ["400", "700"],
-  subsets: ["latin"],
-});
+const monoFamily = "JetBrains Mono, ui-monospace, monospace";
 
 export type TermLine = {
   text: string;

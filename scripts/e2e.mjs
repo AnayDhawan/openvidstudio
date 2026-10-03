@@ -205,7 +205,7 @@ try {
   await step("export_rendition (gif)", () => call("export_rendition", { projectRoot, videoName, format: "gif" }));
   await step("visual_regression", () => call("visual_regression", { projectRoot, videoName }));
   await step("docs_drift", () => call("docs_drift", { projectRoot, videoName }));
-  await step("diff_beats", () => call("diff_beats", { projectRoot, videoName, beatsJson }));
+  await step("diff_beats", () => call("diff_beats", { projectRoot, videoName, newBeatsJson: beatsJson }));
 } catch {
   ok = false;
 } finally {

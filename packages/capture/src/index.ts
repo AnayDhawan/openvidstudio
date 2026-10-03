@@ -14,5 +14,6 @@ export * from "./browser";
 export * from "./determinism";
 export * from "./settle";
 export * from "./cursor";
+export * from "./captureSidecar";
 export * from "./native";
 export * from "./terminal";

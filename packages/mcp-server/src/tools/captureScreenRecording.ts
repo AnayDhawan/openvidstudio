@@ -9,6 +9,7 @@ import {
   DEFAULT_VIEWPORT,
   screenEncodeArgs,
   settlePage,
+  writeCaptureSidecar,
   writeCursorSidecar,
   writeSettleSidecar,
   detectAndCompensateZoom,
@@ -402,6 +403,17 @@ export async function runCaptureScreenRecording(
       // Same reasoning: without this, scaffold_scene (a separate later tool call) has no
       // real coordinates or timing to build a cursor overlay from.
       writeCursorSidecar(outPathAbs, compensatedViewport, cursorPoints);
+      // Same reasoning as capture_screenshot's own capture sidecar: docs_drift/release_diff
+      // need the CSS viewport actually requested, not the compensated size or a guess made
+      // from a reference frame's pixel dimensions.
+      writeCaptureSidecar(outPathAbs, {
+        url: input.url,
+        viewport: target,
+        deviceScaleFactor,
+        zoom,
+        ...(input.interactions?.length ? { interactions: input.interactions } : {}),
+        capturedAt: new Date().toISOString(),
+      });
 
       return {
         outPath: outPathAbs,

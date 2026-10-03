@@ -20,6 +20,30 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`docs_drift` no longer treats a reference screenshot's pixel size as the CSS viewport
+  to re-capture at.** A 1440x900 capture at the default 2x scale is a 2880x1800 PNG on
+  disk; re-navigating to a 2880-wide viewport is a different, much wider layout, not the
+  page that was actually captured, so every default-scale capture reported 26-40% drift on
+  pages that never changed. `capture_screenshot`, `capture_screen_recording`, and
+  `release_diff` now write a `<asset>.capture.json` sidecar (url, viewport,
+  deviceScaleFactor, zoom, interactions, capturedAt) next to every capture; `docs_drift`
+  resolves the viewport to re-capture at from an explicit binding, then that sidecar, and
+  only falls back to a narrow heuristic (the reference's pixel size is exactly double a
+  common CSS viewport) for a legacy asset with neither, otherwise asking for an explicit
+  binding instead of guessing. Verified: v1.1 captures compared against v1.1 itself report
+  0 drift; compared against v1.0, only the route an actual code change touched reports
+  drift (9.70% changed), everything else 0.
+
+- **`extract_brand` now finds a palette on a repo with no CSS design tokens, if the logo
+  carries one.** It previously resolved nothing on such a repo even when the logo SVG
+  visibly carried the brand's real colors. When no CSS token or Tailwind config yields a
+  palette, it now parses the chosen logo SVG's fill colors, ranks them by pixel area, and
+  maps the top ones to accent/accentAlt/success/danger (plus a background token for an
+  exact full-bleed rect), naming the logo as the source. Fonts also now fall back to
+  `@fontsource/*` package.json dependencies when no CSS variable or `next/font` import
+  named one. Verified against this repo's own `brand/logo-lockup.svg`: resolves
+  `#8b5cf6`, `#f87171`, `#3b82f6`, `#2dd4bf` on `#0a0a0a`, each attributed to the logo.
+
 - **Renders no longer require network access.** `TerminalReplay`, `RepoCta`, and
   `ChecklistPanel` each called a `@remotion/google-fonts` loader at module scope, and
   every scaffolded scene imports the core index, so any render with no route to

@@ -2245,6 +2245,218 @@ if (browserAvailable) {
   skip("Part 32: real settling E2E", "real Chromium is not available in this environment");
 }
 
+console.log("\n== Part 33: write_description -- sample content disclosure ==");
+
+{
+  const { runWriteDescription } = require(path.join(distDir, "tools", "writeDescription.js"));
+
+  // Case A: brief.json with a three-shot shotList: one real: true (hook, needs no disclosure)
+  // and two real: false (demo-board, demo-detail). Both of the latter's disclosures must land
+  // in the written file, verbatim, checked by a real string search on the real file on disk,
+  // and the real: true shot must NOT be treated as a disclosure.
+  // (brief.json's real shape, per write_brief: shotList entries carry real/provenance/
+  // whyConstructed, not a flat sampleContent array -- only the fields write_description
+  // reads are included here, not write_brief's other required fields like arc/music/
+  // designSystem, since write_description never re-validates write_brief's full schema.)
+  const sampleVideoName = "wd-sample";
+  const sampleVideoDir = path.join(tmpRoot, "src", "videos", sampleVideoName);
+  fs.mkdirSync(sampleVideoDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(sampleVideoDir, "brief.json"),
+    JSON.stringify(
+      {
+        logline: "Loomcard turns your notes into spaced-repetition flashcards.",
+        audience: "people cramming for technical interviews",
+        feeling: "calm and competent",
+        shotList: [
+          { beatId: "hook", real: true, provenance: "higgsfield" },
+          {
+            beatId: "demo-board",
+            real: false,
+            provenance: "Acme Tasks, a fictional task board app built for this demo",
+            whyConstructed: "the real product's board holds a client's private data that can't be shown on camera",
+          },
+          {
+            beatId: "demo-detail",
+            real: false,
+            provenance: "a fabricated card detail view with placeholder names like 'Jordan Lee'",
+            whyConstructed: "the real detail view exposes a logged-in user's email address",
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(sampleVideoDir, "beats.json"),
+    JSON.stringify(
+      {
+        fps: 30,
+        beats: [
+          {
+            id: "hook",
+            start: 0,
+            duration: 90,
+            vo: "Here is how the board actually works.",
+            visual: { captureMethod: "dom-demo" },
+          },
+          {
+            id: "demo-board",
+            start: 90,
+            duration: 120,
+            vo: "Drag a card across the board and it updates everywhere.",
+            visual: { captureMethod: "dom-demo" },
+          },
+          {
+            id: "demo-detail",
+            start: 210,
+            duration: 120,
+            vo: "Open a card and every field is editable inline.",
+            visual: { captureMethod: "dom-demo" },
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  const sampleResult = runWriteDescription({ projectRoot: tmpRoot, videoName: sampleVideoName });
+  check(
+    "write_description succeeded with a constructed shot present",
+    sampleResult.written === true && fs.existsSync(sampleResult.path),
+  );
+  check(
+    "result.sampleContentDisclosed lists both real:false beatIds",
+    sampleResult.sampleContentDisclosed.includes("demo-board") &&
+      sampleResult.sampleContentDisclosed.includes("demo-detail"),
+  );
+  check(
+    "result.sampleContentDisclosed does NOT list the real:true hook shot",
+    !sampleResult.sampleContentDisclosed.includes("hook"),
+  );
+
+  const sampleContent = fs.readFileSync(sampleResult.path, "utf8");
+  check(
+    "written file discloses demo-board's provenance text verbatim",
+    sampleContent.includes("Acme Tasks, a fictional task board app built for this demo"),
+  );
+  check(
+    "written file discloses demo-board's whyConstructed text verbatim",
+    sampleContent.includes("the real product's board holds a client's private data that can't be shown on camera"),
+  );
+  check(
+    "written file discloses demo-detail's provenance text verbatim",
+    sampleContent.includes("a fabricated card detail view with placeholder names like 'Jordan Lee'"),
+  );
+  check(
+    "written file discloses demo-detail's whyConstructed text verbatim",
+    sampleContent.includes("the real detail view exposes a logged-in user's email address"),
+  );
+  check(
+    "written file is grounded in the real beats (hook's vo appears)",
+    sampleContent.includes("Here is how the board actually works."),
+  );
+  check(
+    "written file surfaces the audience field",
+    sampleContent.includes("people cramming for technical interviews"),
+  );
+  check(
+    "the real:true hook shot's provenance ('higgsfield') never appears in the output at all",
+    !sampleContent.includes("higgsfield"),
+  );
+
+  // Case B: brief.json present but with no shotList field at all.
+  const noSampleVideoName = "wd-nosample";
+  const noSampleVideoDir = path.join(tmpRoot, "src", "videos", noSampleVideoName);
+  fs.mkdirSync(noSampleVideoDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(noSampleVideoDir, "brief.json"),
+    JSON.stringify(
+      { logline: "A plain walkthrough of the real app, nothing constructed.", feeling: "brisk" },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(noSampleVideoDir, "beats.json"),
+    JSON.stringify(
+      {
+        fps: 30,
+        beats: [
+          {
+            id: "only-beat",
+            start: 0,
+            duration: 90,
+            vo: "This is the only beat in this video.",
+            visual: { captureMethod: "dom-demo" },
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  const noSampleResult = runWriteDescription({ projectRoot: tmpRoot, videoName: noSampleVideoName });
+  check("write_description succeeded with no shotList", noSampleResult.written === true);
+  check(
+    "result.sampleContentDisclosed is empty when brief has no shotList",
+    noSampleResult.sampleContentDisclosed.length === 0,
+  );
+  const noSampleContent = fs.readFileSync(noSampleResult.path, "utf8");
+  check(
+    "no sample-content section heading when there is nothing to disclose",
+    !noSampleContent.includes("Sample content used in this video"),
+  );
+  check(
+    "no leftover disclosure language from the sampled case bled into this file",
+    !noSampleContent.includes("Acme Tasks") && !noSampleContent.includes("built specifically for this video"),
+  );
+
+  // Case C: no brief.json at all, just beats.json -- write_description must still succeed.
+  const noBriefVideoName = "wd-nobrief";
+  const noBriefVideoDir = path.join(tmpRoot, "src", "videos", noBriefVideoName);
+  fs.mkdirSync(noBriefVideoDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(noBriefVideoDir, "beats.json"),
+    JSON.stringify(
+      {
+        fps: 30,
+        beats: [
+          { id: "intro", start: 0, duration: 60, vo: "A quick look at the tool.", visual: { captureMethod: "dom-demo" } },
+          { id: "cta", start: 60, duration: 60, vo: "Try it yourself today.", visual: { captureMethod: "dom-demo" } },
+        ],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  check(
+    "no brief.json exists for the no-brief case (test setup sanity check)",
+    !fs.existsSync(path.join(noBriefVideoDir, "brief.json")),
+  );
+  const noBriefResult = runWriteDescription({ projectRoot: tmpRoot, videoName: noBriefVideoName });
+  check(
+    "write_description succeeds with no brief.json at all",
+    noBriefResult.written === true && fs.existsSync(noBriefResult.path),
+  );
+  const noBriefContent = fs.readFileSync(noBriefResult.path, "utf8");
+  check(
+    "description with no brief is still grounded in the real beats (both vo lines present)",
+    noBriefContent.includes("A quick look at the tool.") && noBriefContent.includes("Try it yourself today."),
+  );
+  check(
+    "no sample-content section when brief.json doesn't exist at all",
+    !noBriefContent.includes("Sample content used in this video"),
+  );
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

@@ -195,6 +195,45 @@ console.log("\n== Part 2: C9 write_description disclosure ==");
   );
 }
 
+console.log("\n== Part 2b: C3 compose_score real generation ==");
+{
+  const python = spawnSync(process.platform === "win32" ? "where" : "which", ["python"], { encoding: "utf8" });
+  const deps = python.status === 0
+    ? spawnSync("python", ["-c", "import numpy, scipy, soundfile, pyloudnorm, matplotlib"], { encoding: "utf8" })
+    : { status: 1 };
+  if (deps.status !== 0) {
+    skip("C3 compose_score real generation", "python DSP dependencies are not installed");
+  } else {
+    const { runComposeScore } = require(path.join(distDir, "tools", "composeScore.js"));
+    const { runMusicCues } = require(path.join(distDir, "tools", "musicCues.js"));
+    const scoreRoot = path.join(tmpRoot, "c3-score");
+    const result = runComposeScore({
+      projectRoot: scoreRoot,
+      videoName: "score-check",
+      music: {
+        bpm: 120,
+        key: "C major",
+        sectionMap: [
+          { label: "intro", startBar: 0, endBar: 2 },
+          { label: "reveal", startBar: 2, endBar: 4 },
+        ],
+        impactPoints: [{ name: "reveal", bar: 2 }],
+      },
+    });
+    const cueResult = await runMusicCues({ projectRoot: scoreRoot, track: result.mp3Path });
+    check(
+      "C3 writes a real mp3, cues file, and spectrogram",
+      fs.statSync(path.join(scoreRoot, result.mp3Path)).size > 0 &&
+        fs.existsSync(path.join(scoreRoot, result.cuesPath)) &&
+        fs.existsSync(path.join(scoreRoot, result.spectrogramPath)),
+    );
+    check(
+      "C3 generated cues round trip through plan_music_cues from cache",
+      cueResult.source === "cached" && cueResult.bpm === 120 && cueResult.track === result.mp3Path,
+    );
+  }
+}
+
 console.log("\n== Part 3: write_beats_file -> scaffold_scene x3 -> stitch_composition ==");
 
 const beatsJson = {

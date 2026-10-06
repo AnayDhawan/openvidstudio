@@ -34,6 +34,7 @@ import { registerReleaseDiff } from "./releaseDiff";
 import { registerMusicCues } from "./musicCues";
 import { registerMusicLibrary } from "./musicLibrary";
 import { registerCatalogMotionPrimitives, registerAddMotionPrimitive } from "./motionPrimitives";
+import { registerRenderStills } from "./renderStills";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -80,6 +81,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerMusicLibrary(server);
   registerCatalogMotionPrimitives(server);
   registerAddMotionPrimitive(server);
+  registerRenderStills(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

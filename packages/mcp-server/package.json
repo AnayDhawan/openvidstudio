@@ -12,7 +12,8 @@
   "files": [
     "dist",
     "templates",
-    "docs"
+    "docs",
+    "py"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

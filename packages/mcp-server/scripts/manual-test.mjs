@@ -3589,6 +3589,191 @@ console.log("\n== Part 48: plan_production's real MCP elicitation (B) ==");
   );
 }
 
+console.log("\n== Part 49: compose_score -- original arc-matched score generation (C3) ==");
+{
+  const composeScore = require(path.join(distDir, "tools", "composeScore.js"));
+  const { sectionsToPythonSections, impactPointsToPythonImpacts, computeWarnings, resolvePythonCommand, runComposeScore } = composeScore;
+
+  // Pure logic first, no python or filesystem involved: the brief-shape-to-spec-shape
+  // conversion and the warnings surfacing, unit-testable on their own.
+  check(
+    "contiguous sections convert to {label, bars}",
+    JSON.stringify(
+      sectionsToPythonSections([
+        { label: "intro", startBar: 0, endBar: 4 },
+        { label: "groove", startBar: 4, endBar: 12 },
+        { label: "outro", startBar: 12, endBar: 16 },
+      ]),
+    ) === JSON.stringify([{ label: "intro", bars: 4 }, { label: "groove", bars: 8 }, { label: "outro", bars: 4 }]),
+  );
+
+  let gapMessage = "";
+  try {
+    sectionsToPythonSections([
+      { label: "intro", startBar: 0, endBar: 4 },
+      { label: "groove", startBar: 5, endBar: 12 },
+    ]);
+  } catch (err) {
+    gapMessage = err instanceof Error ? err.message : String(err);
+  }
+  check(
+    "a gap between sections throws, naming exactly which two don't connect",
+    gapMessage.includes("intro") && gapMessage.includes("groove") && gapMessage.includes("bar 4") && gapMessage.includes("bar 5"),
+  );
+
+  check(
+    "impactPoints map name/bar to label/atBar/atBeat:0",
+    JSON.stringify(impactPointsToPythonImpacts([{ name: "drop", bar: 4, note: "groove kicks in" }])) ===
+      JSON.stringify([{ label: "drop", atBar: 4, atBeat: 0 }]),
+  );
+  check("impactPoints defaults to an empty list, not a throw", JSON.stringify(impactPointsToPythonImpacts(undefined)) === "[]");
+
+  check(
+    "computeWarnings flags a non-ok band balance verdict",
+    computeWarnings({ checks: { bandBalance: { verdict: "all-bass" } } }).some((w) => w.includes("all-bass")),
+  );
+  check(
+    "computeWarnings flags a detected click",
+    computeWarnings({ checks: { clickCount: 2 } }).some((w) => w.includes("2 clicks")),
+  );
+  check(
+    "computeWarnings flags a true peak over the limiter's own ceiling",
+    computeWarnings({ truePeakDbtp: -0.5, truePeakMaxDbtp: -1 }).some((w) => w.includes("-0.5")),
+  );
+  check(
+    "computeWarnings flags loudness far from target",
+    computeWarnings({ lufsIntegrated: -8, lufsTarget: -14 }).some((w) => w.includes("LUFS")),
+  );
+  check(
+    "computeWarnings stays quiet when every check is clean",
+    computeWarnings({
+      checks: { bandBalance: { verdict: "ok" }, clickCount: 0 },
+      truePeakDbtp: -2,
+      truePeakMaxDbtp: -1,
+      lufsIntegrated: -14,
+      lufsTarget: -14,
+    }).length === 0,
+  );
+
+  // Real end-to-end from here: gated on python plus the DSP engine's own pip deps being
+  // importable, matching house style for an environment-dependent block (skip cleanly,
+  // never fake a pass), AND on the script file itself existing. That third gate is not
+  // hypothetical here: packages/mcp-server/py/compose-score.py does not exist in this
+  // worktree as of this Part being written (checked with `git log --all`, not just a
+  // stale checkout), so this always skips in this environment today. The assertions
+  // below are what should run once the engine lands; they are real code, not a stub.
+  const pyCmd = resolvePythonCommand();
+  const depsOk = pyCmd
+    ? spawnSync(pyCmd, ["-c", "import numpy, scipy, soundfile, pyloudnorm, matplotlib"], { encoding: "utf8" }).status === 0
+    : false;
+  const scriptPath = path.join(packageRoot, "py", "compose-score.py");
+  const scriptExists = fs.existsSync(scriptPath);
+  let ffmpegOk = true;
+  try {
+    execFileSync("ffmpeg", ["-version"], { stdio: "ignore" });
+  } catch {
+    ffmpegOk = false;
+  }
+
+  if (!pyCmd || !depsOk) {
+    skip(
+      "Part 49: compose_score real end-to-end render",
+      "python (or python3) with numpy/scipy/soundfile/pyloudnorm/matplotlib importable is not available in this environment",
+    );
+  } else if (!scriptExists) {
+    skip(
+      "Part 49: compose_score real end-to-end render",
+      `compose-score.py not found at ${scriptPath} -- the DSP engine has not been added to this checkout yet`,
+    );
+  } else if (!ffmpegOk) {
+    skip("Part 49: compose_score real end-to-end render", "ffmpeg not available in this environment");
+  } else {
+    const scoreRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-compose-score-"));
+    const musicPlan = {
+      bpm: 140,
+      key: "C minor",
+      sectionMap: [
+        { label: "intro", startBar: 0, endBar: 4 },
+        { label: "groove", startBar: 4, endBar: 12 },
+        { label: "outro", startBar: 12, endBar: 16 },
+      ],
+      impactPoints: [{ name: "drop", bar: 4, note: "groove kicks in" }],
+    };
+
+    const result = runComposeScore({ projectRoot: scoreRoot, videoName: "scoretest", music: musicPlan });
+    const mp3Abs = path.join(scoreRoot, result.mp3Path);
+    check(
+      "compose_score writes to the default public/audio/music-bed.mp3",
+      result.mp3Path.replace(/\\/g, "/") === "public/audio/music-bed.mp3" && fs.existsSync(mp3Abs),
+    );
+
+    let probedDuration = null;
+    try {
+      const out = execFileSync(
+        "ffprobe",
+        ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", mp3Abs],
+        { encoding: "utf8" },
+      );
+      probedDuration = Number.parseFloat(out.trim());
+    } catch (err) {
+      console.log(`  (ffprobe duration probe failed: ${err.message})`);
+    }
+    check(
+      "ffprobe reports a real audio stream with a plausible duration (16 bars at 140bpm is a handful of seconds)",
+      probedDuration !== null && Number.isFinite(probedDuration) && probedDuration > 1 && probedDuration < 60,
+    );
+
+    const cuesAbs = path.join(scoreRoot, result.cuesPath);
+    check("cues.json exists", fs.existsSync(cuesAbs));
+    const cues = JSON.parse(fs.readFileSync(cuesAbs, "utf8"));
+    check("...source is \"generated\"", cues.source === "generated");
+    check("...the right bpm", cues.bpm === 140);
+    check("...a non-empty beats[] array", Array.isArray(cues.beats) && cues.beats.length > 0);
+    check("...a non-empty strongCues[] array", Array.isArray(cues.strongCues) && cues.strongCues.length > 0);
+
+    // The actual proof the integration point works: plan_music_cues must treat this file
+    // as authoritative and return it immediately, not re-analyze the track.
+    const { runMusicCues } = require(path.join(distDir, "tools", "musicCues.js"));
+    const cached = await runMusicCues({ projectRoot: scoreRoot, track: "public/audio/music-bed.mp3" });
+    check(
+      "plan_music_cues returns source: \"cached\" immediately, with the same bpm/beats/strongCues, no re-analysis",
+      cached.source === "cached" &&
+        cached.bpm === 140 &&
+        cached.beats.length === cues.beats.length &&
+        cached.strongCues.length === cues.strongCues.length,
+    );
+  }
+
+  // The contiguity-validation error path end to end through the real tool, not just the
+  // pure helper above. Not gated on python or the script: runComposeScore validates the
+  // section arc before it ever checks for either, so this runs and proves something for
+  // real regardless of this environment's python/compose-score.py availability.
+  {
+    const gapRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-compose-score-gap-"));
+    let gapToolMessage = "";
+    try {
+      runComposeScore({
+        projectRoot: gapRoot,
+        videoName: "gaptest",
+        music: {
+          bpm: 120,
+          key: "A minor",
+          sectionMap: [
+            { label: "intro", startBar: 0, endBar: 4 },
+            { label: "outro", startBar: 5, endBar: 9 },
+          ],
+        },
+      });
+    } catch (err) {
+      gapToolMessage = err instanceof Error ? err.message : String(err);
+    }
+    check(
+      "runComposeScore itself refuses a non-contiguous sectionMap before spawning anything",
+      gapToolMessage.includes("intro") && gapToolMessage.includes("outro"),
+    );
+  }
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

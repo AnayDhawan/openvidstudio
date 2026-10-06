@@ -303,6 +303,30 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
     blocking: false,
   });
 
+  // compose_score needs a real python with its DSP stack importable, not just a python on
+  // PATH, so this checks the same import line the tool itself depends on rather than
+  // guessing from the interpreter's presence alone. Same python-then-python3 fallback order
+  // composeScore.ts uses internally. Non-blocking: a video with no original score still
+  // renders, same reasoning as the narration check above.
+  const composeScorePython = which("python") ? "python" : which("python3") ? "python3" : null;
+  const composeScoreDeps = composeScorePython
+    ? spawnSync(composeScorePython, ["-c", "import numpy, scipy, soundfile, pyloudnorm, matplotlib"], { encoding: "utf8" })
+    : null;
+  const composeScoreOk = composeScorePython !== null && composeScoreDeps?.status === 0;
+  checks.push({
+    name: "compose-score-deps",
+    ok: composeScoreOk,
+    detail: composeScoreOk
+      ? `${composeScorePython} has numpy, scipy, soundfile, pyloudnorm and matplotlib importable`
+      : composeScorePython
+        ? `${composeScorePython} is missing one or more of numpy/scipy/soundfile/pyloudnorm/matplotlib`
+        : "no python or python3 on PATH",
+    fix: composeScoreOk
+      ? undefined
+      : `${composeScorePython ?? "python"} -m pip install numpy scipy soundfile pyloudnorm matplotlib`,
+    blocking: false,
+  });
+
   const blockers = checks.filter((c) => !c.ok && c.blocking).map((c) => `${c.name}: ${c.fix ?? c.detail}`);
   return {
     ok: blockers.length === 0,

@@ -6,6 +6,7 @@ import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
 import { loadConfig } from "../config";
 import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { runRenderChecks, type RenderBeat } from "./validateScenesRender";
 
 /**
  * The worst failure class in this pipeline is silent wrongness: a scene renders

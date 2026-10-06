@@ -42,7 +42,10 @@ export const CinematicScene: React.FC<{
         {children}
       </CameraRig>
       {overlay ? (
-        <div style={{ position: "absolute", inset: 0 }}>{overlay}</div>
+        // data-ovs-overlay marks this screen-space subtree for validate_scenes' render
+        // mode, so captions here are checked for legibility/reading-time but exempted
+        // from the camera-crop check (overlay is never camera-transformed by design).
+        <div data-ovs-overlay="" style={{ position: "absolute", inset: 0 }}>{overlay}</div>
       ) : null}
       <LookPass
         grain={grain}

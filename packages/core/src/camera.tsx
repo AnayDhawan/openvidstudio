@@ -85,6 +85,11 @@ export const CameraRig: React.FC<{
         }}
       >
         <div
+          // Stable hook for validate_scenes' render mode to find the camera-transformed
+          // stage subtree (vs. the overlay / look-pass layers) via a real DOM query,
+          // rather than a fragile inline-style heuristic. Purely additive: no visual or
+          // layout effect.
+          data-ovs-camera-stage=""
           style={{
             width: stageWidth,
             height: stageHeight,

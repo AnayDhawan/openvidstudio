@@ -56,7 +56,7 @@ export interface StitchCompositionResult {
   languages: LanguageComposition[];
 }
 
-interface RegistryEntry {
+export interface RegistryEntry {
   id: string;
   videoName: string;
   componentName: string;
@@ -82,11 +82,11 @@ interface BeatLike {
  * part of openvidstudio.config.json: that shape is pinned for Task 5 to depend on,
  * this is internal bookkeeping local to this one tool.
  */
-function registryPath(projectRoot: string): string {
+export function registryPath(projectRoot: string): string {
   return path.join(projectRoot, "src", "videos", ".registry.json");
 }
 
-function readRegistry(projectRoot: string): RegistryEntry[] {
+export function readRegistry(projectRoot: string): RegistryEntry[] {
   const p = registryPath(projectRoot);
   if (!fs.existsSync(p)) return [];
   return JSON.parse(fs.readFileSync(p, "utf8")) as RegistryEntry[];

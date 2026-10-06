@@ -355,6 +355,21 @@ if (fs.existsSync(templateNodeModules)) {
 }
 check("tsc --noEmit passed against the scaffolded temp project", tscOk);
 
+console.log("\n== Part 4a: C6 render_stills real PNG output ==");
+if (tscOk) {
+  const { runRenderStills } = require(path.join(distDir, "tools", "renderStills.js"));
+  const stills = await runRenderStills({ projectRoot: tmpRoot, videoName: "demo", beatIds: ["explain"] });
+  check(
+    "C6 writes a nonempty real PNG for a rendered beat",
+    stills.stills.length === 1 &&
+      stills.stills.every((still) =>
+        fs.existsSync(still.path) && still.width === 1920 && still.height === 1080 && still.bytes > 10_000,
+      ),
+  );
+} else {
+  skip("C6 render_stills real PNG output", "the scaffolded project could not resolve its dependencies");
+}
+
 console.log("\n== Part 4b: render_video real invocation (Task 4 Windows spawn regression pin) ==");
 // Regression pin for the Task 4 EINVAL bug fixed in util.ts's spawnCapture (see Part 3's
 // comment above): before that fix, EVERY real render_video call on this repo's actual

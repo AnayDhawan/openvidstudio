@@ -110,6 +110,13 @@ re-layout between them.
 
 ## Screen recordings
 
+### Theme toggles
+
+`colorScheme: "dark"` already makes libraries such as `next-themes` start in dark mode.
+Do not click a theme toggle afterwards unless the beat explicitly needs light mode: the click
+usually flips the capture back to light. Check `document.documentElement.dataset.theme` after
+the interaction when a project uses a `data-theme` attribute.
+
 For `captureMethod: "recording"` beats, the same zoom-desync check in step
 1 still applies before you start recording: verify the effective viewport
 matches what you requested before you hit record, since the desync is set

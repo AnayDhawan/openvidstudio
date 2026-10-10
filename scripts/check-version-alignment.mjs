@@ -35,6 +35,17 @@ const isExact = (v) => /^\d+\.\d+\.\d+$/.test(v);
 
 let failed = false;
 
+const expectedNode = ">=20";
+for (const rel of MANIFESTS) {
+  const file = path.join(root, rel);
+  if (!fs.existsSync(file)) continue;
+  const found = JSON.parse(fs.readFileSync(file, "utf8")).engines?.node;
+  if (found !== expectedNode) {
+    console.error(`  ${rel} -> engines.node is ${JSON.stringify(found)}; expected ${expectedNode}.`);
+    failed = true;
+  }
+}
+
 for (const family of FAMILIES) {
   /** @type {Map<string, string[]>} */
   const seen = new Map();

@@ -141,7 +141,61 @@ check(
   fs.readFileSync(path.join(tmpRoot, "src", "Root.tsx"), "utf8").includes("PreflightBenchmark"),
 );
 
-console.log("\n== Part 2: write_beats_file -> scaffold_scene x3 -> stitch_composition ==");
+console.log("\n== Part 2: C9 write_description disclosure ==");
+{
+  const { runWriteDescription } = require(path.join(distDir, "tools", "writeDescription.js"));
+  const videoName = "description-check";
+  const videoDir = path.join(tmpRoot, "src", "videos", videoName);
+  fs.mkdirSync(videoDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      beats: [
+        { id: "real", duration: 90, vo: "The real capture." },
+        { id: "constructed", duration: 90, vo: "The sample capture." },
+      ],
+    }),
+  );
+  fs.writeFileSync(
+    path.join(videoDir, "brief.json"),
+    JSON.stringify({
+      logline: "A grounded description.",
+      shotList: [
+        { beatId: "real", real: true, provenance: "real product" },
+        {
+          beatId: "constructed",
+          real: false,
+          provenance: "Acme Tasks, a fictional task board",
+          whyConstructed: "the real board contains private customer data",
+        },
+      ],
+    }),
+  );
+  const result = runWriteDescription({ projectRoot: tmpRoot, videoName });
+  const content = fs.readFileSync(result.path, "utf8");
+  check("C9 writes a description file from real beats", result.written && fs.existsSync(result.path));
+  check(
+    "C9 discloses constructed content verbatim and excludes real shots from the disclosure list",
+    result.sampleContentDisclosed.join(",") === "constructed" &&
+      content.includes("Acme Tasks, a fictional task board") &&
+      content.includes("the real board contains private customer data"),
+  );
+  const noBriefVideo = "description-no-brief";
+  const noBriefDir = path.join(tmpRoot, "src", "videos", noBriefVideo);
+  fs.mkdirSync(noBriefDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(noBriefDir, "beats.json"),
+    JSON.stringify({ fps: 30, beats: [{ id: "only", duration: 60, vo: "Still works without a brief." }] }),
+  );
+  const noBrief = runWriteDescription({ projectRoot: tmpRoot, videoName: noBriefVideo });
+  check(
+    "C9 supports projects without brief.json",
+    fs.existsSync(noBrief.path) && !fs.readFileSync(noBrief.path, "utf8").includes("Sample content used"),
+  );
+}
+
+console.log("\n== Part 3: write_beats_file -> scaffold_scene x3 -> stitch_composition ==");
 
 const beatsJson = {
   fps: 30,

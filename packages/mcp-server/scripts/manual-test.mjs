@@ -378,7 +378,10 @@ if (fs.existsSync(tempNodeModules)) {
 
 console.log("\n== Part 5: capture_screenshot / capture_screen_recording -- pure functions (no browser) ==");
 
-const captureCore = require(path.join(distDir, "capture.js"));
+// capture.ts moved to @openvidstudio/capture (as browser.ts) when the capture engine was
+// split into its own package; this require still pointed at mcp-server's own dist, which
+// never had this file, crashing the suite before it could finish.
+const captureCore = require(path.join(packageRoot, "..", "capture", "dist", "browser.js"));
 const { detectAndCompensateZoom, ZoomCompensationError, DEFAULT_VIEWPORT } = captureCore;
 
 check(

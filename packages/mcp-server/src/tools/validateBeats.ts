@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { interactionSchema } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { resolveProjectRoot, sanitizeSegment } from "../util";
+import { writeFactRecord } from "../facts";
 
 export interface ValidateBeatsResult {
   valid: boolean;
@@ -413,6 +415,33 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   return { valid: errors.length === 0, errors };
 }
 
+export interface ValidateBeatsInput {
+  beatsJson: unknown;
+  /** When set, the outcome is also kept as a run record for this video (see collect_facts). */
+  videoName?: string;
+  projectRoot?: string;
+}
+
+export function runValidateBeats(input: ValidateBeatsInput): ValidateBeatsResult {
+  const result = validateBeatsLogic(input.beatsJson);
+  if (input.videoName !== undefined) {
+    writeFactRecord(resolveProjectRoot(input.projectRoot), {
+      tool: "validate_beats",
+      videoName: sanitizeSegment(input.videoName, "videoName"),
+      facts: {
+        ok: result.valid,
+        errors: result.errors.length,
+        // Errors are labelled `beat "<id>": ...` when they belong to one beat.
+        findings: result.errors.map((message) => {
+          const m = message.match(/^beat "([^"]+)": ([\s\S]*)$/);
+          return m ? { beatId: m[1], severity: "error", message: m[2] } : { severity: "error", message };
+        }),
+      },
+    });
+  }
+  return result;
+}
+
 export function registerValidateBeats(server: McpServer): void {
   server.registerTool(
     "validate_beats",
@@ -449,8 +478,17 @@ export function registerValidateBeats(server: McpServer): void {
         beatsJson: z
           .unknown()
           .describe("The drafted beats.json content (an object), not a file path."),
+        videoName: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional. When given, the outcome is also kept as a run record for this video (see collect_facts). " +
+              "Validation itself never touches the disk without it.",
+          ),
+        projectRoot: z.string().optional().describe("Only used with videoName."),
       },
     },
-    async ({ beatsJson }) => runTool("validate_beats", () => validateBeatsLogic(beatsJson)),
+    async (input) => runTool("validate_beats", () => runValidateBeats(input)),
   );
 }

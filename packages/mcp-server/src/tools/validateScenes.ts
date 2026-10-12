@@ -6,6 +6,7 @@ import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
 import { loadConfig } from "../config";
 import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { writeFactRecord } from "../facts";
 import { resolveCompositionId } from "./renderStills";
 import { readTypeMinimums, runRenderChecks } from "./validateScenesRender";
 
@@ -197,7 +198,29 @@ function expectedArtifact(
   return null;
 }
 
+function recordValidateScenes(input: ValidateScenesInput, result: ValidateScenesResult): void {
+  writeFactRecord(resolveProjectRoot(input.projectRoot), {
+    tool: "validate_scenes",
+    videoName: sanitizeSegment(input.videoName, "videoName"),
+    facts: {
+      ok: result.ok,
+      scenesChecked: result.scenesChecked,
+      renderMode: result.render !== undefined,
+      errors: result.findings.filter((f) => f.severity === "error").length,
+      warnings: result.findings.filter((f) => f.severity === "warning").length,
+      findings: result.findings,
+      ...(result.render ? { render: result.render } : {}),
+    },
+  });
+}
+
 export function runValidateScenes(input: ValidateScenesInput): ValidateScenesResult {
+  const result = staticPass(input);
+  recordValidateScenes(input, result);
+  return result;
+}
+
+function staticPass(input: ValidateScenesInput): ValidateScenesResult {
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const config = loadConfig(projectRoot);
@@ -333,8 +356,11 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
  * for every caller that only wants the static read.
  */
 export async function runValidateScenesFull(input: ValidateScenesInput): Promise<ValidateScenesResult> {
-  const result = runValidateScenes(input);
-  if (!input.render) return result;
+  const result = staticPass(input);
+  if (!input.render) {
+    recordValidateScenes(input, result);
+    return result;
+  }
 
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
@@ -363,7 +389,7 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
   });
 
   const findings = [...result.findings, ...rendered.findings];
-  return {
+  const full: ValidateScenesResult = {
     ok: !findings.some((f) => f.severity === "error"),
     scenesChecked: result.scenesChecked,
     findings,
@@ -375,6 +401,8 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
       totalMs: rendered.totalMs,
     },
   };
+  recordValidateScenes(input, full);
+  return full;
 }
 
 export function registerValidateScenes(server: McpServer): void {

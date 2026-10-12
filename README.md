@@ -37,7 +37,7 @@ is your app, captured live.
   actually running app; the UI, the product text, and the layout are all ground truth.
 - **Your agent drives** - no separate app, no timeline editor, no manual keyframing.
   Claude Code, Cursor, ChatGPT, or anything that speaks MCP runs the whole pipeline
-  through thirty-eight tools, thirty-nine with the Higgsfield tier enabled.
+  through thirty-nine tools, forty with the Higgsfield tier enabled.
 - **A directed video, not a screen recording** - push-ins, drift, shallow depth of
   field, an oversized cursor, narration, and a synthesized music bed turn plain
   captures into something you'd ship.

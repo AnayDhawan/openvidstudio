@@ -213,6 +213,36 @@ read the render plus `beats.json`, so none of them can drift from the video:
   screen. It does not write the narration and does not install the manifest:
   both go through the approval gate in `PLANNING.md` §5.
 
+## Run records and facts
+
+A beat's text says what was intended. A run record says what actually happened. Each tool
+that captures, composes, renders or validates writes one small JSON file to
+`.openvidstudio/runs/<tool>-<timestamp>.json` when it finishes: a capture records what it
+captured (URL or command, output path, real size on disk, whether the page settled), a render
+records the size of the file that landed and which beats it rendered or reused from the cache,
+a validator records its findings. Writing a record never fails the tool: an unwritable runs
+directory is logged to stderr and the tool's own result is returned untouched.
+
+`collect_facts` (one call per video) merges the records that belong to a video into
+`src/videos/<video>/facts.json`, keyed by beat id, and compares them with `beats.json`:
+
+- `provenance` per beat is `capture` (a capture tool ran for it), `construction` (the beat
+  claims no capture, e.g. `dom-demo`) or `unverified` (it claims a capture and none ran).
+- `discrepancies` lists a beat that claims a capture with no record behind it, and a recorded
+  capture whose file is no longer on disk.
+- Only the latest record per tool is kept per beat. Older records stay in the runs directory.
+
+Per-beat records (captures) take no video name, so they belong to every video whose
+`beats.json` has that beat id. Video-level records (render, validate, stitch) are matched by
+`videoName`. `validate_beats` validates a draft that is not on disk, so it only writes a record
+when you pass it `videoName`.
+
+Not instrumented, on purpose: `plan_*`, `write_*`, `scaffold_scene` and the other tools that
+draft something for approval produce intent, which beats.json and brief.json already hold;
+`extract_brand`, `contact_sheet` and `qc_extract_frames` write their own artifacts, which are
+the evidence. `render_stills`, `compose_score` and `write_description` are the judgment calls: they
+write files the next tool reads, and nothing downstream checks a claim against them yet.
+
 ## Asset conventions
 
 Every tool in this pipeline that reads or writes a beat's media agrees on
@@ -234,6 +264,8 @@ VO specifically, silently omits the layer with no warning:
 | Translated VO | `public/audio/vo/<lang>/<beatId>.mp3` | `generate_narration` with `languages` | `stitch_composition`, as that language's composition |
 | Beat segments and their cache | `output/segments/<video>/` | `render_video` with `incremental` | `render_video`, on the next run |
 | Visual baseline | `.openvidstudio/visual-baseline/<video>/<beatId>.png` | `visual_regression` | `visual_regression`, on the next run. Commit these |
+| Run record | `.openvidstudio/runs/<tool>-<timestamp>.json` | `capture_screenshot`, `capture_screen_recording`, `capture_terminal`, `capture_desktop`, `capture_mobile`, `import_higgsfield_clip`, `stitch_composition`, `render_video`, `validate_scenes`, `validate_beats` (with `videoName`) | `collect_facts`. Local evidence, not source: gitignore `.openvidstudio/runs/` |
+| Facts | `src/videos/<video>/facts.json` | `collect_facts` | a reviewer, or any check that wants to hold a claim up against what ran. Commit it if you want it reviewed |
 | Capture sidecar | `<asset>.capture.json` (next to the screenshot it describes) | `capture_screenshot`, `capture_screen_recording`, `release_diff` | `docs_drift` / `release_diff`, to re-capture at the same CSS viewport and scale the reference actually used |
 
 Every path in this table is also the default a beat's `artifacts` field

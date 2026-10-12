@@ -24,6 +24,7 @@ import {
   type Viewport,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 export interface CaptureScreenRecordingInput {
   projectRoot?: string;
@@ -265,6 +266,30 @@ async function probeDurationMs(filePath: string, cwd: string): Promise<number | 
 }
 
 export async function runCaptureScreenRecording(
+  input: CaptureScreenRecordingInput
+): Promise<CaptureScreenRecordingResult> {
+  const result = await captureScreenRecording(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_screen_recording",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      url: input.url,
+      viewport: { width: result.width, height: result.height },
+      durationMs: result.durationMs ?? null,
+      speed: input.speed ?? 1,
+      interactions: input.interactions?.length ?? 0,
+      settled: result.settle?.settled ?? null,
+      settleWaitedMs: result.settle?.waitedMs ?? null,
+    },
+  });
+  return result;
+}
+
+async function captureScreenRecording(
   input: CaptureScreenRecordingInput,
 ): Promise<CaptureScreenRecordingResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");

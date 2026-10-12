@@ -14,6 +14,7 @@ import {
   type Region,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 export interface CaptureDesktopInput {
   projectRoot?: string;
@@ -123,7 +124,28 @@ function explainFailure(
   return `ffmpeg desktop capture failed:\n${tail}`;
 }
 
-export async function runCaptureDesktop(input: CaptureDesktopInput): Promise<CaptureDesktopResult> {
+export async function runCaptureDesktop(
+  input: CaptureDesktopInput
+): Promise<CaptureDesktopResult> {
+  const result = await captureDesktop(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_desktop",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      platform: result.platform,
+      backend: result.backend,
+      durationSeconds: result.durationSeconds,
+      window: result.window ?? null,
+    },
+  });
+  return result;
+}
+
+async function captureDesktop(input: CaptureDesktopInput): Promise<CaptureDesktopResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const platform = currentPlatform();

@@ -37,6 +37,7 @@ import { registerComposeScore } from "./composeScore";
 import { registerCatalogMotionPrimitives, registerAddMotionPrimitive } from "./motionPrimitives";
 import { registerWriteDescription } from "./writeDescription";
 import { registerRenderStills } from "./renderStills";
+import { registerCollectFacts } from "./collectFacts";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -86,6 +87,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerAddMotionPrimitive(server);
   registerWriteDescription(server);
   registerRenderStills(server);
+  registerCollectFacts(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

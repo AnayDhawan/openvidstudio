@@ -64,7 +64,10 @@ Rules of thumb:
   rather than showing a flat full-screen grab.
 - Constructed panels: 1.04 to 1.15. They are already built at stage size, so they
   need a gentle push, not a zoom.
-- Run `validate_scenes` and it will tell you which scenes are cropping.
+- Run `validate_scenes` and it will tell you which scenes are cropping. That is a read of
+  the source. Pass `render: true` (after `stitch_composition`) to measure the real rendered
+  frames instead: cropped text, text below the design system's minimum size, on-screen text
+  that takes longer to read than the beat lasts (3 words/sec), and beats that never change.
 
 ### `Layer`
 

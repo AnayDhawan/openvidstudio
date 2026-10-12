@@ -313,12 +313,10 @@ export async function openSeekablePage(opts: {
 
   const hasHooks = await page.evaluate(() => {
     const w = window as unknown as Record<string, unknown>;
-    return typeof w.remotion_setBundleMode === "function" && typeof w.remotion_setFrame === "function";
+    return typeof w.remotion_setBundleMode === "function";
   });
   if (!hasHooks) {
-    throw new RemotionBridgeProtocolError(
-      `Bundle at ${bundleUrl} did not expose window.remotion_setBundleMode/remotion_setFrame after load.`,
-    );
+    throw new RemotionBridgeProtocolError(`Bundle at ${bundleUrl} did not expose window.remotion_setBundleMode after load.`);
   }
 
   await page.evaluate(
@@ -355,6 +353,19 @@ export async function openSeekablePage(opts: {
     },
   );
 
+  // remotion_setFrame is registered by the composition once bundle mode is set, not at load,
+  // so it can only be feature-detected here.
+  await page
+    .waitForFunction(
+      () => typeof (window as unknown as Record<string, unknown>).remotion_setFrame === "function",
+      undefined,
+      { timeout: timeoutMs },
+    )
+    .catch(() => {
+      throw new RemotionBridgeProtocolError(
+        `Bundle at ${bundleUrl} did not expose window.remotion_setFrame after remotion_setBundleMode.`,
+      );
+    });
   await waitForRenderReady(page, timeoutMs);
 }
 

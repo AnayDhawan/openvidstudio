@@ -85,7 +85,7 @@ export function resolveBeatFrame(beat: BeatLike, at: RenderStillsInput["at"]): n
   return beat.start + Math.floor(duration / 2);
 }
 
-function resolveCompositionId(projectRoot: string, videoName: string, override?: string): string {
+export function resolveCompositionId(projectRoot: string, videoName: string, override?: string): string {
   if (override) return override;
   const entry = readRegistry(projectRoot).find((e) => e.videoName === videoName);
   if (!entry) {

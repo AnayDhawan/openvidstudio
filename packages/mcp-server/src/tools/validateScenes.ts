@@ -6,6 +6,8 @@ import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
 import { loadConfig } from "../config";
 import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { resolveCompositionId } from "./renderStills";
+import { readTypeMinimums, runRenderChecks } from "./validateScenesRender";
 
 /**
  * The worst failure class in this pipeline is silent wrongness: a scene renders
@@ -24,6 +26,16 @@ import { runTool } from "./mcp";
 export interface ValidateScenesInput {
   projectRoot?: string;
   videoName: string;
+  /**
+   * Also mount the composition in a real browser and measure the rendered frames. Slower
+   * (it bundles the project) and needs the video stitched, but it is the only way to see
+   * cropping, text size, reading time and dead frames as they actually render.
+   */
+  render?: boolean;
+  /** With render: overrides the composition id resolved from src/videos/.registry.json. */
+  compositionId?: string;
+  /** With render: limit the measurement to these beats. Static checks always cover every beat. */
+  beatIds?: string[];
 }
 
 export interface SceneFinding {
@@ -31,12 +43,24 @@ export interface SceneFinding {
   scene: string;
   severity: "error" | "warning";
   message: string;
+  /** Which pass produced this: reading the source, or measuring the real render. */
+  source?: "static" | "render";
+  /** For render findings, which check: crop, text-size, reading-time, dead-frames or render-skipped. */
+  check?: string;
 }
 
 export interface ValidateScenesResult {
   ok: boolean;
   scenesChecked: number;
   findings: SceneFinding[];
+  /** Present only when render mode ran. */
+  render?: {
+    compositionId: string;
+    beatsMeasured: number;
+    beatsSkipped: { beatId: string; reason: string }[];
+    bundleMs: number;
+    totalMs: number;
+  };
 }
 
 const STAGE_W = 1920;
@@ -44,6 +68,8 @@ const STAGE_H = 1080;
 
 interface BeatLike {
   id: string;
+  /** A bespoke scene path relative to the video directory (C5), replacing scenes/<Pascal>.tsx. */
+  scene?: string;
   visual?: { captureMethod?: string; source?: string; assetPath?: string };
   artifacts?: { screenshotPath?: string; recordingPath?: string; terminalPath?: string };
   // (expectedArtifact below resolves these into the one path this beat actually needs.)
@@ -187,14 +213,19 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
   let checked = 0;
 
   for (const beat of doc.beats) {
-    const component = pascalCase(beat.id);
-    const file = path.join(scenesDir, `${component}.tsx`);
+    // A beat can point at a bespoke scene (C5's `scene` field); stitch_composition imports that
+    // file instead of scenes/<Pascal>.tsx, so this has to read the same one.
+    const overridden = beat.scene ? path.join(videoDir, beat.scene.replace(/\.(tsx|ts|jsx|js)$/, "") + ".tsx") : null;
+    const component = overridden ? path.basename(overridden, ".tsx") : pascalCase(beat.id);
+    const file = overridden ?? path.join(scenesDir, `${component}.tsx`);
     if (!fs.existsSync(file)) {
       findings.push({
         beatId: beat.id,
         scene: `${component}.tsx`,
         severity: "error",
-        message: `No scene file. Run scaffold_scene for this beat.`,
+        message: overridden
+          ? `Scene override ${beat.scene} does not exist.`
+          : `No scene file. Run scaffold_scene for this beat.`,
       });
       continue;
     }
@@ -292,7 +323,58 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
   }
 
   void config;
-  return { ok: !findings.some((f) => f.severity === "error"), scenesChecked: checked, findings };
+  const tagged = findings.map((f): SceneFinding => ({ source: "static", ...f }));
+  return { ok: !tagged.some((f) => f.severity === "error"), scenesChecked: checked, findings: tagged };
+}
+
+/**
+ * The static pass plus, when `render` is set, the render-based pass. Async because the
+ * render pass bundles the project and drives a browser; runValidateScenes stays synchronous
+ * for every caller that only wants the static read.
+ */
+export async function runValidateScenesFull(input: ValidateScenesInput): Promise<ValidateScenesResult> {
+  const result = runValidateScenes(input);
+  if (!input.render) return result;
+
+  const videoName = sanitizeSegment(input.videoName, "videoName");
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  const videoDir = path.join(projectRoot, "src", "videos", videoName);
+  const doc = JSON.parse(fs.readFileSync(path.join(videoDir, "beats.json"), "utf8")) as {
+    fps?: number;
+    beats: { id: string; start: number; duration: number }[];
+  };
+
+  let beats = doc.beats;
+  if (input.beatIds && input.beatIds.length > 0) {
+    const known = new Set(beats.map((b) => b.id));
+    const unknown = input.beatIds.filter((id) => !known.has(id));
+    if (unknown.length > 0) throw new Error(`beatIds not found in beats.json: ${unknown.join(", ")}`);
+    const wanted = new Set(input.beatIds);
+    beats = beats.filter((b) => wanted.has(b.id));
+  }
+  const compositionId = resolveCompositionId(projectRoot, videoName, input.compositionId);
+  const rendered = await runRenderChecks({
+    projectRoot,
+    videoName,
+    compositionId,
+    beats,
+    fps: doc.fps ?? 30,
+    minimums: readTypeMinimums(videoDir),
+  });
+
+  const findings = [...result.findings, ...rendered.findings];
+  return {
+    ok: !findings.some((f) => f.severity === "error"),
+    scenesChecked: result.scenesChecked,
+    findings,
+    render: {
+      compositionId,
+      beatsMeasured: rendered.beatsMeasured,
+      beatsSkipped: rendered.beatsSkipped,
+      bundleMs: rendered.bundleMs,
+      totalMs: rendered.totalMs,
+    },
+  };
 }
 
 export function registerValidateScenes(server: McpServer): void {
@@ -309,12 +391,20 @@ export function registerValidateScenes(server: McpServer): void {
         "reports a timeout (the frame may be mid-transition -- see capture_screenshot/" +
         "capture_screen_recording's settle/settleTimeoutMs), leftover TODOs, and beats with no " +
         "narration file, since stitch_composition skips those silently and the beat renders mute. Run it " +
-        "after scaffolding and again before rendering.",
+        "after scaffolding and again before rendering. Pass render: true to also mount the stitched composition " +
+        "in a real browser and measure what actually renders: text cropped at the frame edge (camera-" +
+        "transformed content only, found through the real DOM), text below the design system's minimum " +
+        "size, on-screen text that needs longer to read than the beat lasts (3 words/sec), and beats whose " +
+        "frames never change. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
+        "recording played through OffthreadVideo) is reported as render-skipped, never as clean.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
+        render: z.boolean().optional(),
+        compositionId: z.string().optional(),
+        beatIds: z.array(z.string()).optional(),
       },
     },
-    async (input) => runTool("validate_scenes", () => runValidateScenes(input)),
+    async (input) => runTool("validate_scenes", () => runValidateScenesFull(input)),
   );
 }

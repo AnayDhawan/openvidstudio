@@ -4062,6 +4062,135 @@ export const BespokeC4Check: React.FC = () => {
   skip("Part 52: C4 primitives real render", "no resolvable node_modules to scaffold a renderable project from");
 }
 
+console.log("\n== Part 53: validate_scenes render mode, pure judgement (C7) ==");
+{
+  const { judgeBeat, readTypeMinimums, MAX_READING_WORDS_PER_SEC } = require(path.join(distDir, "tools", "validateScenesRender.js"));
+  const probe = (over) => ({ text: "hello", fontPx: 40, mono: false, inStage: true, opacity: 1, croppedRatio: 0, overhangPx: 0, ...over });
+  const beat = { id: "pure", start: 0, duration: 150 };
+  const mins = { body: 26, mono: 15 };
+  const run = (samples, maxChangedRatio = 0.5, b = beat) => judgeBeat({ beat: b, fps: 30, minimums: mins, samples, maxChangedRatio });
+  const same = (p) => [[p], [p], [p], [p], [p]];
+
+  check("a clean beat yields no findings", run(same(probe({}))).length === 0);
+  check(
+    "crop is flagged when stage text is cut in most samples",
+    run(same(probe({ text: "wide", croppedRatio: 0.4, overhangPx: 300 }))).some((f) => f.check === "crop" && f.severity === "error"),
+  );
+  check(
+    "crop is NOT flagged for a slide-in cut in only two of five samples",
+    !run([[probe({ text: "slide", croppedRatio: 0.6, overhangPx: 200 })], [probe({ text: "slide", croppedRatio: 0.3, overhangPx: 90 })], [probe({ text: "slide" })], [probe({ text: "slide" })], [probe({ text: "slide" })]]).some((f) => f.check === "crop"),
+  );
+  check(
+    "overlay text is exempt from the crop check",
+    !run(same(probe({ inStage: false, croppedRatio: 0.5, overhangPx: 200 }))).some((f) => f.check === "crop"),
+  );
+  check("text below the body minimum is flagged", run(same(probe({ fontPx: 14 }))).some((f) => f.check === "text-size"));
+  check("mono text is held to the mono minimum, not the body one", !run(same(probe({ fontPx: 18, mono: true }))).some((f) => f.check === "text-size"));
+  const words = Array.from({ length: 40 }, (_, i) => "w" + i).join(" ");
+  check(
+    "too much text for the beat's duration is flagged with the documented rate",
+    MAX_READING_WORDS_PER_SEC === 3 && run(same(probe({ text: words })), 0.5, { ...beat, duration: 60 }).some((f) => f.check === "reading-time"),
+  );
+  check("the same text on a long enough beat is not flagged", !run(same(probe({ text: words })), 0.5, { ...beat, duration: 600 }).some((f) => f.check === "reading-time"));
+  check("identical frames are flagged dead", run(same(probe({})), 0).some((f) => f.check === "dead-frames"));
+  check("a null pixel comparison never flags dead frames", !run(same(probe({})), null).some((f) => f.check === "dead-frames"));
+
+  const dsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c7-design-"));
+  check("no design.ts falls back to the default minimums", readTypeMinimums(dsDir).body === 26 && readTypeMinimums(dsDir).mono === 15);
+  fs.writeFileSync(path.join(dsDir, "design.ts"), "typeScale: { display: [120, 220], headline: [56, 84], body: [30, 40], mono: [18, 24] },");
+  check("design.ts typeScale overrides the minimums", readTypeMinimums(dsDir).body === 30 && readTypeMinimums(dsDir).mono === 18);
+}
+
+console.log("\n== Part 54: validate_scenes render mode against real rendered scenes (C7) ==");
+if (fs.existsSync(templateNodeModules)) {
+  const { runInitProject } = require(path.join(distDir, "tools", "initProject.js"));
+  const { runValidateScenesFull } = require(path.join(distDir, "tools", "validateScenes.js"));
+  const c7Root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c7-render-"));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      runInitProject({ name: "c7check", projectRoot: c7Root });
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      fs.rmSync(c7Root, { recursive: true, force: true });
+      fs.mkdirSync(c7Root, { recursive: true });
+    }
+  }
+  fs.symlinkSync(templateNodeModules, path.join(c7Root, "node_modules"), "junction");
+
+  const videoDir = path.join(c7Root, "src", "videos", "c7check");
+  const customDir = path.join(videoDir, "custom-scenes");
+  fs.mkdirSync(customDir, { recursive: true });
+  const longCopy = Array.from({ length: 64 }, (_, i) => "word" + i).join(" ");
+
+  // Correct: copy is short and large, everything is inside the frame, the camera pushes in.
+  fs.writeFileSync(
+    path.join(customDir, "GoodScene.tsx"),
+    [
+      'import React from "react";',
+      'import { CinematicScene, E } from "@openvidstudio/core";',
+      "export const GoodScene: React.FC = () => (",
+      "  <CinematicScene camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 150, x: 960, y: 540, scale: 1.15, easing: E.drift }]}>",
+      '    <div style={{ position: "absolute", left: 300, top: 360, fontSize: 72, color: "#fff" }}>Ship the demo</div>',
+      '    <div style={{ position: "absolute", left: 300, top: 480, fontSize: 36, color: "#fff" }}>Ten tools, one pipeline.</div>',
+      "  </CinematicScene>",
+      ");",
+      "",
+    ].join("\n"),
+  );
+  // Broken in all four ways: a static camera (dead), text running off the right edge (crop),
+  // 12px text that is 15.6px on screen at scale 1.3 (text size), and 64 words in a 2s beat.
+  fs.writeFileSync(
+    path.join(customDir, "BadScene.tsx"),
+    [
+      'import React from "react";',
+      'import { CinematicScene } from "@openvidstudio/core";',
+      "export const BadScene: React.FC = () => (",
+      "  <CinematicScene camera={[{ frame: 0, x: 960, y: 540, scale: 1.3 }, { frame: 60, x: 960, y: 540, scale: 1.3 }]}>",
+      '    <div style={{ position: "absolute", left: 1500, top: 300, fontSize: 40, whiteSpace: "nowrap", color: "#fff" }}>This line runs off the right edge of the frame</div>',
+      '    <div style={{ position: "absolute", left: 400, top: 420, fontSize: 12, color: "#fff" }}>tiny caption nobody can read</div>',
+      '    <div style={{ position: "absolute", left: 400, top: 500, width: 1000, fontSize: 30, color: "#fff" }}>' + longCopy + "</div>",
+      "  </CinematicScene>",
+      ");",
+      "",
+    ].join("\n"),
+  );
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      beats: [
+        { id: "good-scene", start: 0, duration: 150, scene: "./custom-scenes/GoodScene.tsx" },
+        { id: "bad-scene", start: 150, duration: 60, scene: "./custom-scenes/BadScene.tsx" },
+      ],
+    }),
+  );
+  runStitchComposition({ projectRoot: c7Root, videoName: "c7check" });
+
+  const res = await runValidateScenesFull({ projectRoot: c7Root, videoName: "c7check", render: true });
+  const renderFindings = res.findings.filter((f) => f.source === "render");
+  const forBeat = (id, kind) => renderFindings.filter((f) => f.beatId === id && f.check === kind);
+  console.log("  render findings:", JSON.stringify(renderFindings.map((f) => [f.beatId, f.check, f.severity])));
+
+  check("render mode measured both beats and skipped none", res.render?.beatsMeasured === 2 && res.render.beatsSkipped.length === 0);
+  check("the correct scene has zero render findings (no false positives)", renderFindings.filter((f) => f.beatId === "good-scene").length === 0);
+  check("the broken scene is flagged for cropped text", forBeat("bad-scene", "crop").length === 1 && forBeat("bad-scene", "crop")[0].message.includes("runs off the right edge"));
+  check("the broken scene is flagged for text below the minimum size", forBeat("bad-scene", "text-size").length === 1 && forBeat("bad-scene", "text-size")[0].message.includes("tiny caption"));
+  check("the broken scene is flagged for reading time", forBeat("bad-scene", "reading-time").length === 1);
+  check("the broken scene is flagged for dead frames", forBeat("bad-scene", "dead-frames").length === 1);
+  check(
+    "the static pass reads each beat's bespoke scene override and finds no error in either",
+    res.scenesChecked === 2 && res.findings.filter((f) => f.source === "static" && f.severity === "error").length === 0,
+  );
+  check("a crop error makes the result not ok", res.ok === false);
+
+  // Without the flag, no render happens and the result has no render block.
+  const staticOnly = runValidateScenesFull({ projectRoot: c7Root, videoName: "c7check" });
+  check("without render:true no render pass runs", (await staticOnly).render === undefined);
+} else {
+  skip("Part 54: validate_scenes render mode", "no resolvable node_modules to scaffold a renderable project from");
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

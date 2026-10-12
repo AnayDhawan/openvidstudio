@@ -184,6 +184,23 @@ regenerated from `beats.json` on every run.
 - Write `<video>/script.md`: VO table (timestamps from markers), delivery
   notes, description draft. See `SCRIPT.md` for VO pacing/duration rules.
 
+### Final assembly
+
+`finalize_video` is the last pass over a finished render. It measures the mix's
+real integrated loudness, true peak and range, then normalises it two-pass with
+ffmpeg's `loudnorm`: the first pass measures, the second applies a linear gain
+computed from those numbers, and the video stream is copied, not re-encoded. The
+written file is measured again, and the result says whether it landed within 1 LU
+of the target. The target is **-14 LUFS integrated, -1.5 dBTP**. That is not the
+-15 `compose_score` uses for `mode: "bed"`: that figure is the music alone sitting
+under narration, while this is the finished mix, and -14 is the level the large
+video platforms normalise to. Override it with `targetLufs` / `truePeakDb`.
+
+It writes `output/<video>-final.mp4` (the original render is kept), a poster
+frame, and a copy under a size cap (`shareMaxMB`, default 10). Pass `poster:
+false` or `share: false` to skip either. A render with no audio track skips the
+loudness step and says so.
+
 ### Other outputs from the same render
 
 The finished mp4 is one consumer of the beats, not the only one. All of these
@@ -196,6 +213,17 @@ read the render plus `beats.json`, so none of them can drift from the video:
   an index pairing each with that beat's narration, which is already written.
 - `export_rendition` with `format: "store-frames"` writes App Store and Play
   Store images at the exact dimensions each store rejects submissions over.
+- `export_rendition` with `format: "poster"` writes one still. By default it is
+  the last beat's midpoint; with `posterPick: "auto"` every beat's midpoint is
+  scored (luma entropy and contrast, penalising near-black and blown-out frames)
+  and the best one wins, so the thumbnail is not a fade or a call-to-action card
+  by accident.
+- `export_rendition` with `format: "share"` writes a copy under a hard size cap
+  (`maxMB`, default 10, where 1MB is 1,000,000 bytes). The bitrate comes from the
+  cap and the duration, the largest resolution that bitrate can carry without
+  blocking is chosen, it is encoded two-pass H.264, and the file on disk is
+  measured and re-encoded smaller if it came out over. When the cap cannot be met
+  it says so rather than reporting success.
 - `reformat_vertical` writes a 9:16 cut with the crop chosen per beat from the
   manifest rather than by taking the middle of the frame.
 
@@ -264,7 +292,8 @@ VO specifically, silently omits the layer with no warning:
 | Translated VO | `public/audio/vo/<lang>/<beatId>.mp3` | `generate_narration` with `languages` | `stitch_composition`, as that language's composition |
 | Beat segments and their cache | `output/segments/<video>/` | `render_video` with `incremental` | `render_video`, on the next run |
 | Visual baseline | `.openvidstudio/visual-baseline/<video>/<beatId>.png` | `visual_regression` | `visual_regression`, on the next run. Commit these |
-| Run record | `.openvidstudio/runs/<tool>-<timestamp>.json` | `capture_screenshot`, `capture_screen_recording`, `capture_terminal`, `capture_desktop`, `capture_mobile`, `import_higgsfield_clip`, `stitch_composition`, `render_video`, `validate_scenes`, `validate_beats` (with `videoName`) | `collect_facts`. Local evidence, not source: gitignore `.openvidstudio/runs/` |
+| Final master, poster, share copy | `output/<video>-final.mp4`, `output/<video>-poster.jpg`, `output/<video>-share.mp4` | `finalize_video` | pick up / upload from here |
+| Run record | `.openvidstudio/runs/<tool>-<timestamp>.json` | `capture_screenshot`, `capture_screen_recording`, `capture_terminal`, `capture_desktop`, `capture_mobile`, `import_higgsfield_clip`, `stitch_composition`, `render_video`, `finalize_video`, `validate_scenes`, `validate_beats` (with `videoName`) | `collect_facts`. Local evidence, not source: gitignore `.openvidstudio/runs/` |
 | Facts | `src/videos/<video>/facts.json` | `collect_facts` | a reviewer, or any check that wants to hold a claim up against what ran. Commit it if you want it reviewed |
 | Capture sidecar | `<asset>.capture.json` (next to the screenshot it describes) | `capture_screenshot`, `capture_screen_recording`, `release_diff` | `docs_drift` / `release_diff`, to re-capture at the same CSS viewport and scale the reference actually used |
 

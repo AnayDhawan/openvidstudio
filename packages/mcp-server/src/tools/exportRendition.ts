@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
+import sharp from "sharp";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, spawnCapture } from "../util";
 import { runTool } from "./mcp";
@@ -20,7 +22,7 @@ import { runTool } from "./mcp";
  * release or two, which is the whole problem with hand-made docs images.
  */
 
-export type Rendition = "gif" | "screenshots" | "store-frames" | "poster";
+export type Rendition = "gif" | "screenshots" | "store-frames" | "poster" | "share";
 
 export interface RenditionBeat {
   id: string;
@@ -49,6 +51,17 @@ export interface ExportRenditionInput {
   /** poster only. Exact timestamp in seconds, overriding posterBeatId. */
   posterAt?: number;
   /**
+   * poster only, when neither posterAt nor posterBeatId is given. "last" (the default, and what
+   * this always did) takes the last beat's midpoint. "auto" scores every beat's midpoint frame
+   * and takes the one that looks most like a representative picture: not blank, not flat, not
+   * near-black or blown out. See scoreFrameStats for exactly what is measured.
+   */
+  posterPick?: "last" | "auto";
+  /** share only. The file size cap in megabytes (1MB = 1,000,000 bytes). Defaults to 10. */
+  maxMB?: number;
+  /** share only. Audio bitrate in kbps when the render has audio. Defaults to 96. */
+  audioKbps?: number;
+  /**
    * poster only. Also write a copy of the render with the poster baked in as the file's
    * embedded thumbnail (an attached_pic stream, the same mechanism a podcast mp3's cover
    * art uses), so players and file browsers show it instead of a black or mid-motion first
@@ -64,7 +77,24 @@ export interface ExportRenditionResult {
   indexPath?: string;
   /** poster only, when bake was not disabled: the render with the poster baked in as its thumbnail. */
   bakedPath?: string;
+  /** poster only, when posterPick was "auto": what was scored and which beat won. */
+  posterPick?: { beatId: string; seconds: number; scores: { beatId: string; score: number }[] };
+  /** share only: what was actually produced, measured from the file on disk. */
+  share?: ShareResult;
   notes: string[];
+}
+
+export interface ShareResult {
+  path: string;
+  bytes: number;
+  maxBytes: number;
+  withinCap: boolean;
+  width: number;
+  height: number;
+  videoKbps: number;
+  audioKbps: number;
+  /** Encode attempts it took to land under the cap (1 means the first try fit). */
+  attempts: number;
 }
 
 /**
@@ -209,6 +239,229 @@ export function buildScreenshotIndex(videoName: string, entries: { file: string;
   );
 }
 
+
+// ---------------------------------------------------------------------------------------
+// Poster: picking a representative frame
+// ---------------------------------------------------------------------------------------
+
+export interface FrameStats {
+  /** Mean luma, 0 to 255. */
+  mean: number;
+  /** Standard deviation of luma, 0 to 255: how much contrast the frame has. */
+  stdev: number;
+  /** Shannon entropy of the luma histogram, 0 to 8 bits: how much is going on in it. */
+  entropy: number;
+}
+
+/**
+ * Scores one frame as a poster candidate. A good poster is a picture with something in it, so
+ * the score is the frame's luma entropy (a flat or empty frame has little, a UI full of text and
+ * panels has a lot), scaled down when the frame has almost no contrast (stdev under 40) and cut
+ * to 30% when it is near-black or blown out (mean outside 30..225), which is what a fade or a
+ * transition frame looks like. It is a heuristic for "not a dud frame", not a taste judgement:
+ * pass posterBeatId or posterAt when a specific frame is wanted.
+ */
+export function scoreFrameStats(stats: FrameStats): number {
+  const contrast = Math.min(1, stats.stdev / 40);
+  const exposure = stats.mean >= 30 && stats.mean <= 225 ? 1 : 0.3;
+  return stats.entropy * contrast * exposure;
+}
+
+/** The highest score wins; a tie goes to the earlier beat, since an opening frame is the safer poster. */
+export function pickBestScore(scores: { beatId: string; score: number }[]): string {
+  let best = scores[0];
+  for (const s of scores) if (s.score > best.score) best = s;
+  return best.beatId;
+}
+
+async function frameStats(file: string): Promise<FrameStats> {
+  const st = await sharp(file).greyscale().stats();
+  return { mean: st.channels[0].mean, stdev: st.channels[0].stdev, entropy: st.entropy };
+}
+
+// ---------------------------------------------------------------------------------------
+// Share: an export with a hard size cap
+// ---------------------------------------------------------------------------------------
+
+/** Rungs tried from the top, each no taller than the source. */
+const SHARE_HEIGHTS = [1080, 720, 540, 480, 360, 240];
+/** Bits per pixel per frame below which x264 starts to block and smear. Screen content is forgiving; this is not generous. */
+const SHARE_MIN_BPP = 0.05;
+/** Share of the cap the plan aims for, leaving room for container overhead and rate control that overshoots. */
+const SHARE_BUDGET = 0.92;
+
+export interface SharePlan {
+  width: number;
+  height: number;
+  videoKbps: number;
+  audioKbps: number;
+  fps: number;
+  /** True when even the smallest rung falls under SHARE_MIN_BPP: the cap is tight for this duration. */
+  tight: boolean;
+}
+
+/**
+ * Turns a size cap into an encode: the bitrate that fits (cap, minus the audio, over the
+ * duration) and the largest resolution that bitrate can still carry without blocking. A fixed
+ * preset cannot do this; it either blows a short clip's budget on nothing or starves a long
+ * one. Pure, so the arithmetic is testable without encoding anything.
+ */
+export function planShareEncode(opts: {
+  maxBytes: number;
+  durationSec: number;
+  srcWidth: number;
+  srcHeight: number;
+  fps: number;
+  hasAudio: boolean;
+  audioKbps?: number;
+  /** Scales the video bitrate down on a retry after the first attempt landed over the cap. */
+  bitrateScale?: number;
+}): SharePlan {
+  const audioKbps = opts.hasAudio ? (opts.audioKbps ?? 96) : 0;
+  const totalKbps = (opts.maxBytes * SHARE_BUDGET * 8) / 1000 / opts.durationSec;
+  const videoKbps = Math.max(50, Math.floor((totalKbps - audioKbps) * (opts.bitrateScale ?? 1)));
+  const fps = Math.min(opts.fps, 30);
+
+  const rungs = SHARE_HEIGHTS.filter((h) => h <= opts.srcHeight);
+  if (rungs.length === 0) rungs.push(opts.srcHeight);
+  const dims = (h: number) => ({ w: Math.max(2, Math.round((opts.srcWidth * h) / opts.srcHeight / 2) * 2), h: h - (h % 2) });
+  let chosen = dims(rungs[rungs.length - 1]);
+  let tight = true;
+  for (const h of rungs) {
+    const d = dims(h);
+    if ((videoKbps * 1000) / (d.w * d.h * fps) >= SHARE_MIN_BPP) {
+      chosen = d;
+      tight = false;
+      break;
+    }
+  }
+  return { width: chosen.w, height: chosen.h, videoKbps, audioKbps, fps, tight };
+}
+
+export function buildSharePassArgs(opts: {
+  inPath: string;
+  outPath: string;
+  plan: SharePlan;
+  pass: 1 | 2;
+  passLog: string;
+  hasAudio: boolean;
+}): string[] {
+  const { plan, pass } = opts;
+  const video = [
+    "-vf",
+    `scale=${plan.width}:${plan.height}:flags=lanczos,fps=${plan.fps}`,
+    "-c:v",
+    "libx264",
+    "-preset",
+    "medium",
+    "-pix_fmt",
+    "yuv420p",
+    "-b:v",
+    `${plan.videoKbps}k`,
+    // A ceiling just above the target and a buffer of two seconds keep rate control from
+    // spiking on a scene cut and pushing the file past a cap that the average alone would meet.
+    "-maxrate",
+    `${Math.round(plan.videoKbps * 1.25)}k`,
+    "-bufsize",
+    `${plan.videoKbps * 2}k`,
+    "-pass",
+    String(pass),
+    "-passlogfile",
+    opts.passLog,
+  ];
+  if (pass === 1) return ["-nostdin", "-y", "-i", opts.inPath, ...video, "-an", "-f", "null", "-"];
+  return [
+    "-nostdin",
+    "-y",
+    "-i",
+    opts.inPath,
+    ...video,
+    ...(opts.hasAudio ? ["-c:a", "aac", "-b:a", `${plan.audioKbps}k`, "-ar", "48000"] : ["-an"]),
+    "-movflags",
+    "+faststart",
+    opts.outPath,
+  ];
+}
+
+export interface ProbeInfo {
+  width: number;
+  height: number;
+  fps: number;
+  durationSec: number;
+  hasAudio: boolean;
+}
+
+export async function probeMedia(inPath: string, cwd: string): Promise<ProbeInfo> {
+  const r = await spawnCapture(
+    "ffprobe",
+    ["-v", "error", "-show_entries", "stream=codec_type,width,height,r_frame_rate:format=duration", "-of", "json", inPath],
+    cwd,
+  );
+  if (r.code !== 0) throw new Error(`ffprobe failed on ${inPath}:\n${r.stderr.slice(-600)}`);
+  const doc = JSON.parse(r.stdout) as {
+    streams?: { codec_type?: string; width?: number; height?: number; r_frame_rate?: string }[];
+    format?: { duration?: string };
+  };
+  const video = doc.streams?.find((st) => st.codec_type === "video");
+  if (!video?.width || !video.height) throw new Error(`${inPath} has no video stream.`);
+  const [num, den] = (video.r_frame_rate ?? "30/1").split("/").map(Number);
+  const durationSec = Number.parseFloat(doc.format?.duration ?? "");
+  if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error(`${inPath} has no usable duration.`);
+  return {
+    width: video.width,
+    height: video.height,
+    fps: den ? num / den : 30,
+    durationSec,
+    hasAudio: doc.streams?.some((st) => st.codec_type === "audio") ?? false,
+  };
+}
+
+async function exportShare(opts: {
+  projectRoot: string;
+  inPathRel: string;
+  outRel: string;
+  maxMB: number;
+  audioKbps?: number;
+  notes: string[];
+}): Promise<ShareResult> {
+  const { projectRoot, inPathRel, outRel, notes } = opts;
+  const maxBytes = Math.round(opts.maxMB * 1_000_000);
+  const probe = await probeMedia(inPathRel, projectRoot);
+  fs.mkdirSync(path.dirname(path.join(projectRoot, outRel)), { recursive: true });
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-share-"));
+  try {
+    const passLog = path.join(work, "pass");
+    let scale = 1;
+    let plan: SharePlan = planShareEncode({ maxBytes, durationSec: probe.durationSec, srcWidth: probe.width, srcHeight: probe.height, fps: probe.fps, hasAudio: probe.hasAudio, audioKbps: opts.audioKbps });
+    if (plan.tight) {
+      notes.push(
+        `${opts.maxMB}MB is tight for ${probe.durationSec.toFixed(0)}s of video: even ${plan.width}x${plan.height} gets ` +
+          `only ${plan.videoKbps}kbps, so expect visible blocking. Raise maxMB or export a shorter cut.`,
+      );
+    }
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      plan = planShareEncode({ maxBytes, durationSec: probe.durationSec, srcWidth: probe.width, srcHeight: probe.height, fps: probe.fps, hasAudio: probe.hasAudio, audioKbps: opts.audioKbps, bitrateScale: scale });
+      for (const pass of [1, 2] as const) {
+        const args = buildSharePassArgs({ inPath: inPathRel, outPath: outRel, plan, pass, passLog, hasAudio: probe.hasAudio });
+        const r = await spawnCapture("ffmpeg", args, projectRoot);
+        if (r.code !== 0) throw new Error(`share encode pass ${pass} failed:\n${r.stderr.slice(-1200)}`);
+      }
+      const bytes = fs.statSync(path.join(projectRoot, outRel)).size;
+      if (bytes <= maxBytes) {
+        notes.push(`${(bytes / 1_000_000).toFixed(2)}MB, under the ${opts.maxMB}MB cap, at ${plan.width}x${plan.height}.`);
+        return { path: outRel, bytes, maxBytes, withinCap: true, width: plan.width, height: plan.height, videoKbps: plan.videoKbps, audioKbps: plan.audioKbps, attempts: attempt };
+      }
+      // Over the cap: aim for 3% under it from the size this attempt actually produced.
+      scale *= (maxBytes * 0.97) / bytes;
+    }
+    const bytes = fs.statSync(path.join(projectRoot, outRel)).size;
+    notes.push(`Still ${(bytes / 1_000_000).toFixed(2)}MB after 3 attempts, over the ${opts.maxMB}MB cap. Raise maxMB or export a shorter cut.`);
+    return { path: outRel, bytes, maxBytes, withinCap: false, width: plan.width, height: plan.height, videoKbps: plan.videoKbps, audioKbps: plan.audioKbps, attempts: 3 };
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+}
+
 function readBeats(projectRoot: string, videoName: string): { fps: number; beats: RenditionBeat[] } {
   const beatsPath = path.join(projectRoot, "src", "videos", videoName, "beats.json");
   if (!fs.existsSync(beatsPath)) {
@@ -294,8 +547,28 @@ export async function runExportRendition(input: ExportRenditionInput): Promise<E
 
   if (input.format === "poster") {
     let atSeconds: number;
+    let pickInfo: ExportRenditionResult["posterPick"];
     if (typeof input.posterAt === "number") {
       atSeconds = input.posterAt;
+    } else if (!input.posterBeatId && input.posterPick === "auto") {
+      // Score every beat's midpoint frame and take the best. Frames go to a temp dir: they are
+      // an intermediate, and the winner is re-extracted below like any other poster.
+      const work = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-poster-"));
+      try {
+        const scores: { beatId: string; score: number }[] = [];
+        for (const beat of beats) {
+          const probeFile = path.join(work, `${beat.id}.png`);
+          const r = await spawnCapture("ffmpeg", buildFrameArgs(inPathRel, beatMidpointSeconds(beat, fps), probeFile), projectRoot);
+          if (r.code !== 0 || !fs.existsSync(probeFile)) throw new Error(`poster scoring: frame extraction failed for beat "${beat.id}":\n${r.stderr.slice(-600)}`);
+          scores.push({ beatId: beat.id, score: Number(scoreFrameStats(await frameStats(probeFile)).toFixed(3)) });
+        }
+        const winner = beats.find((b) => b.id === pickBestScore(scores))!;
+        atSeconds = beatMidpointSeconds(winner, fps);
+        pickInfo = { beatId: winner.id, seconds: atSeconds, scores };
+        notes.push(`posterPick auto chose beat "${winner.id}" (score ${scores.find((x) => x.beatId === winner.id)!.score}).`);
+      } finally {
+        fs.rmSync(work, { recursive: true, force: true });
+      }
     } else {
       const beatId = input.posterBeatId ?? beats[beats.length - 1].id;
       const beat = beats.find((b) => b.id === beatId);
@@ -332,7 +605,20 @@ export async function runExportRendition(input: ExportRenditionInput): Promise<E
       );
     }
 
-    return { format: "poster", files, notes, ...(bakedPath ? { bakedPath } : {}) };
+    return { format: "poster", files, notes, ...(bakedPath ? { bakedPath } : {}), ...(pickInfo ? { posterPick: pickInfo } : {}) };
+  }
+
+  if (input.format === "share") {
+    const outRel = input.outPath ?? path.join(path.dirname(inPathRel), `${videoName}-share.mp4`);
+    sanitizeRelativeOutPath(projectRoot, outRel, "outPath");
+    if (path.resolve(projectRoot, outRel) === path.resolve(projectRoot, inPathRel)) {
+      throw new Error("outPath is the same file as the input render. Pick a different outPath.");
+    }
+    const maxMB = input.maxMB ?? 10;
+    if (!(maxMB > 0)) throw new Error("maxMB must be a positive number.");
+    const share = await exportShare({ projectRoot, inPathRel, outRel, maxMB, audioKbps: input.audioKbps, notes });
+    files.push(outRel);
+    return { format: "share", files, notes, share };
   }
 
   const deviceKey = input.device ?? "iphone-6.9";
@@ -390,12 +676,17 @@ export function registerExportRendition(server: McpServer): void {
         "baked in as the file's embedded thumbnail (an attached_pic stream, the same mechanism a podcast " +
         "mp3's cover art uses), copied not re-encoded, so video and audio quality are untouched. Skipping " +
         "this step is why a shared video's idle thumbnail is so often a black frame or a mid-motion blur " +
-        "instead of the frame that was actually chosen to represent it. All four formats read the finished " +
+        "instead of the frame that was actually chosen to represent it. With posterPick: \"auto\" the frame is chosen " +
+        "by scoring every beat's midpoint (luma entropy and contrast, penalising near-black and blown-out " +
+        "frames) instead of defaulting to the last beat. format: \"share\" encodes a copy under a hard size cap " +
+        "(maxMB, default 10): the bitrate is computed from the cap and the duration, the largest resolution " +
+        "that bitrate can carry is chosen, it is encoded two-pass H.264 with +faststart, and the file on disk " +
+        "is measured and re-encoded smaller if it came out over the cap. All five formats read the finished " +
         "render plus beats.json rather than re-capturing, so run render_video first.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
-        format: z.enum(["gif", "screenshots", "store-frames", "poster"]),
+        format: z.enum(["gif", "screenshots", "store-frames", "poster", "share"]),
         inPath: z.string().optional().describe("The finished render. Defaults to output/<videoName>.mp4."),
         outDir: z.string().optional(),
         outPath: z.string().optional().describe("gif and poster only."),
@@ -409,6 +700,12 @@ export function registerExportRendition(server: McpServer): void {
         posterBeatId: z.string().optional().describe("poster only. Defaults to the last beat."),
         posterAt: z.number().optional().describe("poster only. Exact seconds, overriding posterBeatId."),
         bake: z.boolean().optional().describe("poster only. Defaults to true."),
+        posterPick: z
+          .enum(["last", "auto"])
+          .optional()
+          .describe('poster only. "last" (default) is the last beat\'s midpoint; "auto" scores every beat\'s midpoint and takes the most representative frame.'),
+        maxMB: z.number().positive().optional().describe("share only. Size cap in megabytes (1MB = 1,000,000 bytes). Defaults to 10."),
+        audioKbps: z.number().int().positive().optional().describe("share only. Defaults to 96."),
       },
     },
     async (input) => runTool("export_rendition", () => runExportRendition(input)),

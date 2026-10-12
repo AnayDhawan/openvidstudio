@@ -49,6 +49,8 @@ export interface FactsDocument {
   video: {
     composition: Record<string, unknown> | null;
     render: Record<string, unknown> | null;
+    /** The last finalize_video run: the measured loudness, the poster beat, the share copy. */
+    final: Record<string, unknown> | null;
     validation: Record<string, unknown>;
   };
   discrepancies: { beatId: string; kind: string; detail: string }[];
@@ -101,6 +103,7 @@ export function buildFactsDocument(opts: {
   const renders = mine.filter((r) => r.tool === "render_video");
   const latestRender = renders[renders.length - 1] ?? null;
   const latestStitch = [...mine].reverse().find((r) => r.tool === "stitch_composition") ?? null;
+  const latestFinal = [...mine].reverse().find((r) => r.tool === "finalize_video") ?? null;
 
   const discrepancies: FactsDocument["discrepancies"] = [];
   const beatFacts: Record<string, BeatFacts> = {};
@@ -191,6 +194,7 @@ export function buildFactsDocument(opts: {
     video: {
       composition: latestStitch ? { recordedAt: latestStitch.recordedAt, ...latestStitch.facts } : null,
       render: latestRender ? { recordedAt: latestRender.recordedAt, ...latestRender.facts } : null,
+      final: latestFinal ? { recordedAt: latestFinal.recordedAt, ...latestFinal.facts } : null,
       validation: videoValidation,
     },
     discrepancies,
@@ -242,7 +246,7 @@ export function registerCollectFacts(server: McpServer): void {
       description:
         "Reads the run records tools leave in .openvidstudio/runs/ (capture_screenshot, " +
         "capture_screen_recording, capture_terminal, capture_desktop, capture_mobile, " +
-        "import_higgsfield_clip, stitch_composition, render_video, validate_scenes, validate_beats) and merges " +
+        "import_higgsfield_clip, stitch_composition, render_video, finalize_video, validate_scenes, validate_beats) and merges " +
         "the ones belonging to this video into src/videos/<videoName>/facts.json, keyed by beat id: what " +
         "captured it and when, whether the last render rendered or reused it, what each validator flagged. " +
         "Then compares that with beats.json and lists discrepancies, such as a beat that claims a real " +

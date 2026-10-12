@@ -64,6 +64,13 @@ await replayInteractions(page, [{ type: "click", selector: "[data-tour=start]" }
 await page.screenshot({ path: "shot.png" });
 ```
 
+This is runnable as written after starting an app on `localhost:3000` and installing Chromium:
+
+```bash
+npx playwright install chromium
+node capture.mjs
+```
+
 ```ts
 import { buildDesktopCaptureArgs } from "@openvidstudio/capture";
 

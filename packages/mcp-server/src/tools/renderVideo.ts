@@ -265,11 +265,9 @@ export async function runRenderVideo(input: RenderVideoInput): Promise<RenderVid
   const brandLocked = fs.existsSync(path.join(projectRoot, "src", "brand.ts"));
   if (!brandLocked && input.skipBrandLock !== true) {
     throw new Error(
-      "Brand-lock gate: no src/brand.ts found in this project. Run extract_brand against the repo being " +
-        "filmed first (it writes src/brand.ts even when most tokens stay at the openvidstudio default, " +
-        "reporting exactly what it couldn't resolve rather than inventing anything) so the render wears " +
-        "that product's identity instead of openvidstudio's own navy/Inter default. If this project " +
-        "deliberately has no brand to extract, pass skipBrandLock: true.",
+      `Brand-lock gate: no src/brand.ts found in this project. Run extract_brand with ` +
+        `{ sourceRepo: "${projectRoot}" } before rendering. It writes src/brand.ts from the repo being filmed. ` +
+        "If this project deliberately has no brand to extract, pass skipBrandLock: true.",
     );
   }
 

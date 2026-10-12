@@ -26,16 +26,20 @@ export interface ScaffoldSceneInput {
   overwrite?: boolean;
   /** Override the automatic template choice. */
   template?: TemplateName;
+  /** Return the generated source without writing a scene file. */
+  dryRun?: boolean;
 }
 
 export interface ScaffoldSceneResult {
-  written: true;
+  written: boolean;
   path: string;
   componentName: string;
   template: TemplateName;
   /** True when the beat was found in beats.json and its content was used. */
   usedBeat: boolean;
   notes: string[];
+  /** Present for dry runs so callers can inspect the exact generated scene. */
+  source?: string;
 }
 
 interface BeatLike {
@@ -221,16 +225,19 @@ export function runScaffoldScene(input: ScaffoldSceneInput): ScaffoldSceneResult
   const template = input.template ?? pickTemplate(input.kind, description);
   const source = renderTemplate(template, ctx, input.kind);
 
-  fs.mkdirSync(scenesDir, { recursive: true });
-  fs.writeFileSync(filePath, source, "utf8");
+  if (!input.dryRun) {
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(filePath, source, "utf8");
+  }
 
   return {
-    written: true,
+    written: !input.dryRun,
     path: filePath,
     componentName,
     template,
     usedBeat: Boolean(beat),
     notes,
+    ...(input.dryRun ? { source } : {}),
   };
 }
 
@@ -281,6 +288,7 @@ export function registerScaffoldScene(server: McpServer): void {
             "existing-asset",
           ])
           .optional(),
+        dryRun: z.boolean().optional().describe("Return generated source without writing a file."),
       },
     },
     async (input) => runTool("scaffold_scene", () => runScaffoldScene(input)),

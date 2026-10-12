@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "An openvidstudio video project, scaffolded from templates/default.",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
     "@remotion/cli": "4.0.532",

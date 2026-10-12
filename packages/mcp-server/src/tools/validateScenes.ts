@@ -252,12 +252,15 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
       }
     }
 
-    if (/TODO/.test(src)) {
+    const todo = src.match(/TODO/g);
+    if (todo) {
+      const offset = src.indexOf("TODO");
+      const line = src.slice(0, offset).split("\n").length;
       findings.push({
         beatId: beat.id,
         scene: `${component}.tsx`,
         severity: "warning",
-        message: `Still contains a TODO.`,
+        message: `Still contains a TODO at ${component}.tsx:${line}.`,
       });
     }
   }

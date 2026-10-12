@@ -3,6 +3,9 @@
   "version": "0.2.0",
   "description": "Camera rig, motion, SFX, look pass, and scene components shared by every openvidstudio video project.",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "commonjs",
   "main": "src/index.ts",
   "types": "src/index.ts",

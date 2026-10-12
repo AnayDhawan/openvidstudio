@@ -84,11 +84,11 @@ export interface ComposeScoreInput {
   /** Bare filename under public/audio/, ending in .mp3. Defaults to "music-bed.mp3". */
   outFile?: string;
   /**
-   * "bed" (default): -15 LUFS, mastered to sit under narration, matching MusicBed's own
+   * "bed": -15 LUFS, mastered to sit under narration, matching MusicBed's own
    * quiet-by-design convention (see NARRATION.md). "music": -14 LUFS, for a music-only
    * video (narration: "none") where the score is the only thing on the audio track.
    */
-  mode?: "bed" | "music";
+  mode: "bed" | "music";
 }
 
 export interface ComposeScoreResult {
@@ -177,7 +177,7 @@ interface ComposeScoreSpec {
   key: string;
   sections: { label: string; bars: number }[];
   impacts: { label: string; atBar: number; atBeat: number }[];
-  mode?: "bed" | "music";
+  mode: "bed" | "music";
   trackName: string;
   outWav: string;
   outCues: string;
@@ -190,14 +190,14 @@ export function buildComposeScoreSpec(
   outWav: string,
   outCues: string,
   outSpectrogram: string,
-  mode?: "bed" | "music",
+  mode: "bed" | "music",
 ): ComposeScoreSpec {
   return {
     bpm: music.bpm,
     key: music.key,
     sections: sectionsToPythonSections(music.sectionMap),
     impacts: impactPointsToPythonImpacts(music.impactPoints),
-    ...(mode ? { mode } : {}),
+    mode,
     trackName,
     outWav,
     outCues,
@@ -280,6 +280,9 @@ function probeDurationSeconds(mp3Abs: string): number {
 }
 
 export function runComposeScore(input: ComposeScoreInput): ComposeScoreResult {
+  if (input.mode !== "bed" && input.mode !== "music") {
+    throw new Error('mode is required: choose "bed" for narrated video (-15 LUFS) or "music" for music-only video (-14 LUFS).');
+  }
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const music = loadMusicPlan(projectRoot, videoName, input.music);
@@ -436,8 +439,8 @@ export function registerComposeScore(server: McpServer): void {
         "auto-detection already looks. Also writes public/audio/<stem>.cues.json with source: \"generated\", " +
         "so plan_music_cues treats it as ground truth and returns it directly rather than re-analyzing, and " +
         "keeps the script's diagnostic spectrogram PNG permanently at public/audio/<stem>.spectrogram.png. " +
-        "mode controls the mastering target: \"bed\" (default, -15 LUFS) for a score that sits under " +
-        "narration, \"music\" (-14 LUFS) for a music-only video with no narration at all. Validates that the " +
+        "mode is required: choose \"bed\" (-15 LUFS) for narrated videos, which most callers want, since it sits under " +
+        "voiceover; choose \"music\" (-14 LUFS) only for a music-only video with no narration. No silent default. Validates that the " +
         "brief's sectionMap is contiguous (each section's endBar equal to the next section's startBar) " +
         "before composing anything, and throws naming exactly which two sections don't connect if not. " +
         "Surfaces the script's own mastering checks as a warnings array: a band-balance verdict other than " +
@@ -453,7 +456,7 @@ export function registerComposeScore(server: McpServer): void {
             "src/videos/<videoName>/brief.json.",
         ),
         outFile: z.string().optional().describe('Bare filename under public/audio/, ending in .mp3. Defaults to "music-bed.mp3".'),
-        mode: z.enum(["bed", "music"]).optional().describe('"bed" (default, -15 LUFS) sits under narration; "music" (-14 LUFS) is for a music-only video.'),
+        mode: z.enum(["bed", "music"]).describe('Required: "bed" (-15 LUFS) for narrated videos (most common); "music" (-14 LUFS) for music-only videos. No default.'),
       },
     },
     async (input) => runTool("compose_score", () => runComposeScore(input)),

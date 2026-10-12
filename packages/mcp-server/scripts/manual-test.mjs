@@ -3366,7 +3366,8 @@ console.log("\n== Part 42: README's tool count matches what actually gets regist
   const readmeText = fs.readFileSync(path.join(monorepoRoot, "README.md"), "utf8");
   const NUMBER_WORDS = {
     twentyeight: 28, twentynine: 29, thirty: 30, thirtyone: 31, thirtytwo: 32,
-    thirtythree: 33, thirtyfour: 34, thirtyfive: 35, thirtysix: 36,
+    thirtythree: 33, thirtyfour: 34, thirtyfive: 35, thirtysix: 36, thirtyseven: 37,
+    thirtyeight: 38, thirtynine: 39, forty: 40, fortyone: 41, fortytwo: 42,
   };
   const wordToNumber = (w) => NUMBER_WORDS[w.toLowerCase().replace(/-/g, "")];
   const m = /through (\w[\w-]*) tools, (\w[\w-]*) with the Higgsfield tier enabled/.exec(readmeText);
@@ -3823,7 +3824,13 @@ console.log("\n== Part 50: stitch_composition's per-beat scene override, and its
     fps: 30,
     // 12 words over 150 frames at 30fps (5.0s) is 2.4 words/sec, inside SCRIPT.md's
     // 2.3-2.9 budget -- this is a fixture for the scene field, not a VO-pacing test.
-    beats: [{ id: "b1", start: 0, duration: 150, vo: "A line that holds the pace this beat needs for its length.", scene }],
+    // visual is required on every beat regardless of a scene override (PLANNING.md S4).
+    beats: [{
+      id: "b1", start: 0, duration: 150,
+      vo: "A line that holds the pace this beat needs for its length.",
+      visual: { captureMethod: "dom-demo" },
+      scene,
+    }],
   });
   check("validate_beats accepts a beat with a real, non-empty scene override", validateC5SceneBeats(sceneBeat("./scenes/B1.tsx")).valid);
   check(
@@ -4038,7 +4045,7 @@ export const BespokeC4Check: React.FC = () => {
     path.join(videoDir, "beats.json"),
     JSON.stringify({
       fps: 30,
-      beats: [{ id: "check", start: 0, duration: 150, scene: "./custom-scenes/BespokeC4Check.tsx" }],
+      beats: [{ id: "bespoke-c4-check", start: 0, duration: 150, scene: "./custom-scenes/BespokeC4Check.tsx" }],
     }),
   );
 

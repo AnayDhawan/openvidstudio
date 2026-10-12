@@ -210,6 +210,7 @@ console.log("\n== Part 2b: C3 compose_score real generation ==");
     const result = runComposeScore({
       projectRoot: scoreRoot,
       videoName: "score-check",
+      mode: "bed",
       music: {
         bpm: 120,
         key: "C major",

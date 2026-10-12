@@ -12,18 +12,18 @@
     "public"
   ],
   "dependencies": {
-    "@remotion/google-fonts": "4.0.524"
+    "@remotion/google-fonts": "4.0.532"
   },
   "peerDependencies": {
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "remotion": "4.0.524"
+    "remotion": "4.0.532"
   },
   "devDependencies": {
     "@types/react": "19.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "remotion": "4.0.524",
+    "remotion": "4.0.532",
     "typescript": "5.9.3"
   },
   "scripts": {

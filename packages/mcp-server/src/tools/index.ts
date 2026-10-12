@@ -33,6 +33,7 @@ import { registerPlanShots } from "./planShots";
 import { registerReleaseDiff } from "./releaseDiff";
 import { registerMusicCues } from "./musicCues";
 import { registerMusicLibrary } from "./musicLibrary";
+import { registerComposeScore } from "./composeScore";
 import { registerCatalogMotionPrimitives, registerAddMotionPrimitive } from "./motionPrimitives";
 import { registerWriteDescription } from "./writeDescription";
 import { registerRenderStills } from "./renderStills";
@@ -80,6 +81,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerReleaseDiff(server);
   registerMusicCues(server);
   registerMusicLibrary(server);
+  registerComposeScore(server);
   registerCatalogMotionPrimitives(server);
   registerAddMotionPrimitive(server);
   registerWriteDescription(server);

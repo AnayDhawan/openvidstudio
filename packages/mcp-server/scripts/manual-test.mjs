@@ -195,6 +195,46 @@ console.log("\n== Part 2: C9 write_description disclosure ==");
   );
 }
 
+console.log("\n== Part 2b: C3 compose_score real generation ==");
+{
+  const python = spawnSync(process.platform === "win32" ? "where" : "which", ["python"], { encoding: "utf8" });
+  const deps = python.status === 0
+    ? spawnSync("python", ["-c", "import numpy, scipy, soundfile, pyloudnorm, matplotlib"], { encoding: "utf8" })
+    : { status: 1 };
+  if (deps.status !== 0) {
+    skip("C3 compose_score real generation", "python DSP dependencies are not installed");
+  } else {
+    const { runComposeScore } = require(path.join(distDir, "tools", "composeScore.js"));
+    const { runMusicCues } = require(path.join(distDir, "tools", "musicCues.js"));
+    const scoreRoot = path.join(tmpRoot, "c3-score");
+    const result = runComposeScore({
+      projectRoot: scoreRoot,
+      videoName: "score-check",
+      mode: "bed",
+      music: {
+        bpm: 120,
+        key: "C major",
+        sectionMap: [
+          { label: "intro", startBar: 0, endBar: 2 },
+          { label: "reveal", startBar: 2, endBar: 4 },
+        ],
+        impactPoints: [{ name: "reveal", bar: 2 }],
+      },
+    });
+    const cueResult = await runMusicCues({ projectRoot: scoreRoot, track: result.mp3Path });
+    check(
+      "C3 writes a real mp3, cues file, and spectrogram",
+      fs.statSync(path.join(scoreRoot, result.mp3Path)).size > 0 &&
+        fs.existsSync(path.join(scoreRoot, result.cuesPath)) &&
+        fs.existsSync(path.join(scoreRoot, result.spectrogramPath)),
+    );
+    check(
+      "C3 generated cues round trip through plan_music_cues from cache",
+      cueResult.source === "cached" && cueResult.bpm === 120 && cueResult.track === result.mp3Path,
+    );
+  }
+}
+
 console.log("\n== Part 3: write_beats_file -> scaffold_scene x3 -> stitch_composition ==");
 
 const beatsJson = {
@@ -3326,7 +3366,8 @@ console.log("\n== Part 42: README's tool count matches what actually gets regist
   const readmeText = fs.readFileSync(path.join(monorepoRoot, "README.md"), "utf8");
   const NUMBER_WORDS = {
     twentyeight: 28, twentynine: 29, thirty: 30, thirtyone: 31, thirtytwo: 32,
-    thirtythree: 33, thirtyfour: 34, thirtyfive: 35, thirtysix: 36,
+    thirtythree: 33, thirtyfour: 34, thirtyfive: 35, thirtysix: 36, thirtyseven: 37,
+    thirtyeight: 38, thirtynine: 39, forty: 40, fortyone: 41, fortytwo: 42,
   };
   const wordToNumber = (w) => NUMBER_WORDS[w.toLowerCase().replace(/-/g, "")];
   const m = /through (\w[\w-]*) tools, (\w[\w-]*) with the Higgsfield tier enabled/.exec(readmeText);
@@ -3783,7 +3824,13 @@ console.log("\n== Part 50: stitch_composition's per-beat scene override, and its
     fps: 30,
     // 12 words over 150 frames at 30fps (5.0s) is 2.4 words/sec, inside SCRIPT.md's
     // 2.3-2.9 budget -- this is a fixture for the scene field, not a VO-pacing test.
-    beats: [{ id: "b1", start: 0, duration: 150, vo: "A line that holds the pace this beat needs for its length.", scene }],
+    // visual is required on every beat regardless of a scene override (PLANNING.md S4).
+    beats: [{
+      id: "b1", start: 0, duration: 150,
+      vo: "A line that holds the pace this beat needs for its length.",
+      visual: { captureMethod: "dom-demo" },
+      scene,
+    }],
   });
   check("validate_beats accepts a beat with a real, non-empty scene override", validateC5SceneBeats(sceneBeat("./scenes/B1.tsx")).valid);
   check(
@@ -3998,7 +4045,7 @@ export const BespokeC4Check: React.FC = () => {
     path.join(videoDir, "beats.json"),
     JSON.stringify({
       fps: 30,
-      beats: [{ id: "check", start: 0, duration: 150, scene: "./custom-scenes/BespokeC4Check.tsx" }],
+      beats: [{ id: "bespoke-c4-check", start: 0, duration: 150, scene: "./custom-scenes/BespokeC4Check.tsx" }],
     }),
   );
 

@@ -15,8 +15,8 @@ Before §1's fixed questions, before drafting anything: ask two questions.
    - **peak**: full creative liberty. A cold-open hook, tension, a problem,
      a reveal, chapters, a payoff, an optional twist. A bespoke design
      system and motion language derived from the brand. An original,
-     arc-matched score. Custom scenes, not templates. Three or more
-     rounds of stills review.
+     arc-matched score (`compose_score`, see `NARRATION.md`). Custom scenes, not
+     templates. Three or more rounds of stills review.
    - **mid**: strong defaults. The arc from §3 below (hook, problem, demo
      x2-3, differentiator, cta). The built-in `pulse-bed.mp3` or a CC0
      track. A mix of templates and the occasional custom scene where a

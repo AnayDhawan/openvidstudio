@@ -25,6 +25,7 @@ import {
   type CachedSegment,
 } from "../renderCache";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 import { createJob, updateJobProgress, completeJob, failJob } from "../jobs";
 
 export interface RenderVideoInput {
@@ -451,7 +452,35 @@ export function prepareRenderVideo(input: RenderVideoInput): PreparedRenderVideo
   return { videoName, projectRoot, compositionId, outPathRel, brandLocked };
 }
 
+/**
+ * Records what this render actually did next to what was asked: which beats were rendered
+ * and which came from the cache, and the size of the file that landed. The result's own
+ * stdout/stderr stay out of the record, they are logs, not facts.
+ */
 export async function runRenderVideo(input: RenderVideoInput, opts: RenderVideoOpts = {}): Promise<RenderVideoResult> {
+  const result = await renderVideoUnrecorded(input, opts);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "render_video",
+    videoName: sanitizeSegment(input.videoName, "videoName"),
+    facts: {
+      success: result.success,
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: result.success ? fileBytes(result.outPath) : null,
+      draft: result.draft,
+      incremental: input.incremental === true,
+      elapsedSeconds: result.elapsedSeconds,
+      brandLocked: result.brandLocked,
+      ...(result.renderedBeats ? { renderedBeats: result.renderedBeats } : {}),
+      ...(result.reusedBeats ? { reusedBeats: result.reusedBeats } : {}),
+      ...(result.framesRendered !== undefined ? { framesRendered: result.framesRendered } : {}),
+      ...(result.totalFrames !== undefined ? { totalFrames: result.totalFrames } : {}),
+    },
+  });
+  return result;
+}
+
+async function renderVideoUnrecorded(input: RenderVideoInput, opts: RenderVideoOpts): Promise<RenderVideoResult> {
   const { videoName, projectRoot, compositionId, outPathRel, brandLocked } = prepareRenderVideo(input);
 
   const started = Date.now();

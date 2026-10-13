@@ -11,6 +11,7 @@ import {
   type TerminalStep,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 /**
  * Records a real command run, as timed text rather than as pixels.
@@ -67,7 +68,30 @@ const stepSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("wait"), ms: z.number().int().positive() }),
 ]);
 
-export async function runCaptureTerminal(input: CaptureTerminalInput): Promise<CaptureTerminalResult> {
+export async function runCaptureTerminal(
+  input: CaptureTerminalInput
+): Promise<CaptureTerminalResult> {
+  const result = await captureTerminal(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_terminal",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      command: [input.command, ...(input.args ?? [])].join(" "),
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      eventCount: result.eventCount,
+      mode: result.mode,
+      truncated: result.truncated,
+    },
+  });
+  return result;
+}
+
+async function captureTerminal(input: CaptureTerminalInput): Promise<CaptureTerminalResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
 

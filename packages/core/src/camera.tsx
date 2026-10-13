@@ -85,6 +85,7 @@ export const CameraRig: React.FC<{
         }}
       >
         <div
+          data-ovs-camera-stage=""
           style={{
             width: stageWidth,
             height: stageHeight,

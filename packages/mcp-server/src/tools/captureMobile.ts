@@ -14,6 +14,7 @@ import {
   spawnForDuration,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 export type MobilePlatform = "android" | "ios-simulator";
 
@@ -130,7 +131,27 @@ async function captureIosSimulator(
   }
 }
 
-export async function runCaptureMobile(input: CaptureMobileInput): Promise<CaptureMobileResult> {
+export async function runCaptureMobile(
+  input: CaptureMobileInput
+): Promise<CaptureMobileResult> {
+  const result = await captureMobile(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_mobile",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      device: result.device,
+      deviceId: result.deviceId,
+      durationSeconds: result.durationSeconds,
+    },
+  });
+  return result;
+}
+
+async function captureMobile(input: CaptureMobileInput): Promise<CaptureMobileResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const deviceId = input.deviceId ? sanitizeDeviceId(input.deviceId) : undefined;

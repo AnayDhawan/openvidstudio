@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath } from "../util";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 /**
  * `import_higgsfield_clip` does NOT call Higgsfield itself. See HIGGSFIELD.md and
@@ -66,6 +67,25 @@ function readLocalFile(sourcePath: string): Buffer {
  * are trusted as-is from whichever source the calling agent already produced.
  */
 export async function runImportHiggsfieldClip(
+  input: ImportHiggsfieldClipInput,
+  deps: ImportHiggsfieldClipDeps = {},
+): Promise<ImportHiggsfieldClipResult> {
+  const result = await importHiggsfieldClip(input, deps);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "import_higgsfield_clip",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "generated-clip",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      sourceType: input.source.type,
+    },
+  });
+  return result;
+}
+
+async function importHiggsfieldClip(
   input: ImportHiggsfieldClipInput,
   deps: ImportHiggsfieldClipDeps = {},
 ): Promise<ImportHiggsfieldClipResult> {

@@ -184,6 +184,23 @@ regenerated from `beats.json` on every run.
 - Write `<video>/script.md`: VO table (timestamps from markers), delivery
   notes, description draft. See `SCRIPT.md` for VO pacing/duration rules.
 
+### Final assembly
+
+`finalize_video` is the last pass over a finished render. It measures the mix's
+real integrated loudness, true peak and range, then normalises it two-pass with
+ffmpeg's `loudnorm`: the first pass measures, the second applies a linear gain
+computed from those numbers, and the video stream is copied, not re-encoded. The
+written file is measured again, and the result says whether it landed within 1 LU
+of the target. The target is **-14 LUFS integrated, -1.5 dBTP**. That is not the
+-15 `compose_score` uses for `mode: "bed"`: that figure is the music alone sitting
+under narration, while this is the finished mix, and -14 is the level the large
+video platforms normalise to. Override it with `targetLufs` / `truePeakDb`.
+
+It writes `output/<video>-final.mp4` (the original render is kept), a poster
+frame, and a copy under a size cap (`shareMaxMB`, default 10). Pass `poster:
+false` or `share: false` to skip either. A render with no audio track skips the
+loudness step and says so.
+
 ### Other outputs from the same render
 
 The finished mp4 is one consumer of the beats, not the only one. All of these
@@ -196,6 +213,17 @@ read the render plus `beats.json`, so none of them can drift from the video:
   an index pairing each with that beat's narration, which is already written.
 - `export_rendition` with `format: "store-frames"` writes App Store and Play
   Store images at the exact dimensions each store rejects submissions over.
+- `export_rendition` with `format: "poster"` writes one still. By default it is
+  the last beat's midpoint; with `posterPick: "auto"` every beat's midpoint is
+  scored (luma entropy and contrast, penalising near-black and blown-out frames)
+  and the best one wins, so the thumbnail is not a fade or a call-to-action card
+  by accident.
+- `export_rendition` with `format: "share"` writes a copy under a hard size cap
+  (`maxMB`, default 10, where 1MB is 1,000,000 bytes). The bitrate comes from the
+  cap and the duration, the largest resolution that bitrate can carry without
+  blocking is chosen, it is encoded two-pass H.264, and the file on disk is
+  measured and re-encoded smaller if it came out over. When the cap cannot be met
+  it says so rather than reporting success.
 - `reformat_vertical` writes a 9:16 cut with the crop chosen per beat from the
   manifest rather than by taking the middle of the frame.
 
@@ -212,6 +240,36 @@ read the render plus `beats.json`, so none of them can drift from the video:
   before/after manifest covering only the routes that actually changed on
   screen. It does not write the narration and does not install the manifest:
   both go through the approval gate in `PLANNING.md` §5.
+
+## Run records and facts
+
+A beat's text says what was intended. A run record says what actually happened. Each tool
+that captures, composes, renders or validates writes one small JSON file to
+`.openvidstudio/runs/<tool>-<timestamp>.json` when it finishes: a capture records what it
+captured (URL or command, output path, real size on disk, whether the page settled), a render
+records the size of the file that landed and which beats it rendered or reused from the cache,
+a validator records its findings. Writing a record never fails the tool: an unwritable runs
+directory is logged to stderr and the tool's own result is returned untouched.
+
+`collect_facts` (one call per video) merges the records that belong to a video into
+`src/videos/<video>/facts.json`, keyed by beat id, and compares them with `beats.json`:
+
+- `provenance` per beat is `capture` (a capture tool ran for it), `construction` (the beat
+  claims no capture, e.g. `dom-demo`) or `unverified` (it claims a capture and none ran).
+- `discrepancies` lists a beat that claims a capture with no record behind it, and a recorded
+  capture whose file is no longer on disk.
+- Only the latest record per tool is kept per beat. Older records stay in the runs directory.
+
+Per-beat records (captures) take no video name, so they belong to every video whose
+`beats.json` has that beat id. Video-level records (render, validate, stitch) are matched by
+`videoName`. `validate_beats` validates a draft that is not on disk, so it only writes a record
+when you pass it `videoName`.
+
+Not instrumented, on purpose: `plan_*`, `write_*`, `scaffold_scene` and the other tools that
+draft something for approval produce intent, which beats.json and brief.json already hold;
+`extract_brand`, `contact_sheet` and `qc_extract_frames` write their own artifacts, which are
+the evidence. `render_stills`, `compose_score` and `write_description` are the judgment calls: they
+write files the next tool reads, and nothing downstream checks a claim against them yet.
 
 ## Asset conventions
 
@@ -234,6 +292,9 @@ VO specifically, silently omits the layer with no warning:
 | Translated VO | `public/audio/vo/<lang>/<beatId>.mp3` | `generate_narration` with `languages` | `stitch_composition`, as that language's composition |
 | Beat segments and their cache | `output/segments/<video>/` | `render_video` with `incremental` | `render_video`, on the next run |
 | Visual baseline | `.openvidstudio/visual-baseline/<video>/<beatId>.png` | `visual_regression` | `visual_regression`, on the next run. Commit these |
+| Final master, poster, share copy | `output/<video>-final.mp4`, `output/<video>-poster.jpg`, `output/<video>-share.mp4` | `finalize_video` | pick up / upload from here |
+| Run record | `.openvidstudio/runs/<tool>-<timestamp>.json` | `capture_screenshot`, `capture_screen_recording`, `capture_terminal`, `capture_desktop`, `capture_mobile`, `import_higgsfield_clip`, `stitch_composition`, `render_video`, `finalize_video`, `validate_scenes`, `validate_beats` (with `videoName`) | `collect_facts`. Local evidence, not source: gitignore `.openvidstudio/runs/` |
+| Facts | `src/videos/<video>/facts.json` | `collect_facts` | a reviewer, or any check that wants to hold a claim up against what ran. Commit it if you want it reviewed |
 | Capture sidecar | `<asset>.capture.json` (next to the screenshot it describes) | `capture_screenshot`, `capture_screen_recording`, `release_diff` | `docs_drift` / `release_diff`, to re-capture at the same CSS viewport and scale the reference actually used |
 
 Every path in this table is also the default a beat's `artifacts` field

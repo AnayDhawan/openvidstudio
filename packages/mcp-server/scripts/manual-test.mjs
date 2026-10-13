@@ -4062,6 +4062,460 @@ export const BespokeC4Check: React.FC = () => {
   skip("Part 52: C4 primitives real render", "no resolvable node_modules to scaffold a renderable project from");
 }
 
+console.log("\n== Part 53: validate_scenes render mode, pure judgement (C7) ==");
+{
+  const { judgeBeat, readTypeMinimums, MAX_READING_WORDS_PER_SEC } = require(path.join(distDir, "tools", "validateScenesRender.js"));
+  const probe = (over) => ({ text: "hello", fontPx: 40, mono: false, label: false, inStage: true, opacity: 1, croppedRatio: 0, overhangPx: 0, ...over });
+  const beat = { id: "pure", start: 0, duration: 150 };
+  const mins = { body: 26, mono: 15, label: 16 };
+  const run = (samples, maxChangedRatio = 0.5, b = beat) => judgeBeat({ beat: b, fps: 30, minimums: mins, samples, maxChangedRatio });
+  const same = (p) => [[p], [p], [p], [p], [p]];
+
+  check("a clean beat yields no findings", run(same(probe({}))).length === 0);
+  check(
+    "crop is flagged when stage text is cut in most samples",
+    run(same(probe({ text: "wide", croppedRatio: 0.4, overhangPx: 300 }))).some((f) => f.check === "crop" && f.severity === "error"),
+  );
+  check(
+    "crop is NOT flagged for a slide-in cut in only two of five samples",
+    !run([[probe({ text: "slide", croppedRatio: 0.6, overhangPx: 200 })], [probe({ text: "slide", croppedRatio: 0.3, overhangPx: 90 })], [probe({ text: "slide" })], [probe({ text: "slide" })], [probe({ text: "slide" })]]).some((f) => f.check === "crop"),
+  );
+  check(
+    "overlay text is exempt from the crop check",
+    !run(same(probe({ inStage: false, croppedRatio: 0.5, overhangPx: 200 }))).some((f) => f.check === "crop"),
+  );
+  check("text below the body minimum is flagged", run(same(probe({ fontPx: 14 }))).some((f) => f.check === "text-size"));
+  check("mono text is held to the mono minimum, not the body one", !run(same(probe({ fontPx: 18, mono: true }))).some((f) => f.check === "text-size"));
+  check("a label (Pill/ToolChip) at 18px is not flagged, even though that is below the body minimum", !run(same(probe({ fontPx: 18, label: true }))).some((f) => f.check === "text-size"));
+  check("a label below its own, lower minimum is still flagged", run(same(probe({ fontPx: 10, label: true }))).some((f) => f.check === "text-size" && /label/.test(f.message)));
+  const words = Array.from({ length: 40 }, (_, i) => "w" + i).join(" ");
+  check(
+    "too much text for the beat's duration is flagged with the documented rate",
+    MAX_READING_WORDS_PER_SEC === 3 && run(same(probe({ text: words })), 0.5, { ...beat, duration: 60 }).some((f) => f.check === "reading-time"),
+  );
+  check("the same text on a long enough beat is not flagged", !run(same(probe({ text: words })), 0.5, { ...beat, duration: 600 }).some((f) => f.check === "reading-time"));
+  check("identical frames are flagged dead", run(same(probe({})), 0).some((f) => f.check === "dead-frames"));
+  check("a null pixel comparison never flags dead frames", !run(same(probe({})), null).some((f) => f.check === "dead-frames"));
+
+  const dsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c7-design-"));
+  check("no design.ts falls back to the default minimums", readTypeMinimums(dsDir).body === 26 && readTypeMinimums(dsDir).mono === 15 && readTypeMinimums(dsDir).label === 16);
+  fs.writeFileSync(path.join(dsDir, "design.ts"), "typeScale: { display: [120, 220], headline: [56, 84], body: [30, 40], mono: [18, 24] },");
+  check("design.ts typeScale overrides body/mono", readTypeMinimums(dsDir).body === 30 && readTypeMinimums(dsDir).mono === 18);
+  check("...but label has no typeScale counterpart, so it stays fixed regardless", readTypeMinimums(dsDir).label === 16);
+}
+
+console.log("\n== Part 54: validate_scenes render mode against real rendered scenes (C7) ==");
+if (fs.existsSync(templateNodeModules)) {
+  const { runInitProject } = require(path.join(distDir, "tools", "initProject.js"));
+  const { runValidateScenesFull } = require(path.join(distDir, "tools", "validateScenes.js"));
+  const c7Root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c7-render-"));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      runInitProject({ name: "c7check", projectRoot: c7Root });
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      fs.rmSync(c7Root, { recursive: true, force: true });
+      fs.mkdirSync(c7Root, { recursive: true });
+    }
+  }
+  fs.symlinkSync(templateNodeModules, path.join(c7Root, "node_modules"), "junction");
+
+  const videoDir = path.join(c7Root, "src", "videos", "c7check");
+  const customDir = path.join(videoDir, "custom-scenes");
+  fs.mkdirSync(customDir, { recursive: true });
+  const longCopy = Array.from({ length: 64 }, (_, i) => "word" + i).join(" ");
+
+  // Correct: copy is short and large, everything is inside the frame, the camera pushes in.
+  fs.writeFileSync(
+    path.join(customDir, "GoodScene.tsx"),
+    [
+      'import React from "react";',
+      'import { CinematicScene, E } from "@openvidstudio/core";',
+      "export const GoodScene: React.FC = () => (",
+      "  <CinematicScene camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 150, x: 960, y: 540, scale: 1.15, easing: E.drift }]}>",
+      '    <div style={{ position: "absolute", left: 300, top: 360, fontSize: 72, color: "#fff" }}>Ship the demo</div>',
+      '    <div style={{ position: "absolute", left: 300, top: 480, fontSize: 36, color: "#fff" }}>Ten tools, one pipeline.</div>',
+      "  </CinematicScene>",
+      ");",
+      "",
+    ].join("\n"),
+  );
+  // Broken in all four ways: a static camera (dead), text running off the right edge (crop),
+  // 12px text that is 15.6px on screen at scale 1.3 (text size), and 64 words in a 2s beat.
+  fs.writeFileSync(
+    path.join(customDir, "BadScene.tsx"),
+    [
+      'import React from "react";',
+      'import { CinematicScene } from "@openvidstudio/core";',
+      "export const BadScene: React.FC = () => (",
+      "  <CinematicScene camera={[{ frame: 0, x: 960, y: 540, scale: 1.3 }, { frame: 60, x: 960, y: 540, scale: 1.3 }]}>",
+      '    <div style={{ position: "absolute", left: 1500, top: 300, fontSize: 40, whiteSpace: "nowrap", color: "#fff" }}>This line runs off the right edge of the frame</div>',
+      '    <div style={{ position: "absolute", left: 400, top: 420, fontSize: 12, color: "#fff" }}>tiny caption nobody can read</div>',
+      '    <div style={{ position: "absolute", left: 400, top: 500, width: 1000, fontSize: 30, color: "#fff" }}>' + longCopy + "</div>",
+      "  </CinematicScene>",
+      ");",
+      "",
+    ].join("\n"),
+  );
+  fs.writeFileSync(
+    path.join(videoDir, "beats.json"),
+    JSON.stringify({
+      fps: 30,
+      beats: [
+        { id: "good-scene", start: 0, duration: 150, scene: "./custom-scenes/GoodScene.tsx" },
+        { id: "bad-scene", start: 150, duration: 60, scene: "./custom-scenes/BadScene.tsx" },
+      ],
+    }),
+  );
+  runStitchComposition({ projectRoot: c7Root, videoName: "c7check" });
+
+  const res = await runValidateScenesFull({ projectRoot: c7Root, videoName: "c7check", render: true });
+  const renderFindings = res.findings.filter((f) => f.source === "render");
+  const forBeat = (id, kind) => renderFindings.filter((f) => f.beatId === id && f.check === kind);
+  console.log("  render findings:", JSON.stringify(renderFindings.map((f) => [f.beatId, f.check, f.severity])));
+
+  check("render mode measured both beats and skipped none", res.render?.beatsMeasured === 2 && res.render.beatsSkipped.length === 0);
+  check("the correct scene has zero render findings (no false positives)", renderFindings.filter((f) => f.beatId === "good-scene").length === 0);
+  check("the broken scene is flagged for cropped text", forBeat("bad-scene", "crop").length === 1 && forBeat("bad-scene", "crop")[0].message.includes("runs off the right edge"));
+  check("the broken scene is flagged for text below the minimum size", forBeat("bad-scene", "text-size").length === 1 && forBeat("bad-scene", "text-size")[0].message.includes("tiny caption"));
+  check("the broken scene is flagged for reading time", forBeat("bad-scene", "reading-time").length === 1);
+  check("the broken scene is flagged for dead frames", forBeat("bad-scene", "dead-frames").length === 1);
+  check(
+    "the static pass reads each beat's bespoke scene override and finds no error in either",
+    res.scenesChecked === 2 && res.findings.filter((f) => f.source === "static" && f.severity === "error").length === 0,
+  );
+  check("a crop error makes the result not ok", res.ok === false);
+
+  // Without the flag, no render happens and the result has no render block.
+  const staticOnly = runValidateScenesFull({ projectRoot: c7Root, videoName: "c7check" });
+  check("without render:true no render pass runs", (await staticOnly).render === undefined);
+} else {
+  skip("Part 54: validate_scenes render mode", "no resolvable node_modules to scaffold a renderable project from");
+}
+
+console.log("\n== Part 55: run records and collect_facts, against a real capture, render and validation (C8) ==");
+if (fs.existsSync(templateNodeModules) && browserAvailable) {
+  const http = await import("node:http");
+  const { runInitProject } = require(path.join(distDir, "tools", "initProject.js"));
+  const { runCaptureScreenshot } = require(path.join(distDir, "tools", "captureScreenshot.js"));
+  const { runCaptureTerminal } = require(path.join(distDir, "tools", "captureTerminal.js"));
+  const { runValidateScenes } = require(path.join(distDir, "tools", "validateScenes.js"));
+  const { runValidateBeats } = require(path.join(distDir, "tools", "validateBeats.js"));
+  const { runCollectFacts } = require(path.join(distDir, "tools", "collectFacts.js"));
+
+  const c8Root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c8-facts-"));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      runInitProject({ name: "c8check", projectRoot: c8Root });
+      break;
+    } catch (err) {
+      if (attempt >= 3) throw err;
+      fs.rmSync(c8Root, { recursive: true, force: true });
+      fs.mkdirSync(c8Root, { recursive: true });
+    }
+  }
+  fs.symlinkSync(templateNodeModules, path.join(c8Root, "node_modules"), "junction");
+
+  // Nothing has run yet, so there is nothing to collect: an error, not an empty facts.json.
+  const videoDir = path.join(c8Root, "src", "videos", "c8check");
+  fs.mkdirSync(path.join(videoDir, "custom-scenes"), { recursive: true });
+  fs.writeFileSync(path.join(videoDir, "beats.json"), JSON.stringify({ fps: 30, beats: [] }));
+  let noRecordsError = "";
+  try {
+    runCollectFacts({ projectRoot: c8Root, videoName: "c8check" });
+  } catch (err) {
+    noRecordsError = String(err.message);
+  }
+  check("collect_facts refuses when no run records exist yet", /No run records/.test(noRecordsError));
+  check("...and wrote no facts.json", !fs.existsSync(path.join(videoDir, "facts.json")));
+
+  const scene = (name) =>
+    [
+      'import React from "react";',
+      'import { CinematicScene, E } from "@openvidstudio/core";',
+      "export const " + name + ": React.FC = () => (",
+      "  <CinematicScene camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 45, x: 960, y: 540, scale: 1.1, easing: E.drift }]}>",
+      '    <div style={{ position: "absolute", left: 300, top: 400, fontSize: 64, color: "#fff" }}>' + name + "</div>",
+      "  </CinematicScene>",
+      ");",
+      "",
+    ].join("\n");
+  const beatDefs = [
+    { id: "shot", scene: "Shot", visual: { captureMethod: "screenshot", url: "http://placeholder", interactions: [] } },
+    { id: "term", scene: "Term", visual: { captureMethod: "recording", source: "terminal" } },
+    { id: "built", scene: "Built", visual: { captureMethod: "dom-demo" } },
+    { id: "claimed", scene: "Claimed", visual: { captureMethod: "screenshot" } },
+  ];
+  beatDefs.forEach((b) => fs.writeFileSync(path.join(videoDir, "custom-scenes", b.scene + ".tsx"), scene(b.scene)));
+
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end("<!doctype html><body style='margin:0;background:#224'><h1 style='color:#fff'>facts page</h1></body>");
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const factsUrl = "http://127.0.0.1:" + server.address().port + "/";
+
+  const beatsDoc = {
+    fps: 30,
+    narration: "none",
+    beats: beatDefs.map((b, i) => ({
+      id: b.id,
+      start: i * 45,
+      duration: 45,
+      visual: b.id === "shot" ? { ...b.visual, url: factsUrl } : b.visual,
+      scene: "./custom-scenes/" + b.scene + ".tsx",
+    })),
+  };
+  fs.writeFileSync(path.join(videoDir, "beats.json"), JSON.stringify(beatsDoc));
+
+  try {
+    // The real pipeline: capture, stitch, render, validate. Beat "claimed" is never captured.
+    const shot = await runCaptureScreenshot({ projectRoot: c8Root, beatId: "shot", url: factsUrl, viewport: { width: 800, height: 600 } });
+    const term = await runCaptureTerminal({
+      projectRoot: c8Root,
+      beatId: "term",
+      command: process.execPath,
+      args: ["-e", "console.log('hello facts')"],
+      mode: "pipe",
+    });
+    runStitchComposition({ projectRoot: c8Root, videoName: "c8check" });
+    const render = await runRenderVideo({ projectRoot: c8Root, videoName: "c8check", draft: true, skipBrandLock: true, incremental: true });
+    check("the fixture render succeeded for real", render.success === true && fs.existsSync(render.outPath));
+    runValidateScenes({ projectRoot: c8Root, videoName: "c8check" });
+    const beatsValidation = runValidateBeats({ beatsJson: beatsDoc, videoName: "c8check", projectRoot: c8Root });
+
+    const runsDir = path.join(c8Root, ".openvidstudio", "runs");
+    const runFiles = fs.readdirSync(runsDir);
+    const has = (tool) => runFiles.some((f) => f.startsWith(tool + "-") && f.endsWith(".json"));
+    check(
+      "real tool runs left one record file each in .openvidstudio/runs",
+      ["capture_screenshot", "capture_terminal", "stitch_composition", "render_video", "validate_scenes", "validate_beats"].every(has),
+    );
+
+    const result = runCollectFacts({ projectRoot: c8Root, videoName: "c8check" });
+    const facts = JSON.parse(fs.readFileSync(path.join(videoDir, "facts.json"), "utf8"));
+    check("collect_facts wrote src/videos/<name>/facts.json and read every record", result.factsPath === path.join(videoDir, "facts.json") && result.recordsRead === runFiles.length);
+
+    // Evidence, compared with what is really on disk rather than with the record's own text.
+    const shotFacts = facts.beats.shot.captures.find((c) => c.tool === "capture_screenshot");
+    check("shot: provenance is a real capture", facts.beats.shot.provenance === "capture");
+    check("shot: the recorded size is the real PNG's size on disk", shotFacts?.bytes === fs.statSync(shot.outPath).size && shotFacts.bytes > 0);
+    check("shot: the recorded URL and path are what was captured", shotFacts?.url === factsUrl && shotFacts.outPath === "public/images/shot.png");
+    const termFacts = facts.beats.term.captures.find((c) => c.tool === "capture_terminal");
+    check("term: the terminal capture records the command and its real exit code", termFacts?.exitCode === 0 && /hello facts/.test(termFacts.command) && termFacts.eventCount === term.eventCount);
+    check("built: a dom-demo beat is a construction, with no capture claimed", facts.beats.built.provenance === "construction" && facts.beats.built.captures.length === 0);
+    check("claimed: a beat that claims a screenshot nobody took is unverified", facts.beats.claimed.provenance === "unverified");
+    check(
+      "claimed: ...and listed as a discrepancy",
+      facts.discrepancies.some((d) => d.beatId === "claimed" && d.kind === "claimed-capture-without-record") &&
+        !facts.discrepancies.some((d) => d.beatId === "shot" || d.beatId === "term"),
+    );
+    check(
+      "render: records the real file size and which beats it actually rendered",
+      facts.video.render?.bytes === fs.statSync(render.outPath).size && facts.video.render.success === true &&
+        JSON.stringify([...facts.video.render.renderedBeats].sort()) === JSON.stringify(["built", "claimed", "shot", "term"]),
+    );
+    check("render: each beat records whether it was rendered or reused", facts.beats.shot.render?.status === "rendered");
+    check(
+      "validate_beats: the real error is attributed to the beat it belongs to",
+      beatsValidation.valid === false &&
+        facts.beats.claimed.validation.some((v) => v.tool === "validate_beats" && v.findings.length > 0) &&
+        facts.beats.shot.validation.find((v) => v.tool === "validate_beats")?.findings.length === 0,
+    );
+    check("validate_scenes: its record is merged in per beat", facts.beats.shot.validation.some((v) => v.tool === "validate_scenes"));
+    check("stitch: the composition id is recorded", typeof facts.video.composition?.compositionId === "string");
+
+    // A second render with nothing changed reuses every beat, and the facts follow.
+    await runRenderVideo({ projectRoot: c8Root, videoName: "c8check", draft: true, skipBrandLock: true, incremental: true });
+    runCollectFacts({ projectRoot: c8Root, videoName: "c8check" });
+    const again = JSON.parse(fs.readFileSync(path.join(videoDir, "facts.json"), "utf8"));
+    check("an unchanged re-render is recorded as reused, from the cache", again.beats.shot.render?.status === "reused");
+
+    // The record outlives the file: delete the capture and the next collect says so.
+    fs.rmSync(shot.outPath);
+    runCollectFacts({ projectRoot: c8Root, videoName: "c8check" });
+    const gone = JSON.parse(fs.readFileSync(path.join(videoDir, "facts.json"), "utf8"));
+    check("a recorded capture whose file is gone is reported", gone.discrepancies.some((d) => d.beatId === "shot" && d.kind === "capture-file-missing"));
+
+    // A malformed record is skipped, not fatal.
+    fs.writeFileSync(path.join(runsDir, "capture_screenshot-garbage.json"), "{not json");
+    check("a malformed record file does not break collect_facts", runCollectFacts({ projectRoot: c8Root, videoName: "c8check" }).recordsRead === fs.readdirSync(runsDir).length - 1);
+
+    // A read-only runs dir must not turn a successful tool into a failure.
+    const ro = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c8-ro-"));
+    fs.writeFileSync(path.join(ro, ".openvidstudio"), "a file where the directory should be");
+    const { writeFactRecord } = require(path.join(distDir, "facts.js"));
+    check("writeFactRecord returns null instead of throwing when it cannot write", writeFactRecord(ro, { tool: "x", facts: {} }) === null);
+  } finally {
+    server.close();
+  }
+} else {
+  skip("Part 55: run records and collect_facts", "needs a resolvable node_modules and a real Chromium");
+}
+
+console.log("\n== Part 56: final assembly, pure logic (C10) ==");
+{
+  const fin = require(path.join(distDir, "tools", "finalizeVideo.js"));
+  const rend = require(path.join(distDir, "tools", "exportRendition.js"));
+  const target = { lufs: -14, truePeakDb: -1.5, lra: 11 };
+
+  const sample = 'size= 0kB time=00:00:06.00 speed=100x\n[Parsed_loudnorm_0 @ 0x1] \n{\n\t"input_i" : "-36.52",\n\t"input_tp" : "-27.10",\n\t"input_lra" : "1.90",\n\t"input_thresh" : "-46.80",\n\t"output_i" : "-23.90",\n\t"output_tp" : "-14.50",\n\t"output_lra" : "0.80",\n\t"output_thresh" : "-34.40",\n\t"normalization_type" : "dynamic",\n\t"target_offset" : "9.90"\n}\n';
+  const m = fin.parseLoudnormJson(sample);
+  check("loudnorm's JSON is parsed out of ffmpeg's noisy stderr", m.integratedLufs === -36.52 && m.truePeakDb === -27.1 && m.loudnessRange === 1.9 && m.threshold === -46.8 && m.targetOffset === 9.9);
+  let silentError = "";
+  try {
+    fin.parseLoudnormJson(sample.replace('"-36.52"', '"-inf"'));
+  } catch (err) {
+    silentError = String(err.message);
+  }
+  check("a silent track (-inf) is an error, not a number", /silent/.test(silentError));
+  const apply = fin.buildLoudnormApplyArgs("in.mp4", "out.mp4", target, m).join(" ");
+  check("the second pass is fed the first pass's real measurements", apply.includes("measured_I=-36.52") && apply.includes("measured_TP=-27.1") && apply.includes("measured_thresh=-46.8") && apply.includes("offset=9.9"));
+  check("...applies one linear gain rather than dynamic adjustment", apply.includes("linear=true"));
+  check("...and copies the video stream untouched", apply.includes("-c:v copy"));
+  check("the default target is -14 LUFS with a -1.5 dBTP ceiling", fin.DEFAULT_TARGET_LUFS === -14 && fin.DEFAULT_TRUE_PEAK_DB === -1.5);
+
+  const plan = (over) => rend.planShareEncode({ maxBytes: 10_000_000, durationSec: 60, srcWidth: 1920, srcHeight: 1080, fps: 30, hasAudio: true, ...over });
+  const p60 = plan({});
+  // 10MB * 0.92 * 8 / 60s = 1226kbps in total, 96 of it audio.
+  check("the share bitrate is the cap's budget minus audio, over the duration", p60.videoKbps === 1130);
+  check("...and 1130kbps cannot carry 1080p or 720p without blocking, so it steps down to 540p", p60.height === 540 && p60.width === 960 && p60.tight === false);
+  check("a shorter clip under the same cap gets a bigger picture", plan({ durationSec: 10 }).height === 1080);
+  check("a longer one gets a smaller picture, never a bigger file", plan({ durationSec: 600 }).height < p60.height);
+  check("a hopelessly small cap is flagged tight rather than pretending", plan({ maxBytes: 200_000 }).tight === true);
+  check("a source with no audio spends nothing on it", plan({ hasAudio: false }).audioKbps === 0);
+  check("a retry scale lowers the bitrate", plan({ bitrateScale: 0.8 }).videoKbps < p60.videoKbps);
+  check("the picture never exceeds the source", plan({ srcWidth: 640, srcHeight: 360, durationSec: 5 }).height <= 360);
+
+  const passArgs = (pass) => rend.buildSharePassArgs({ inPath: "in.mp4", outPath: "out.mp4", plan: p60, pass, passLog: "log", hasAudio: true });
+  check("share is two-pass: pass 1 analyses with no audio and no output file", passArgs(1).includes("-an") && passArgs(1).join(" ").includes("-pass 1") && passArgs(1).join(" ").includes("-f null"));
+  check("...pass 2 writes the file with faststart", passArgs(2).join(" ").includes("-pass 2") && passArgs(2).includes("+faststart") && passArgs(2).at(-1) === "out.mp4");
+
+  const stat = (mean, stdev, entropy) => rend.scoreFrameStats({ mean, stdev, entropy });
+  check("a detailed frame outscores a black one", stat(110, 70, 7.4) > stat(2, 1, 0.1) * 10);
+  check("...and a flat grey one", stat(110, 70, 7.4) > stat(128, 0.5, 0.2) * 10);
+  check("a near-black frame is cut to 30% even if it has contrast", Math.abs(stat(10, 60, 6) - stat(100, 60, 6) * 0.3) < 1e-9);
+  check("a tie goes to the earlier beat", rend.pickBestScore([{ beatId: "a", score: 3 }, { beatId: "b", score: 3 }]) === "a");
+}
+
+console.log("\n== Part 57: final assembly against a real file, measured independently (C10) ==");
+{
+  const ffOk = spawnSync("ffmpeg", ["-version"]).status === 0 && spawnSync("ffprobe", ["-version"]).status === 0;
+  if (!ffOk) {
+    skip("Part 57: real final assembly", "ffmpeg/ffprobe not available in this environment");
+  } else {
+    const sharp = require("sharp");
+    const { runFinalizeVideo } = require(path.join(distDir, "tools", "finalizeVideo.js"));
+    const { runExportRendition } = require(path.join(distDir, "tools", "exportRendition.js"));
+    const { runCollectFacts } = require(path.join(distDir, "tools", "collectFacts.js"));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c10-"));
+    const videoDir = path.join(root, "src", "videos", "c10check");
+    fs.mkdirSync(videoDir, { recursive: true });
+    fs.mkdirSync(path.join(root, "output"), { recursive: true });
+    // Three 2s beats at 30fps: a detailed test pattern, then black, then flat grey. The LAST beat
+    // is grey, so the default poster pick is a dud and only a scored pick finds the first one.
+    fs.writeFileSync(
+      path.join(videoDir, "beats.json"),
+      JSON.stringify({
+        fps: 30,
+        beats: [
+          { id: "detail", start: 0, duration: 60 },
+          { id: "dark", start: 60, duration: 60 },
+          { id: "flat", start: 120, duration: 60 },
+        ],
+      }),
+    );
+    const src = path.join(root, "output", "c10check.mp4");
+    const gen = spawnSync(
+      "ffmpeg",
+      [
+        "-nostdin", "-y",
+        "-f", "lavfi", "-i", "testsrc2=s=1280x720:r=30:d=2",
+        "-f", "lavfi", "-i", "color=c=black:s=1280x720:r=30:d=2",
+        "-f", "lavfi", "-i", "color=c=0x808080:s=1280x720:r=30:d=2",
+        // Quiet, with a slow tremolo so the loudness is not a trivially constant tone.
+        "-f", "lavfi", "-i", "sine=frequency=330:duration=6,volume=0.06,tremolo=f=1.5:d=0.6",
+        "-filter_complex", "[0:v][1:v][2:v]concat=n=3:v=1:a=0[v]",
+        "-map", "[v]", "-map", "3:a", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-t", "6", src,
+      ],
+      { encoding: "utf8" },
+    );
+    check("the fixture video was generated by real ffmpeg", gen.status === 0 && fs.existsSync(src));
+
+    // An independent measurement: ffmpeg's ebur128 filter, not the loudnorm one the tool uses.
+    const ebur = (file) => {
+      const r = spawnSync("ffmpeg", ["-nostdin", "-hide_banner", "-i", file, "-af", "ebur128=peak=true", "-f", "null", "-"], { encoding: "utf8" });
+      const tail = r.stderr.slice(r.stderr.lastIndexOf("Summary:"));
+      return {
+        lufs: Number.parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(tail)?.[1]),
+        peak: Number.parseFloat(/Peak:\s+(-?[\d.]+) dBFS/.exec(tail)?.[1]),
+      };
+    };
+    const probe = (file, entries) =>
+      JSON.parse(spawnSync("ffprobe", ["-v", "error", "-show_entries", entries, "-of", "json", file], { encoding: "utf8" }).stdout);
+
+    const beforeLufs = ebur(src).lufs;
+    check("the source is quiet, well under the target (so there is something to fix)", beforeLufs < -25);
+
+    const fin = await runFinalizeVideo({ projectRoot: root, videoName: "c10check", shareMaxMB: 0.4 });
+    const finalAbs = path.join(root, fin.finalPath);
+    check("final_video wrote output/<video>-final.mp4 and kept the original", fs.existsSync(finalAbs) && fs.existsSync(src) && fin.finalPath.endsWith("c10check-final.mp4"));
+
+    const after = ebur(finalAbs);
+    console.log(`  loudness: ${beforeLufs} LUFS in, ${after.lufs} LUFS out (ebur128), true peak ${after.peak} dBFS; tool says ${fin.loudness.before.integratedLufs} -> ${fin.loudness.after.integratedLufs}`);
+    check("the FINAL file measures within 1 LU of -14 LUFS, by an independent ebur128 measurement", Math.abs(after.lufs - -14) <= 1);
+    check("...and its true peak is under the -1.5 dBTP ceiling (to measurement tolerance)", after.peak <= -1.0);
+    check("the tool's own 'after' is a re-measurement of the written file and agrees with ebur128", Math.abs(fin.loudness.after.integratedLufs - after.lufs) < 0.5);
+    check("the tool's own 'before' agrees with ebur128 on the source", Math.abs(fin.loudness.before.integratedLufs - beforeLufs) < 0.5);
+    check("the result reports within-tolerance from that measurement", fin.loudness.withinTolerance === true);
+    const vSrc = probe(src, "stream=codec_name,width,height,nb_frames").streams.find((s) => s.codec_name === "h264");
+    const vOut = probe(finalAbs, "stream=codec_name,width,height,nb_frames").streams.find((s) => s.codec_name === "h264");
+    check("the video stream was copied, not re-encoded (same codec, size and frame count)", vOut && vSrc.width === vOut.width && vSrc.height === vOut.height && vSrc.nb_frames === vOut.nb_frames);
+
+    // Poster: a real frame, opened and inspected.
+    check("a poster frame was written", fin.poster?.files.length === 1 && fs.existsSync(path.join(root, fin.poster.files[0])));
+    check("posterPick auto chose the detailed beat, not the last (flat grey) one", fin.poster.posterPick?.beatId === "detail");
+    const posterStats = await sharp(path.join(root, fin.poster.files[0])).greyscale().stats();
+    check("the poster is a real picture: 1280x720 with real contrast, not a blank frame", (await sharp(path.join(root, fin.poster.files[0])).metadata()).width === 1280 && posterStats.channels[0].stdev > 30);
+    const defaultPoster = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "poster", inPath: fin.finalPath, outPath: path.join("output", "default-poster.jpg"), bake: false });
+    const defaultStats = await sharp(path.join(root, defaultPoster.files[0])).greyscale().stats();
+    check("omitting posterPick now also defaults to auto: the detailed beat, not the flat one", defaultPoster.posterPick?.beatId === "detail" && defaultStats.channels[0].stdev > 30);
+    const lastPoster = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "poster", inPath: fin.finalPath, outPath: path.join("output", "last-poster.jpg"), bake: false, posterPick: "last" });
+    const lastStats = await sharp(path.join(root, lastPoster.files[0])).greyscale().stats();
+    check("posterPick: \"last\" still opts back into the old behavior: the last beat's frame, which here is flat", lastStats.channels[0].stdev < 5);
+
+    // Share: under its cap, measured from the file on disk.
+    const shareAbs = path.join(root, fin.share.share.path);
+    const shareBytes = fs.statSync(shareAbs).size;
+    const shareProbe = probe(shareAbs, "stream=codec_name,width,height");
+    console.log(`  share: ${shareBytes} bytes against a ${fin.share.share.maxBytes} byte cap, ${fin.share.share.width}x${fin.share.share.height}, ${fin.share.share.attempts} attempt(s)`);
+    check("the share export is under its size cap, by the file's real size on disk", shareBytes <= 400_000 && fin.share.share.withinCap === true && shareBytes === fin.share.share.bytes);
+    check("...with a real playable video and audio stream", shareProbe.streams.some((s) => s.codec_name === "h264") && shareProbe.streams.some((s) => s.codec_name === "aac"));
+    check("...and the cap drove the picture size (smaller than the 1280x720 source)", fin.share.share.height < 720);
+
+    // A cap with room to spare keeps the picture bigger: the cap, not a preset, picks the size.
+    const roomy = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "share", inPath: fin.finalPath, outPath: path.join("output", "roomy-share.mp4"), maxMB: 5 });
+    check("a roomier cap keeps more resolution and is still under it", roomy.share.height === 720 && fs.statSync(path.join(root, roomy.share.path)).size <= 5_000_000);
+
+    // An impossible cap is reported honestly, not claimed.
+    const tiny = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "share", inPath: fin.finalPath, outPath: path.join("output", "tiny-share.mp4"), maxMB: 0.01 });
+    check("a cap the content cannot meet reports withinCap false and says so", tiny.share.withinCap === false && tiny.notes.join(" ").includes("over the"));
+
+    // The run leaves a record, and collect_facts carries the measured numbers.
+    const collected = runCollectFacts({ projectRoot: root, videoName: "c10check" });
+    const factsDoc = JSON.parse(fs.readFileSync(collected.factsPath, "utf8"));
+    check("collect_facts records the measured final loudness and the poster beat", typeof factsDoc.video.final?.loudness?.afterLufs === "number" && factsDoc.video.final.posterBeat !== null);
+
+    // A silent render has no loudness to fix, and says so.
+    const silent = path.join(root, "output", "silent.mp4");
+    spawnSync("ffmpeg", ["-nostdin", "-y", "-i", src, "-an", "-c:v", "copy", silent]);
+    const finSilent = await runFinalizeVideo({ projectRoot: root, videoName: "c10check", inPath: path.join("output", "silent.mp4"), outPath: path.join("output", "silent-final.mp4"), poster: false, share: false });
+    check("a render with no audio skips loudness and says so", finSilent.loudness === null && finSilent.notes.join(" ").includes("no audio"));
+
+  }
+}
+
 console.log(`\n${failures === 0 ? `ALL CHECKS PASSED (${skipped} skipped)` : `${failures} CHECK(S) FAILED (${skipped} skipped)`}`);
 console.log(`temp project left at: ${tmpRoot}`);
 process.exitCode = failures === 0 ? 0 : 1;

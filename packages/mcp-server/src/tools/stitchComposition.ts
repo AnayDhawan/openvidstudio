@@ -5,6 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "../config";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, pascalCase } from "../util";
 import { runTool } from "./mcp";
+import { writeFactRecord } from "../facts";
 
 export interface StitchCompositionInput {
   projectRoot?: string;
@@ -293,6 +294,25 @@ function sanitizeLanguage(tag: string): string {
 }
 
 export function runStitchComposition(input: StitchCompositionInput): StitchCompositionResult {
+  const result = stitchComposition(input);
+  writeFactRecord(resolveProjectRoot(input.projectRoot), {
+    tool: "stitch_composition",
+    videoName: sanitizeSegment(input.videoName, "videoName"),
+    facts: {
+      compositionId: result.compositionId,
+      durationInFrames: result.durationInFrames,
+      voBeatsFound: result.voBeatsFound,
+      voBeatsMissing: result.voBeatsMissing,
+      musicBedFound: result.musicBedFound,
+      musicBedFile: result.musicBedFile,
+      musicBedVolume: result.musicBedVolume,
+      warnings: result.warnings,
+    },
+  });
+  return result;
+}
+
+function stitchComposition(input: StitchCompositionInput): StitchCompositionResult {
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const videoDir = path.join(projectRoot, "src", "videos", videoName);

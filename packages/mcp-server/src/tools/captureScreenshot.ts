@@ -23,6 +23,7 @@ import {
   type Viewport,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 export interface CaptureScreenshotInput {
   projectRoot?: string;
@@ -146,7 +147,32 @@ export async function cropAndUpscale(
     .toBuffer();
 }
 
-export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promise<CaptureScreenshotResult> {
+export async function runCaptureScreenshot(
+  input: CaptureScreenshotInput
+): Promise<CaptureScreenshotResult> {
+  const result = await captureScreenshot(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_screenshot",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      url: input.url,
+      viewport: { width: result.width, height: result.height },
+      pixelWidth: result.pixelWidth,
+      pixelHeight: result.pixelHeight,
+      deviceScaleFactor: result.deviceScaleFactor,
+      interactions: input.interactions?.length ?? 0,
+      settled: result.settle?.settled ?? null,
+      settleWaitedMs: result.settle?.waitedMs ?? null,
+    },
+  });
+  return result;
+}
+
+async function captureScreenshot(input: CaptureScreenshotInput): Promise<CaptureScreenshotResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const target = input.viewport ?? DEFAULT_VIEWPORT;

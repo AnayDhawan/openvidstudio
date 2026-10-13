@@ -69,14 +69,20 @@ const BEAT_TIMEOUT_MS = 12000;
 export interface TypeScaleMinimums {
   body: number;
   mono: number;
+  /** Small UI chips (Pill, ToolChip): never held to body's minimum, which they are not
+   * trying to meet, nor to mono's, which is about a different font role entirely. */
+  label: number;
 }
 
 /**
- * Minimums used when a video has no design.ts. They mirror DEFAULT_TYPE_SCALE in
- * packages/core/src/designSystem.ts (body 26-34, mono 15-22). The values are copied rather
+ * Minimums used when a video has no design.ts. body/mono mirror DEFAULT_TYPE_SCALE in
+ * packages/core/src/designSystem.ts (body 26-34, mono 15-22); the values are copied rather
  * than imported because this package does not depend on core, which is a template dependency.
+ * label has no DesignSystem.typeScale counterpart (that type has no label field) and is not
+ * read from design.ts below: it is a fixed floor, picked below Pill/ToolChip's own 18/20px
+ * defaults so a deliberately smaller label still passes, but a near-illegible one is flagged.
  */
-export const DEFAULT_TYPE_MINIMUMS: TypeScaleMinimums = { body: 26, mono: 15 };
+export const DEFAULT_TYPE_MINIMUMS: TypeScaleMinimums = { body: 26, mono: 15, label: 16 };
 
 /**
  * Reads the lower bound of `body` and `mono` from src/videos/<name>/design.ts when one
@@ -123,6 +129,8 @@ interface TextProbe {
   /** Font size as it appears in the output frame, camera scale included. */
   fontPx: number;
   mono: boolean;
+  /** Inside a data-ovs-label element (Pill, ToolChip): held to its own, lower minimum. */
+  label: boolean;
   inStage: boolean;
   opacity: number;
   /** Fraction of the text box outside the frame, 0 to 1. */
@@ -166,10 +174,12 @@ function probePage(): TextProbe[] {
     const inStage = !!stage && stage.contains(el);
     let opacity = 1;
     let hidden = false;
+    let label = false;
     const clips: Box[] = [];
     for (let a: HTMLElement | null = el; a && a !== document.body; a = a.parentElement) {
       const cs = getComputedStyle(a);
       if (cs.display === "none" || cs.visibility === "hidden") hidden = true;
+      if (a.hasAttribute("data-ovs-label")) label = true;
       opacity *= Number.parseFloat(cs.opacity);
       // An overflow clip inside the stage hides text on purpose (a scrolling terminal, a
       // masked reveal). The stage's own parent is the camera viewport and is the crop this
@@ -199,6 +209,7 @@ function probePage(): TextProbe[] {
       text,
       fontPx: Number.parseFloat(cs.fontSize) * (inStage ? stageScale : 1),
       mono: /mono|courier|consolas|menlo|code/i.test(cs.fontFamily),
+      label,
       inStage,
       opacity,
       croppedRatio,
@@ -261,7 +272,7 @@ export function judgeBeat(opts: {
   const small = new Map<string, number>();
   for (const probes of samples) {
     for (const p of probes) {
-      const min = p.mono ? minimums.mono : minimums.body;
+      const min = p.mono ? minimums.mono : p.label ? minimums.label : minimums.body;
       if (p.fontPx < min - 0.5) small.set(p.text, Math.min(small.get(p.text) ?? Infinity, p.fontPx));
     }
   }
@@ -273,8 +284,9 @@ export function judgeBeat(opts: {
       severity: "warning",
       message:
         `${small.size} text run(s) render below the minimum size (body ${minimums.body}px, mono ${minimums.mono}px, ` +
-        `taken from this video's design.ts or the default type scale): ${examples([...small.keys()])}. ` +
-        `The smallest is ${worst.toFixed(1)}px on screen, camera scale included. Raise the font size or the minimum.`,
+        `label ${minimums.label}px for a Pill/ToolChip, body/mono taken from this video's design.ts or the ` +
+        `default type scale): ${examples([...small.keys()])}. The smallest is ${worst.toFixed(1)}px on screen, ` +
+        `camera scale included. Raise the font size or the minimum.`,
     });
   }
 

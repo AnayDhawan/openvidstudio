@@ -51,10 +51,11 @@ export interface ExportRenditionInput {
   /** poster only. Exact timestamp in seconds, overriding posterBeatId. */
   posterAt?: number;
   /**
-   * poster only, when neither posterAt nor posterBeatId is given. "last" (the default, and what
-   * this always did) takes the last beat's midpoint. "auto" scores every beat's midpoint frame
-   * and takes the one that looks most like a representative picture: not blank, not flat, not
-   * near-black or blown out. See scoreFrameStats for exactly what is measured.
+   * poster only, when neither posterAt nor posterBeatId is given. "auto" (the default) scores
+   * every beat's midpoint frame and takes the one that looks most like a representative
+   * picture: not blank, not flat, not near-black or blown out. See scoreFrameStats for exactly
+   * what is measured. "last" takes the last beat's midpoint instead (what this tool always did
+   * before auto scoring existed); pass it explicitly to keep that behavior.
    */
   posterPick?: "last" | "auto";
   /** share only. The file size cap in megabytes (1MB = 1,000,000 bytes). Defaults to 10. */
@@ -550,7 +551,7 @@ export async function runExportRendition(input: ExportRenditionInput): Promise<E
     let pickInfo: ExportRenditionResult["posterPick"];
     if (typeof input.posterAt === "number") {
       atSeconds = input.posterAt;
-    } else if (!input.posterBeatId && input.posterPick === "auto") {
+    } else if (!input.posterBeatId && input.posterPick !== "last") {
       // Score every beat's midpoint frame and take the best. Frames go to a temp dir: they are
       // an intermediate, and the winner is re-extracted below like any other poster.
       const work = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-poster-"));
@@ -670,15 +671,15 @@ export function registerExportRendition(server: McpServer): void {
         "cannot drift from it. format: \"store-frames\" produces App Store and Play Store images at the exact " +
         "pixel dimensions each store demands (6.9 and 6.5 inch iPhone, 13 inch iPad, Play Store phone and " +
         "tablet), fitting the shot inside the canvas rather than filling it, because filling crops away the " +
-        "UI the screenshot exists to show. format: \"poster\" picks one frame (a beat's midpoint, defaulting " +
-        "to the last beat, or an exact posterAt timestamp) and writes it as <videoName>-poster.jpg, then, " +
-        "unless bake is set to false, also writes <videoName>-poster.mp4: the same render with that frame " +
-        "baked in as the file's embedded thumbnail (an attached_pic stream, the same mechanism a podcast " +
-        "mp3's cover art uses), copied not re-encoded, so video and audio quality are untouched. Skipping " +
-        "this step is why a shared video's idle thumbnail is so often a black frame or a mid-motion blur " +
-        "instead of the frame that was actually chosen to represent it. With posterPick: \"auto\" the frame is chosen " +
-        "by scoring every beat's midpoint (luma entropy and contrast, penalising near-black and blown-out " +
-        "frames) instead of defaulting to the last beat. format: \"share\" encodes a copy under a hard size cap " +
+        "UI the screenshot exists to show. format: \"poster\" picks one frame (a beat's midpoint, or an exact " +
+        "posterAt timestamp) and writes it as <videoName>-poster.jpg, then, unless bake is set to false, also " +
+        "writes <videoName>-poster.mp4: the same render with that frame baked in as the file's embedded " +
+        "thumbnail (an attached_pic stream, the same mechanism a podcast mp3's cover art uses), copied not " +
+        "re-encoded, so video and audio quality are untouched. Skipping this step is why a shared video's idle " +
+        "thumbnail is so often a black frame or a mid-motion blur instead of the frame that was actually chosen " +
+        "to represent it. By default the frame is chosen by scoring every beat's midpoint (luma entropy and " +
+        "contrast, penalising near-black and blown-out frames), posterPick: \"last\" reverts to always taking " +
+        "the last beat's midpoint instead. format: \"share\" encodes a copy under a hard size cap " +
         "(maxMB, default 10): the bitrate is computed from the cap and the duration, the largest resolution " +
         "that bitrate can carry is chosen, it is encoded two-pass H.264 with +faststart, and the file on disk " +
         "is measured and re-encoded smaller if it came out over the cap. All five formats read the finished " +
@@ -697,13 +698,13 @@ export function registerExportRendition(server: McpServer): void {
           .optional()
           .describe("store-frames only. Defaults to iphone-6.9."),
         beatIds: z.array(z.string()).optional().describe("store-frames only. Defaults to every beat."),
-        posterBeatId: z.string().optional().describe("poster only. Defaults to the last beat."),
+        posterBeatId: z.string().optional().describe("poster only. An exact beat to use instead of letting posterPick choose."),
         posterAt: z.number().optional().describe("poster only. Exact seconds, overriding posterBeatId."),
         bake: z.boolean().optional().describe("poster only. Defaults to true."),
         posterPick: z
           .enum(["last", "auto"])
           .optional()
-          .describe('poster only. "last" (default) is the last beat\'s midpoint; "auto" scores every beat\'s midpoint and takes the most representative frame.'),
+          .describe('poster only. "auto" (default) scores every beat\'s midpoint and takes the most representative frame; "last" always takes the last beat\'s midpoint instead.'),
         maxMB: z.number().positive().optional().describe("share only. Size cap in megabytes (1MB = 1,000,000 bytes). Defaults to 10."),
         audioKbps: z.number().int().positive().optional().describe("share only. Defaults to 96."),
       },

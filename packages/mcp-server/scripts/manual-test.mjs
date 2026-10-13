@@ -4065,9 +4065,9 @@ export const BespokeC4Check: React.FC = () => {
 console.log("\n== Part 53: validate_scenes render mode, pure judgement (C7) ==");
 {
   const { judgeBeat, readTypeMinimums, MAX_READING_WORDS_PER_SEC } = require(path.join(distDir, "tools", "validateScenesRender.js"));
-  const probe = (over) => ({ text: "hello", fontPx: 40, mono: false, inStage: true, opacity: 1, croppedRatio: 0, overhangPx: 0, ...over });
+  const probe = (over) => ({ text: "hello", fontPx: 40, mono: false, label: false, inStage: true, opacity: 1, croppedRatio: 0, overhangPx: 0, ...over });
   const beat = { id: "pure", start: 0, duration: 150 };
-  const mins = { body: 26, mono: 15 };
+  const mins = { body: 26, mono: 15, label: 16 };
   const run = (samples, maxChangedRatio = 0.5, b = beat) => judgeBeat({ beat: b, fps: 30, minimums: mins, samples, maxChangedRatio });
   const same = (p) => [[p], [p], [p], [p], [p]];
 
@@ -4086,6 +4086,8 @@ console.log("\n== Part 53: validate_scenes render mode, pure judgement (C7) ==")
   );
   check("text below the body minimum is flagged", run(same(probe({ fontPx: 14 }))).some((f) => f.check === "text-size"));
   check("mono text is held to the mono minimum, not the body one", !run(same(probe({ fontPx: 18, mono: true }))).some((f) => f.check === "text-size"));
+  check("a label (Pill/ToolChip) at 18px is not flagged, even though that is below the body minimum", !run(same(probe({ fontPx: 18, label: true }))).some((f) => f.check === "text-size"));
+  check("a label below its own, lower minimum is still flagged", run(same(probe({ fontPx: 10, label: true }))).some((f) => f.check === "text-size" && /label/.test(f.message)));
   const words = Array.from({ length: 40 }, (_, i) => "w" + i).join(" ");
   check(
     "too much text for the beat's duration is flagged with the documented rate",
@@ -4096,9 +4098,10 @@ console.log("\n== Part 53: validate_scenes render mode, pure judgement (C7) ==")
   check("a null pixel comparison never flags dead frames", !run(same(probe({})), null).some((f) => f.check === "dead-frames"));
 
   const dsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-c7-design-"));
-  check("no design.ts falls back to the default minimums", readTypeMinimums(dsDir).body === 26 && readTypeMinimums(dsDir).mono === 15);
+  check("no design.ts falls back to the default minimums", readTypeMinimums(dsDir).body === 26 && readTypeMinimums(dsDir).mono === 15 && readTypeMinimums(dsDir).label === 16);
   fs.writeFileSync(path.join(dsDir, "design.ts"), "typeScale: { display: [120, 220], headline: [56, 84], body: [30, 40], mono: [18, 24] },");
-  check("design.ts typeScale overrides the minimums", readTypeMinimums(dsDir).body === 30 && readTypeMinimums(dsDir).mono === 18);
+  check("design.ts typeScale overrides body/mono", readTypeMinimums(dsDir).body === 30 && readTypeMinimums(dsDir).mono === 18);
+  check("...but label has no typeScale counterpart, so it stays fixed regardless", readTypeMinimums(dsDir).label === 16);
 }
 
 console.log("\n== Part 54: validate_scenes render mode against real rendered scenes (C7) ==");
@@ -4475,9 +4478,12 @@ console.log("\n== Part 57: final assembly against a real file, measured independ
     check("posterPick auto chose the detailed beat, not the last (flat grey) one", fin.poster.posterPick?.beatId === "detail");
     const posterStats = await sharp(path.join(root, fin.poster.files[0])).greyscale().stats();
     check("the poster is a real picture: 1280x720 with real contrast, not a blank frame", (await sharp(path.join(root, fin.poster.files[0])).metadata()).width === 1280 && posterStats.channels[0].stdev > 30);
-    const lastPoster = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "poster", inPath: fin.finalPath, outPath: path.join("output", "last-poster.jpg"), bake: false });
+    const defaultPoster = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "poster", inPath: fin.finalPath, outPath: path.join("output", "default-poster.jpg"), bake: false });
+    const defaultStats = await sharp(path.join(root, defaultPoster.files[0])).greyscale().stats();
+    check("omitting posterPick now also defaults to auto: the detailed beat, not the flat one", defaultPoster.posterPick?.beatId === "detail" && defaultStats.channels[0].stdev > 30);
+    const lastPoster = await runExportRendition({ projectRoot: root, videoName: "c10check", format: "poster", inPath: fin.finalPath, outPath: path.join("output", "last-poster.jpg"), bake: false, posterPick: "last" });
     const lastStats = await sharp(path.join(root, lastPoster.files[0])).greyscale().stats();
-    check("the default pick is unchanged: the last beat's frame, which here is flat", lastStats.channels[0].stdev < 5);
+    check("posterPick: \"last\" still opts back into the old behavior: the last beat's frame, which here is flat", lastStats.channels[0].stdev < 5);
 
     // Share: under its cap, measured from the file on disk.
     const shareAbs = path.join(root, fin.share.share.path);

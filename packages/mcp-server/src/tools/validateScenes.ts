@@ -422,7 +422,8 @@ export function registerValidateScenes(server: McpServer): void {
         "after scaffolding and again before rendering. Pass render: true to also mount the stitched composition " +
         "in a real browser and measure what actually renders: text cropped at the frame edge (camera-" +
         "transformed content only, found through the real DOM), text below the design system's minimum " +
-        "size, on-screen text that needs longer to read than the beat lasts (3 words/sec), and beats whose " +
+        "size (a Pill/ToolChip label gets its own, lower floor rather than body's), on-screen text that " +
+        "needs longer to read than the beat lasts (3 words/sec), and beats whose " +
         "frames never change. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
         "recording played through OffthreadVideo) is reported as render-skipped, never as clean.",
       inputSchema: {

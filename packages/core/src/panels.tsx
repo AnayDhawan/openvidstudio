@@ -222,6 +222,7 @@ export const ToolChip: React.FC<{
   const done = doneAt !== undefined && frame >= doneAt;
   return (
     <div
+      data-ovs-label=""
       style={{
         display: "inline-flex",
         alignItems: "center",
@@ -251,6 +252,7 @@ export const Pill: React.FC<{
   style?: React.CSSProperties;
 }> = ({ children, color: pillColor = color.textSecondary, size = 18, style }) => (
   <span
+    data-ovs-label=""
     style={{
       display: "inline-flex",
       alignItems: "center",

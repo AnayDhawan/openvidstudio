@@ -15,7 +15,7 @@
     "public"
   ],
   "dependencies": {
-    "@remotion/google-fonts": "4.0.532"
+    "@remotion/google-fonts": "4.0.534"
   },
   "peerDependencies": {
     "react": "19.3.0",

@@ -13,11 +13,11 @@
     "dist"
   ],
   "dependencies": {
-    "playwright": "^1.63.0",
-    "zod": "^4.6.5"
+    "playwright": "^1.64.0",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2"
   },
   "scripts": {

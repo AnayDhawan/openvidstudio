@@ -18,14 +18,14 @@
     "docs"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@openvidstudio/capture": "workspace:*",
-    "playwright": "^1.63.0",
+    "playwright": "^1.64.0",
     "sharp": "^0.35.5",
-    "zod": "^4.6.5"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2"
   },
   "scripts": {

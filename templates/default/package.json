@@ -8,11 +8,11 @@
   },
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
-    "@remotion/cli": "4.0.532",
-    "@remotion/google-fonts": "4.0.532",
-    "@remotion/shapes": "4.0.532",
-    "@remotion/tailwind-v4": "4.0.532",
-    "@remotion/transitions": "4.0.532",
+    "@remotion/cli": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/shapes": "4.0.534",
+    "@remotion/tailwind-v4": "4.0.534",
+    "@remotion/transitions": "4.0.534",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "remotion": "4.0.532",
@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@types/react": "19.3.0",
-    "@types/web": "0.0.357",
+    "@types/web": "0.0.358",
     "typescript": "7.0.2"
   },
   "scripts": {

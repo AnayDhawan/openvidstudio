@@ -73,6 +73,8 @@ export interface RecordTerminalResult {
   cast: TerminalCast;
   truncated: boolean;
   mode: TerminalMode;
+  /** Plain-language notices about the recording environment, for the caller to surface. */
+  warnings: string[];
 }
 
 /** A runaway process can emit output forever; cap what is retained rather than exhausting memory. */
@@ -154,8 +156,48 @@ class CastRecorder {
   }
 }
 
-function childEnv(cols: number, rows: number): NodeJS.ProcessEnv {
-  return { ...process.env, COLUMNS: String(cols), LINES: String(rows), TERM: "xterm-256color" };
+/**
+ * Python defaults that make a recorded run honest. Piped stdout is block-buffered, so without
+ * PYTHONUNBUFFERED a script's whole output arrives as one event at exit and the cast replays as
+ * a single dump; and on Windows the console code page is not UTF-8, so non-ASCII output is
+ * mangled or raises UnicodeEncodeError. These are the environment forms of `python -u` and
+ * `python -X utf8`, which means they apply however the program is launched. They sit below
+ * process.env so a caller who sets them deliberately still wins.
+ */
+export const PYTHON_RECORDING_ENV: Readonly<Record<string, string>> = {
+  PYTHONUNBUFFERED: "1",
+  PYTHONUTF8: "1",
+  PYTHONIOENCODING: "utf-8",
+};
+
+export function childEnv(cols: number, rows: number): NodeJS.ProcessEnv {
+  return {
+    ...PYTHON_RECORDING_ENV,
+    ...process.env,
+    COLUMNS: String(cols),
+    LINES: String(rows),
+    TERM: "xterm-256color",
+  };
+}
+
+/**
+ * On Windows a bare `bash` on PATH is usually the WSL launcher (System32/bash.exe).
+ * It starts a Linux distro with its own filesystem and PATH, so `bash -c "npm test"` runs
+ * something other than what the author's Windows shell would. Returns a warning to show, or null.
+ */
+export function windowsShellWarning(command: string, platform: NodeJS.Platform = process.platform): string | null {
+  if (platform !== "win32") return null;
+  const base = command.split(/[\\/]/).pop()!.toLowerCase().replace(/\.exe$/, "");
+  if (base !== "bash") return null;
+  // A path the caller chose (Git Bash under Program Files, say) is taken at its word. Only a
+  // bare name, which Windows resolves through PATH, or the System32 launcher itself is the trap.
+  const hasPath = /[\\/]/.test(command);
+  if (hasPath && !/[\\/]system32[\\/]/i.test(command)) return null;
+  return (
+    `"${command}" on Windows usually resolves to the WSL launcher (System32/bash.exe), which runs inside a ` +
+    `Linux distro with a different filesystem and PATH. Use Git Bash by full path, or run the program ` +
+    `directly (for example command "node" with args) so the recording shows what a Windows user would see.`
+  );
 }
 
 /**
@@ -314,5 +356,6 @@ export async function recordTerminal(opts: RecordTerminalOptions): Promise<Recor
     },
     truncated: recorder.truncated,
     mode,
+    warnings: [windowsShellWarning(opts.command)].filter((w): w is string => w !== null),
   };
 }

@@ -100,7 +100,7 @@ async function captureTerminal(input: CaptureTerminalInput): Promise<CaptureTerm
   const outPathAbs = path.join(projectRoot, outPathRel);
   fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
 
-  const { cast, truncated, mode } = await recordTerminal({
+  const { cast, truncated, mode, warnings } = await recordTerminal({
     command: input.command,
     args: input.args,
     cwd: input.cwd ? path.resolve(projectRoot, input.cwd) : projectRoot,
@@ -123,15 +123,20 @@ async function captureTerminal(input: CaptureTerminalInput): Promise<CaptureTerm
     rows: cast.rows,
     truncated,
     mode,
-    ...(mode === "pipe" && input.mode !== "pipe"
-      ? {
-          note:
-            "Recorded through pipes, not a pty, because node-pty is not installed here. Most CLIs suppress " +
-            "colour when no terminal is attached, so this cast is likely duller than the real run. Install " +
-            "node-pty in this project for a faithful recording, or use capture_desktop against the terminal " +
-            "window for a full-screen TUI.",
-        }
-      : {}),
+    ...(() => {
+      const notes = [
+        ...(mode === "pipe" && input.mode !== "pipe"
+          ? [
+              "Recorded through pipes, not a pty, because node-pty is not installed here. Most CLIs suppress " +
+                "colour when no terminal is attached, so this cast is likely duller than the real run. Install " +
+                "node-pty in this project for a faithful recording, or use capture_desktop against the terminal " +
+                "window for a full-screen TUI.",
+            ]
+          : []),
+        ...warnings,
+      ];
+      return notes.length > 0 ? { note: notes.join(" ") } : {};
+    })(),
   };
 }
 

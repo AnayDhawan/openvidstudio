@@ -162,6 +162,18 @@ no native build but makes most CLIs suppress colour. A dull, colourless recordin
 therefore explained by the cast rather than left as a mystery. (`mode` is absent in casts
 recorded before pty support existed.)
 
+Two things go wrong on Windows, and the recorder handles both. Python block-buffers
+stdout when it is a pipe, so a script's whole output used to arrive as one event at exit
+and replay as a single dump; and the Windows console code page is not UTF-8, so a `✓` or
+an accented letter raised `UnicodeEncodeError` or came out as mojibake. Every recording
+now sets `PYTHONUNBUFFERED=1`, `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` in the child's
+environment, the environment forms of `python -u` and `python -X utf8`, so it makes no
+difference how the program is launched. They sit below your own environment: a value you
+set on purpose wins. The third trap is `command: "bash"`: on Windows a bare `bash` usually
+resolves to the WSL launcher in System32, which runs inside a Linux distro with a different
+filesystem and PATH, not the shell you meant. `capture_terminal` says so in its `note`
+when it sees that; give the full path to Git Bash, or run the program directly.
+
 A beat uses this path by declaring `visual.captureMethod: "recording"` and
 `visual.source: "terminal"`. `visual.command` must be an executable name only, with
 arguments in `visual.args`; it is never run through a shell. `validate_scenes` requires the

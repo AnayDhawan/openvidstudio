@@ -41,10 +41,12 @@ export interface ScaffoldSceneInput {
   template?: TemplateName;
   /** Defaults to "template". */
   mode?: ScaffoldSceneMode;
+  /** Return the generated source without writing a scene file. */
+  dryRun?: boolean;
 }
 
 export interface ScaffoldSceneResult {
-  written: true;
+  written: boolean;
   path: string;
   componentName: string;
   /** A template name for mode "template"; "starter" for mode "starter". */
@@ -52,6 +54,8 @@ export interface ScaffoldSceneResult {
   /** True when the beat was found in beats.json and its content was used. */
   usedBeat: boolean;
   notes: string[];
+  /** Present for dry runs so callers can inspect the exact generated scene. */
+  source?: string;
 }
 
 /** mode: "blank" never writes a file -- this is what it returns instead. */
@@ -171,7 +175,7 @@ export function runScaffoldScene(
   const notes: string[] = [];
 
   if (mode === "blank") {
-    fs.mkdirSync(scenesDir, { recursive: true });
+    if (!input.dryRun) fs.mkdirSync(scenesDir, { recursive: true });
     notes.push(
       `Nothing written. stitch_composition expects this beat's scene at ` +
         `scenes/${componentName}.tsx, exporting a component named ${componentName}. Write it by hand, ` +
@@ -208,15 +212,18 @@ export function runScaffoldScene(
 
   if (mode === "starter") {
     const source = renderStarterScene(ctx, projectRoot, videoName);
-    fs.mkdirSync(scenesDir, { recursive: true });
-    fs.writeFileSync(filePath, source, "utf8");
+    if (!input.dryRun) {
+      fs.mkdirSync(scenesDir, { recursive: true });
+      fs.writeFileSync(filePath, source, "utf8");
+    }
     return {
-      written: true,
+      written: !input.dryRun,
       path: filePath,
       componentName,
       template: "starter",
       usedBeat: Boolean(beat),
       notes,
+      ...(input.dryRun ? { source } : {}),
     };
   }
 
@@ -348,16 +355,19 @@ export function runScaffoldScene(
 
   const source = renderTemplate(template, ctx, input.kind);
 
-  fs.mkdirSync(scenesDir, { recursive: true });
-  fs.writeFileSync(filePath, source, "utf8");
+  if (!input.dryRun) {
+    fs.mkdirSync(scenesDir, { recursive: true });
+    fs.writeFileSync(filePath, source, "utf8");
+  }
 
   return {
-    written: true,
+    written: !input.dryRun,
     path: filePath,
     componentName,
     template,
     usedBeat: Boolean(beat),
     notes,
+    ...(input.dryRun ? { source } : {}),
   };
 }
 
@@ -416,6 +426,7 @@ export function registerScaffoldScene(server: McpServer): void {
             "existing-asset",
           ])
           .optional(),
+        dryRun: z.boolean().optional().describe("Return generated source without writing a file."),
       },
     },
     async (input) => runTool("scaffold_scene", () => runScaffoldScene(input)),

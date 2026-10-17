@@ -101,7 +101,7 @@ const TOKEN_PATTERNS: [keyof typeof TOKEN_LABEL, RegExp[]][] = [
   ["panel", [/^(color-)?(panel|card|surface-2|muted-bg)$/]],
   ["panelBorder", [/^(color-)?(hairline|border|ring|divider|panel-border)$/]],
   ["textPrimary", [/^(color-)?(ink|foreground|text|text-primary|fg)$/]],
-  ["textSecondary", [/^(color-)?(ink-muted|muted|text-secondary|fg-muted|subtle)$/]],
+  ["textSecondary", [/^(color-)?(ink-muted|muted-foreground|text-secondary|fg-muted|subtle)$/]],
   ["accent", [/^(color-)?(primary|accent|brand)$/, /^(color-)?(violet|blue|indigo)$/]],
   ["accentAlt", [/^(color-)?(secondary|accent-2|accent-alt)$/, /^(color-)?(teal|cyan|purple)$/]],
   ["success", [/^(color-)?(success|green|positive|ok)$/]],

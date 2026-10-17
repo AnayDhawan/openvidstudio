@@ -33,6 +33,7 @@ export interface InitProjectResult {
   config: OpenvidstudioConfig;
   demo: boolean;
   nextSteps: string[];
+  runtime: { node: string; pnpm: string | null; warnings: string[] };
 }
 
 /**
@@ -151,6 +152,11 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
     config,
     demo: Boolean(input.demo),
     nextSteps,
+    runtime: {
+      node: process.version,
+      pnpm: process.env.npm_config_user_agent?.match(/pnpm\/(\S+)/)?.[1] ?? null,
+      warnings: Number.parseInt(process.versions.node, 10) < 20 ? ["Node 20 or newer is supported."] : [],
+    },
   };
 }
 

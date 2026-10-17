@@ -3,6 +3,9 @@
   "version": "0.2.0",
   "description": "MCP server exposing openvidstudio's mechanical pipeline tools: project scaffolding, beats validation, scene stubs, composition stitching, render, QC frame extraction, and capture driven by @openvidstudio/capture.",
   "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "commonjs",
   "bin": {
     "openvidstudio-mcp": "dist/stdio.js"
@@ -16,16 +19,16 @@
     "py"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@openvidstudio/capture": "workspace:*",
-    "@remotion/bundler": "4.0.524",
-    "@remotion/renderer": "4.0.524",
-    "playwright": "^1.63.0",
-    "sharp": "^0.35.4",
-    "zod": "^4.6.4"
+    "@remotion/bundler": "4.0.534",
+    "@remotion/renderer": "4.0.534",
+    "playwright": "^1.64.0",
+    "sharp": "^0.35.5",
+    "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.5",
     "typescript": "7.0.2"
   },
   "scripts": {

@@ -62,6 +62,17 @@ await page.goto("http://localhost:3000");
 const { zoom } = await detectAndCompensateZoom(page, { width: 1600, height: 1000 });
 await replayInteractions(page, [{ type: "click", selector: "[data-tour=start]" }]);
 await page.screenshot({ path: "shot.png" });
+await browser.close();
+```
+
+Save it as `capture.mjs`, start an app on `localhost:3000`, and run it. The click targets
+`[data-tour=start]`, so change that selector to one that exists in your app (a missing
+selector fails after a 30 second timeout). `browser.close()` matters: without it the script
+writes `shot.png` and then never exits, because the open browser keeps Node alive.
+
+```bash
+npx playwright install chromium
+node capture.mjs
 ```
 
 ```ts

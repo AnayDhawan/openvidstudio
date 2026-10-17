@@ -110,6 +110,13 @@ re-layout between them.
 
 ## Screen recordings
 
+### Theme toggles
+
+`colorScheme: "dark"` already makes libraries such as `next-themes` start in dark mode.
+Do not click a theme toggle afterwards unless the beat explicitly needs light mode: the click
+usually flips the capture back to light. Check `document.documentElement.dataset.theme` after
+the interaction when a project uses a `data-theme` attribute.
+
 For `captureMethod: "recording"` beats, the same zoom-desync check in step
 1 still applies before you start recording: verify the effective viewport
 matches what you requested before you hit record, since the desync is set
@@ -117,6 +124,51 @@ once per origin and persists for the whole session. v1 scope is fixed
 full-viewport recordings only: capture at the compensated viewport size
 and composite the whole frame (no post-hoc DOM-rect cropping of a moving
 recording, that's future work, see `PIPELINE.md`).
+
+## Terminal casts
+
+Everything above is the browser path. A CLI, a build tool, or a package manager has no URL
+and no window worth filming, so `capture_terminal` records the command's output stream as
+timed text rather than as pixels, writing a JSON cast to `public/terminal/<beatId>.json`.
+Recording text is the point: one cast renders crisply at 1080p or 4K, picks up the palette
+`extract_brand` resolved, and replays through the `TerminalReplay` component, instead of
+baking in one machine's font, theme, and window size the way a screen recording does.
+
+The cast is JSON, not a video:
+
+```json
+{
+  "version": 1,
+  "command": "npm",
+  "cols": 120,
+  "rows": 32,
+  "durationMs": 4210,
+  "exitCode": 0,
+  "mode": "pty",
+  "events": [[0, "o", "added 1 package in 1s\n"]]
+}
+```
+
+Each `events` entry is `[timestampMs, stream, text]`, where `stream` is `"o"` for stdout
+and `"e"` for stderr. A pty merges the two streams by construction, so every event in a
+pty cast is `"o"`; that is the pty's behaviour, not a loss of fidelity this format
+introduced.
+
+`mode` records the backend actually used, and it is the first thing to check when a
+recording looks flat. `pty` needs the optional `node-pty` module and is what a faithful
+recording requires: the program sees a real terminal, so it keeps its colour, progress
+bars, and cursor addressing. Without `node-pty` the tool falls back to `pipe`, which needs
+no native build but makes most CLIs suppress colour. A dull, colourless recording is
+therefore explained by the cast rather than left as a mystery. (`mode` is absent in casts
+recorded before pty support existed.)
+
+A beat uses this path by declaring `visual.captureMethod: "recording"` and
+`visual.source: "terminal"`. `visual.command` must be an executable name only, with
+arguments in `visual.args`; it is never run through a shell. `validate_scenes` requires the
+cast for every such beat and, when it is missing, reports the exact path it looked for.
+Override the location with `artifacts.terminalPath`; the Asset conventions table in
+`PIPELINE.md` shows how this path sits alongside every other asset. For pty/pipe mode,
+scripted stdin, and output bounding, see the `capture_terminal` tool description.
 
 ## Sizing the frame from the capture
 

@@ -3,21 +3,24 @@
   "version": "0.1.0",
   "description": "An openvidstudio video project, scaffolded from templates/default.",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
-    "@remotion/cli": "4.0.524",
-    "@remotion/google-fonts": "4.0.524",
-    "@remotion/shapes": "4.0.524",
-    "@remotion/tailwind-v4": "4.0.524",
-    "@remotion/transitions": "4.0.524",
+    "@remotion/cli": "4.0.534",
+    "@remotion/google-fonts": "4.0.534",
+    "@remotion/shapes": "4.0.534",
+    "@remotion/tailwind-v4": "4.0.534",
+    "@remotion/transitions": "4.0.534",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "remotion": "4.0.524",
+    "remotion": "4.0.534",
     "tailwindcss": "4.3.3"
   },
   "devDependencies": {
     "@types/react": "19.3.0",
-    "@types/web": "0.0.356",
+    "@types/web": "0.0.358",
     "typescript": "7.0.2"
   },
   "scripts": {

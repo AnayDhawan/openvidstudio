@@ -178,7 +178,7 @@ Working from a clone instead:
 ```bash
 git clone https://github.com/AnayDhawan/openvidstudio.git
 cd openvidstudio && pnpm install
-pnpm --filter @openvidstudio/mcp-server build
+pnpm build
 # then point the config at packages/mcp-server/dist/stdio.js with "command": "node"
 ```
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, spawnCapture } from "../util";
 import { runExportRendition, type ExportRenditionResult } from "./exportRendition";
+import { runWriteDescription, type WriteDescriptionResult } from "./writeDescription";
 import { fileBytes, relToProject, writeFactRecord } from "../facts";
 import { runTool } from "./mcp";
 
@@ -142,6 +143,8 @@ export interface FinalizeVideoInput {
   share?: boolean;
   /** Cap for the share copy in MB. Defaults to 10. */
   shareMaxMB?: number;
+  /** Write output/<videoName>-DESCRIPTION.md (chapters, credits, sample disclosure). Defaults to true. */
+  description?: boolean;
 }
 
 export interface FinalizeVideoResult {
@@ -156,6 +159,8 @@ export interface FinalizeVideoResult {
   } | null;
   poster?: ExportRenditionResult;
   share?: ExportRenditionResult;
+  /** The YouTube-ready description written beside the video, unless description: false. */
+  description?: WriteDescriptionResult;
   notes: string[];
 }
 
@@ -234,6 +239,19 @@ export async function runFinalizeVideo(input: FinalizeVideoInput): Promise<Final
     });
   }
 
+  // The description is part of the finished video, not an extra: a launch video goes up with its
+  // chapters, its credits and its sample-content disclosure, and one that was never written is
+  // one that gets posted without them. Only a missing beats.json is tolerated (nothing to
+  // describe); a malformed brief or a lost disclosure throws, because shipping those quietly
+  // is the failure this file exists to prevent.
+  if (input.description !== false) {
+    if (fs.existsSync(path.join(projectRoot, "src", "videos", videoName, "beats.json"))) {
+      result.description = runWriteDescription({ projectRoot, videoName });
+    } else {
+      notes.push(`No description written: src/videos/${videoName}/beats.json does not exist, so there is nothing to describe.`);
+    }
+  }
+
   writeFactRecord(projectRoot, {
     tool: "finalize_video",
     videoName,
@@ -247,6 +265,7 @@ export async function runFinalizeVideo(input: FinalizeVideoInput): Promise<Final
         afterTruePeakDb: loudness.after.truePeakDb,
         withinTolerance: loudness.withinTolerance,
       },
+      description: result.description ? relToProject(projectRoot, result.description.path) : null,
       poster: result.poster?.files[0] ?? null,
       posterBeat: result.poster?.posterPick?.beatId ?? null,
       share: result.share?.share ? { path: result.share.share.path, bytes: result.share.share.bytes, maxBytes: result.share.share.maxBytes, withinCap: result.share.share.withinCap } : null,
@@ -271,7 +290,10 @@ export function registerFinalizeVideo(server: McpServer): void {
         "<videoName>-final.mp4 and leaves the original render in place. Also writes a poster frame (export_" +
         "rendition's poster with posterPick auto, so the thumbnail is the most representative beat rather " +
         "than the last one) and a share copy under a hard size cap (shareMaxMB, default 10). Pass poster: " +
-        "false or share: false to skip either. A render with no audio track skips loudness and says so.",
+        "false or share: false to skip either. Also writes output/<videoName>-DESCRIPTION.md (write_description: " +
+        "chapters from the beats, credits, and the disclosure of any constructed sample content), because a " +
+        "finished video is posted with it; pass description: false to skip. A render with no audio track skips " +
+        "loudness and says so.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -282,6 +304,7 @@ export function registerFinalizeVideo(server: McpServer): void {
         poster: z.boolean().optional().describe("Defaults to true."),
         share: z.boolean().optional().describe("Defaults to true."),
         shareMaxMB: z.number().positive().optional().describe("Defaults to 10."),
+        description: z.boolean().optional().describe("Write the DESCRIPTION.md file. Defaults to true."),
       },
     },
     async (input) => runTool("finalize_video", () => runFinalizeVideo(input)),

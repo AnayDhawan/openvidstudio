@@ -195,7 +195,7 @@ const AUTO_MUSIC_BEDS = ["pulse-bed.mp3", "music-bed.mp3"];
  * whole composition file, so without this a hand-picked track or level silently reverts to the
  * auto-detected bed. Matches only the exact shape renderDemoTsx emits.
  */
-function readExistingMusicLayer(
+export function readExistingMusicLayer(
   demoPath: string,
 ): { file: string; volume: number; pinned: boolean } | null {
   let text: string;

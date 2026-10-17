@@ -5,7 +5,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { loadConfig } from "../config";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, pascalCase } from "../util";
 import { runTool } from "./mcp";
-import { writeFactRecord } from "../facts";
+import { writeFactRecord, relToProject } from "../facts";
 
 export interface StitchCompositionInput {
   projectRoot?: string;
@@ -61,6 +61,18 @@ export interface StitchCompositionResult {
   musicBedFile: string | null;
   /** The mix level actually applied to musicBedFile, honest about the default that was picked. */
   musicBedVolume: number;
+  /**
+   * Where the music layer came from: "explicit" (musicBed input), "preserved" (the track and
+   * level the previous stitch of this video had, so a hand-picked bed survives a re-stitch),
+   * "auto" (pulse-bed.mp3 / music-bed.mp3 found in public/audio), or "none".
+   */
+  musicBedSource: "explicit" | "preserved" | "auto" | "none";
+  /**
+   * Where the bed's cue grid was copied to for useMusicClock, relative to the project root, or
+   * null when the bed has no <stem>.cues.json next to it (then useMusicClock reports
+   * available: false and runs on a fallback grid). Run plan_music_cues to produce one.
+   */
+  musicCuesPath: string | null;
   /** True when src/videos/<videoName>/overrides.tsx exists and was wired into the composition. */
   overridesApplied: boolean;
   /** Plain-language notices for things that succeeded but probably are not what was wanted. */
@@ -176,6 +188,69 @@ function sceneImportPath(b: BeatLike): string {
   return normalized.startsWith("./") || normalized.startsWith("../") ? normalized : `./${normalized}`;
 }
 
+const AUTO_MUSIC_BEDS = ["pulse-bed.mp3", "music-bed.mp3"];
+
+/**
+ * The music layer a previous stitch of this video wrote, if any. Re-stitching regenerates the
+ * whole composition file, so without this a hand-picked track or level silently reverts to the
+ * auto-detected bed. Matches only the exact shape renderDemoTsx emits.
+ */
+function readExistingMusicLayer(
+  demoPath: string,
+): { file: string; volume: number; pinned: boolean } | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(demoPath, "utf8");
+  } catch {
+    return null;
+  }
+  const m = text.match(/<Audio src=\{staticFile\("audio\/([^"]+)"\)\} volume=\{([0-9.]+)\} loop \/>/);
+  if (!m) return null;
+  const volume = Number(m[2]);
+  if (!Number.isFinite(volume)) return null;
+  const file = m[1]!;
+  // "pinned" = a person chose this layer, so a re-stitch must not replace it. Auto-detected
+  // beds are deliberately not pinned: dropping pulse-bed.mp3 into a project that was stitched
+  // with music-bed.mp3 should still upgrade it, as before.
+  const marker = text.match(/ovs-music-source: (\w+)/)?.[1];
+  const pinned = marker === "explicit" || marker === "preserved" || !AUTO_MUSIC_BEDS.includes(file);
+  return { file, volume, pinned };
+}
+
+/**
+ * The fields of public/audio/<stem>.cues.json that useMusicClock reads, or null when the bed
+ * has no cues file (or it does not parse, or carries no usable bpm). The first downbeat offset
+ * comes from the file's own beat list, so a found track whose first beat is not at 0:00 stays
+ * aligned; compose_score's tracks start on beat 0 and get an offset of 0.
+ */
+function readBedCues(projectRoot: string, bedFile: string): Record<string, unknown> | null {
+  const stem = bedFile.replace(/\.[^.]+$/, "");
+  const cuesPath = path.join(projectRoot, "public", "audio", `${stem}.cues.json`);
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(fs.readFileSync(cuesPath, "utf8")) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+  const bpm = raw.bpm;
+  if (typeof bpm !== "number" || !(bpm > 0)) return null;
+  const beats = Array.isArray(raw.beats) ? (raw.beats as unknown[]) : [];
+  const first = typeof beats[0] === "number" ? (beats[0] as number) : 0;
+  const out: Record<string, unknown> = { bpm, offsetSeconds: first };
+  if (typeof raw.track === "string") out.track = raw.track;
+  if (Array.isArray(raw.sections)) {
+    out.sections = (raw.sections as Record<string, unknown>[])
+      .filter((x) => typeof x.label === "string" && typeof x.startBar === "number" && typeof x.durationBars === "number")
+      .map((x) => ({ label: x.label, startBar: x.startBar, durationBars: x.durationBars }));
+  }
+  if (Array.isArray(raw.impacts)) {
+    out.impacts = (raw.impacts as Record<string, unknown>[])
+      .filter((x) => typeof x.label === "string" && typeof x.atBar === "number")
+      .map((x) => ({ label: x.label, atBar: x.atBar, atBeat: typeof x.atBeat === "number" ? x.atBeat : 0 }));
+  }
+  return out;
+}
+
 function renderDemoTsx(opts: {
   componentName: string;
   beats: BeatLike[];
@@ -184,9 +259,11 @@ function renderDemoTsx(opts: {
   baseLanguage: string;
   musicBedFile: string | null;
   musicBedVolume: number;
+  musicBedSource: StitchCompositionResult["musicBedSource"];
+  hasMusicCues: boolean;
   hasOverrides: boolean;
 }): string {
-  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, hasOverrides } = opts;
+  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, musicBedSource, hasMusicCues, hasOverrides } = opts;
   const sceneImports = beats
     .map((b) => `import { ${pascalCase(b.id)} } from "${sceneImportPath(b)}";`)
     .join("\n");
@@ -202,7 +279,8 @@ function renderDemoTsx(opts: {
     .join("\n");
 
   const musicBedBlock = musicBedFile
-    ? `      <Sequence from={0} durationInFrames={DURATION_IN_FRAMES} layout="none">
+    ? `      {/* ovs-music-source: ${musicBedSource} */}
+      <Sequence from={0} durationInFrames={DURATION_IN_FRAMES} layout="none">
         <Audio src={staticFile(${JSON.stringify(`audio/${musicBedFile}`)})} volume={${musicBedVolume}} loop />
       </Sequence>
 `
@@ -231,8 +309,10 @@ function renderDemoTsx(opts: {
 
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, Series, staticFile } from "remotion";
+import { MusicClockProvider } from "@openvidstudio/core";
 import beats from "./beats.json";
-${overridesImport}${sceneImports}
+${hasMusicCues ? `import musicCues from "./music.cues.json";
+` : ""}${overridesImport}${sceneImports}
 
 const SCENES: Record<string, React.FC> = {
 ${sceneMapLines}
@@ -247,20 +327,27 @@ ${voBlocks}
 const last = beats.beats[beats.beats.length - 1];
 export const DURATION_IN_FRAMES = last.start + last.duration;
 
+// The score's grid, handed to useMusicClock(beatId) in any scene. BEAT_STARTS turns the track's
+// bars into scene-local frames.
+const MUSIC_CUES = ${hasMusicCues ? "musicCues" : "null"};
+const BEAT_STARTS: Record<string, number> = Object.fromEntries(beats.beats.map((b) => [b.id, b.start]));
+
 const Narrated: React.FC<{ language: string }> = ({ language }) => {
   const vo = VO_FILES[language] ?? {};
   return (
     <AbsoluteFill>
-      <Series>
-        {beats.beats.map((b) => {
-          const Scene = SCENES[b.id];
-          return (
-            <Series.Sequence key={b.id} durationInFrames={b.duration} name={b.id}>
-              <Scene />
-            </Series.Sequence>
-          );
-        })}
-      </Series>
+      <MusicClockProvider cues={MUSIC_CUES} beatStarts={BEAT_STARTS}>
+        <Series>
+          {beats.beats.map((b) => {
+            const Scene = SCENES[b.id];
+            return (
+              <Series.Sequence key={b.id} durationInFrames={b.duration} name={b.id}>
+                <Scene />
+              </Series.Sequence>
+            );
+          })}
+        </Series>
+      </MusicClockProvider>
       {beats.beats
         .filter((b) => vo[b.id])
         .map((b) => (
@@ -388,24 +475,57 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
   const voMap = voByLanguage[baseLanguage];
   const voBeatsMissing = languageReports.find((r) => r.language === baseLanguage)!.voBeatsMissing;
 
+  const demoPath = path.join(videoDir, `${componentName}.tsx`);
+  const existingLayer = readExistingMusicLayer(demoPath);
+  const existingLayerUsable =
+    existingLayer !== null &&
+    existingLayer.pinned &&
+    fs.existsSync(path.join(projectRoot, "public", "audio", existingLayer.file));
+  if (existingLayer?.pinned && !existingLayerUsable && !input.musicBed?.file) {
+    warnings.push(
+      `The previous stitch used public/audio/${existingLayer.file} as the music bed, but that file is gone. ` +
+        `Falling back to auto-detection. Restore the file or pass musicBed to pick one explicitly.`,
+    );
+  }
+
   let musicBedFile: string | null;
+  let musicBedSource: StitchCompositionResult["musicBedSource"];
   if (input.musicBed?.file) {
     const exists = fs.existsSync(path.join(projectRoot, "public", "audio", input.musicBed.file));
     if (!exists) {
       throw new Error(`musicBed.file "${input.musicBed.file}" does not exist at public/audio/${input.musicBed.file}`);
     }
     musicBedFile = input.musicBed.file;
+    musicBedSource = "explicit";
+  } else if (existingLayer && existingLayerUsable) {
+    // A re-stitch must not undo a hand-picked track. Auto-detection only decides the first time.
+    musicBedFile = existingLayer.file;
+    musicBedSource = "preserved";
   } else {
     const pulseBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "pulse-bed.mp3"));
     const musicBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
     musicBedFile = pulseBedPresent ? "pulse-bed.mp3" : musicBedPresent ? "music-bed.mp3" : null;
+    musicBedSource = musicBedFile ? "auto" : "none";
   }
   const musicBedFound = musicBedFile !== null;
   // No VO to duck under when narration is "none", so the bed defaults to full level instead
-  // of the 0.18 tuned for sitting quietly beneath narration.
+  // of the 0.18 tuned for sitting quietly beneath narration. A preserved layer keeps the level
+  // it had, since that may have been tuned by hand.
   const narrationMode = beatsData.narration === "none" ? "none" : "voice";
-  const musicBedVolume = input.musicBed?.volume ?? (narrationMode === "none" ? 1.0 : 0.18);
+  const musicBedVolume =
+    input.musicBed?.volume ??
+    (musicBedSource === "preserved" && existingLayer ? existingLayer.volume : narrationMode === "none" ? 1.0 : 0.18);
   const hasOverrides = fs.existsSync(path.join(videoDir, "overrides.tsx"));
+
+  // The bed's cue grid, copied next to the composition because a scene bundle can import JSON
+  // from src/ but not from public/. Trimmed to what useMusicClock reads.
+  const musicCuesAbs = path.join(videoDir, "music.cues.json");
+  const musicCues = musicBedFile ? readBedCues(projectRoot, musicBedFile) : null;
+  if (musicCues) {
+    fs.writeFileSync(musicCuesAbs, JSON.stringify(musicCues, null, 2) + "\n", "utf8");
+  } else if (fs.existsSync(musicCuesAbs)) {
+    fs.rmSync(musicCuesAbs);
+  }
 
   const demoTsx = renderDemoTsx({
     componentName,
@@ -414,9 +534,10 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     baseLanguage,
     musicBedFile,
     musicBedVolume,
+    musicBedSource,
+    hasMusicCues: musicCues !== null,
     hasOverrides,
   });
-  const demoPath = path.join(videoDir, `${componentName}.tsx`);
   fs.writeFileSync(demoPath, demoTsx, "utf8");
 
   const entries = readRegistry(projectRoot).filter((e) => e.videoName !== videoName);
@@ -452,6 +573,8 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     musicBedFound,
     musicBedFile,
     musicBedVolume,
+    musicBedSource,
+    musicCuesPath: musicCues ? relToProject(projectRoot, musicCuesAbs) : null,
     overridesApplied: hasOverrides,
     warnings,
     languages: languageReports,
@@ -485,7 +608,9 @@ export function registerStitchComposition(server: McpServer): void {
         + "auto-detected bed file and its mix level: file is a filename under public/audio/ (same convention "
         + "as the auto-detected pulse-bed.mp3/music-bed.mp3), volume defaults to 0.18 when beats.json's "
         + "narration is \"voice\" or omitted (today's under-narration tuning) and 1.0 when narration is "
-        + "\"none\" (there is no VO to duck under). If src/videos/<videoName>/overrides.tsx exists, it is "
+        + "\"none\" (there is no VO to duck under). When musicBed is omitted and a previous stitch of this "
+        + "video already wrote a music layer whose file still exists, that track and level are preserved "
+        + "(musicBedSource: \"preserved\") instead of reverting to auto-detection. If src/videos/<videoName>/overrides.tsx exists, it is "
         + "imported and rendered as an extra layer inside the composition on every stitch, a dev-authored "
         + "extension point this tool only ever references and never writes, so it survives a re-stitch "
         + "instead of being clobbered by one.",

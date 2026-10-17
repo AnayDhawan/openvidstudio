@@ -12,6 +12,10 @@ import "./localFonts";
 export { CameraRig, Layer, useCamera } from "./camera";
 export type { CamKeyframe } from "./camera";
 
+// Music-first timing: the score's grid as scene-local frames (C3)
+export { MusicClockProvider, useMusicClock, createMusicClock } from "./musicClock";
+export type { MusicCues, MusicClock } from "./musicClock";
+
 // Motion helpers
 export { E, SPRING, tween, pop, jitter, staggerDelay } from "./motion";
 

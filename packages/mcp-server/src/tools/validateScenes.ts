@@ -157,6 +157,36 @@ function declaredWidths(src: string): number[] {
  * have to special-case them. Honours an `artifacts` override, since a beat is allowed to
  * put its capture somewhere other than the convention path.
  */
+/**
+ * Numbers a scene types into its own copy. C8: a scene that shows a number must get it from
+ * facts.json (what collect_facts merged out of the real tool runs) or from a capture, never
+ * from the author's memory, because a retyped number is the one that goes stale or was never
+ * true. This reads the scene source for numbers inside visible text (JSX text, and the string
+ * props text, label, title, name, caption, value) and returns them. Years, version strings
+ * and single digits are not claims and are skipped.
+ */
+export function typedNumbers(src: string): string[] {
+  const candidates: string[] = [];
+  for (const m of src.matchAll(/>([^<>{}]*\d[^<>{}]*)</g)) candidates.push(m[1]!);
+  for (const m of src.matchAll(/\b(?:text|label|title|name|caption|value)\s*=\s*(?:"([^"]*\d[^"]*)"|'([^']*\d[^']*)')/g)) candidates.push((m[1] ?? m[2])!);
+  const found: string[] = [];
+  for (const text of candidates) {
+    for (const m of text.matchAll(/(?<![\w.])(v?)(\d(?:[\d,]*\d)?(?:\.\d+)?)(?![\w])/g)) {
+      const token = m[2]!;
+      if (m[1] === "v") continue;
+      if (/^(19|20)\d{2}$/.test(token)) continue;
+      if (/^\d$/.test(token)) continue;
+      if (/^\d+\.\d+\.\d+/.test(token)) continue;
+      found.push(token);
+    }
+  }
+  return [...new Set(found)];
+}
+
+function importsFacts(src: string): boolean {
+  return /from\s+["'][^"']*facts(?:\.json)?["']/.test(src);
+}
+
 function expectedArtifact(
   beat: BeatLike,
   method: string | undefined,
@@ -320,6 +350,26 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
         // Settling is a browser-capture concept: capture_desktop/mobile/terminal have no
         // settlePage call and never write this sidecar.
         checkSettleSidecar(assetPathAbs, beat.id, component, findings);
+      }
+    }
+
+    // C8: numbers shown on screen come from facts or a capture. A scene that types numbers into its
+    // own copy without importing facts.json is asserting them from memory. A file can opt out of the
+    // check with a `// ovs-numbers-ok: <reason>` comment (a step counter, a fixed price).
+    if (!importsFacts(src) && !src.includes("ovs-numbers-ok")) {
+      const typed = typedNumbers(src);
+      if (typed.length > 0) {
+        findings.push({
+          beatId: beat.id,
+          scene: `${component}.tsx`,
+          severity: "warning",
+          check: "numbers-sourcing",
+          message:
+            `Shows ${typed.length === 1 ? "a number" : "numbers"} typed into the scene (${typed.slice(0, 4).join(", ")}` +
+            `${typed.length > 4 ? ", ..." : ""}) without importing facts.json. A number on screen should come from ` +
+            `a real tool run (collect_facts merges them into src/videos/${videoName}/facts.json) or from a capture. ` +
+            `If this one is a label rather than a claim, add "// ovs-numbers-ok: <why>" to the file.`,
+        });
       }
     }
 

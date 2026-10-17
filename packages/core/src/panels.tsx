@@ -339,13 +339,13 @@ export const ChapterHud: React.FC<{
   const num = String(activeIndex + 1).padStart(2, "0");
   return (
     <>
-      <div style={{ position: "absolute", left: 72, top: 60, display: "flex", alignItems: "center", gap: 22, opacity: p }}>
+      <div data-ovs-hud="" style={{ position: "absolute", left: 72, top: 60, display: "flex", alignItems: "center", gap: 22, opacity: p }}>
         <DotText text={num} at={firstFrame ? at : -100} px={9} build={firstFrame ? "wipe" : "none"} solid={text} glow={0.3} />
         <div style={{ fontFamily: monoStack(), fontSize: 20, letterSpacing: "0.3em", color: faint, transform: `translateX(${(1 - p) * -20}px)` }}>
           {ch.label}
         </div>
       </div>
-      <div style={{ position: "absolute", left: 72, right: 72, bottom: railBottom, display: "flex", gap: 8, opacity: 0.9 }}>
+      <div data-ovs-hud="" style={{ position: "absolute", left: 72, right: 72, bottom: railBottom, display: "flex", gap: 8, opacity: 0.9 }}>
         {chapters.map((c, i) => {
           const fill = i < activeIndex ? 1 : i > activeIndex ? 0 : firstFrame ? tween(frame, [at, at + fillDurationInFrames], [0, 1], E.cinematic) : 1;
           return (

@@ -14,8 +14,8 @@ const EM_DASH = "—";
 const MIN_PACE = 2.3;
 const MAX_PACE = 2.9;
 /** SCRIPT.md's reading-time budget for onScreenText on a narration:"none" beat. */
-const MAX_READING_WORDS_PER_SEC = 3.5;
-const READING_OVERHEAD_SEC = 0.8;
+export const MAX_READING_WORDS_PER_SEC = 3.5;
+export const READING_OVERHEAD_SEC = 0.8;
 const NARRATION_MODES = ["voice", "none"] as const;
 const CREATIVE_LEVELS = ["peak", "mid", "literal"] as const;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;

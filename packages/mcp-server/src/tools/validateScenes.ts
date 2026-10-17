@@ -46,7 +46,10 @@ export interface SceneFinding {
   message: string;
   /** Which pass produced this: reading the source, or measuring the real render. */
   source?: "static" | "render";
-  /** For render findings, which check: crop, text-size, reading-time, dead-frames or render-skipped. */
+  /**
+   * For render findings, which check: crop, text-size, reading-time, dead-frames, em-dash,
+   * contrast, safe-area, hud-overlap or render-skipped.
+   */
   check?: string;
 }
 
@@ -426,8 +429,10 @@ export function registerValidateScenes(server: McpServer): void {
         "in a real browser and measure what actually renders: text cropped at the frame edge (camera-" +
         "transformed content only, found through the real DOM), text below the design system's minimum " +
         "size (a Pill/ToolChip label gets its own, lower floor rather than body's), on-screen text that " +
-        "needs longer to read than the beat lasts (3 words/sec), and beats whose " +
-        "frames never change. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
+        "needs longer to read than the beat lasts (3.5 words/sec plus 0.8s, the same budget validate_beats " +
+        "applies), beats whose frames never change, em dashes in on-screen copy, text colour against the " +
+        "pixels rendered behind it (WCAG 4.5:1, 3:1 for large text), text outside the title-safe area, and " +
+        "scene text that overlaps the chapter HUD. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
         "recording played through OffthreadVideo) is reported as render-skipped, never as clean.",
       inputSchema: {
         projectRoot: z.string().optional(),

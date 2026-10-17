@@ -42,7 +42,10 @@ export function spawnCapture(command: string, args: string[], cwd: string): Prom
     // block `"` itself, so wrapping each in double quotes here is always safe and closes
     // that gap without touching the non-shell (ffmpeg/ffprobe) call path at all.
     const finalArgs = shell ? args.map((a) => `"${a}"`) : args;
-    const child = spawn(command, finalArgs, { cwd, shell });
+    // The command gets the same treatment: a shim at C:\Program Files\... would otherwise be
+    // cut at its first space and cmd.exe would try to run "C:\Program".
+    const finalCommand = shell && /\s/.test(command) ? `"${command}"` : command;
+    const child = spawn(finalCommand, finalArgs, { cwd, shell });
     let stdout = "";
     let stderr = "";
     child.stdout?.on("data", (chunk: Buffer) => {

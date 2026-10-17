@@ -30,6 +30,12 @@ jobs:
       - run: pnpm --filter @openvidstudio/capture typecheck
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck
+      # README's tool counts and packages/docs/TOOLS.md are generated from the tools the
+      # server registers; this fails when either has drifted (fix: node scripts/generate-tool-docs.mjs).
+      - run: node scripts/generate-tool-docs.mjs --check
+      # The per-tool test files that need nothing but node and the built packages. The rest
+      # (renders, browsers, ffmpeg, Python) run locally through `pnpm --filter @openvidstudio/mcp-server test`.
+      - run: node packages/mcp-server/scripts/manual-test.mjs capture-argv-spaces plan-beats stitch-music tool-count
   offline-render:
     runs-on: ubuntu-latest
     steps:

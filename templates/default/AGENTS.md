@@ -11,10 +11,15 @@ detail and is kept in sync with this file by hand.
 ## The order
 
 ```
-preflight -> plan_production -> extract_brand -> plan_beats -> [write VO] -> validate_beats
-  -> APPROVAL GATE -> write_beats_file -> capture_screenshot -> scaffold_scene
-  -> validate_scenes -> stitch_composition -> render_video -> qc_extract_frames
+preflight -> plan_production -> extract_brand -> write_brief -> plan_beats -> [write VO]
+  -> validate_beats -> APPROVAL GATE -> write_beats_file -> captures -> [compose_score]
+  -> scenes -> render_stills -> validate_scenes -> stitch_composition -> render_video
+  -> finalize_video -> qc_extract_frames
 ```
+
+`./docs/CREATIVE.md` is the craft: read it before writing a brief at peak or mid level.
+`./docs/TOOLS.md` lists every tool. Review with `render_stills` (`perBeat: "review"`) before
+any full render, at every level: it returns a contact grid and numeric findings.
 
 ## Before you write a scene: read the brief first
 

@@ -26,6 +26,11 @@ clobber local edits here). If a doc listed below is missing, re-run
   this instead of opening the library source.
 - `./docs/NARRATION.md`: voice, music and sound effects, and why generated
   voiceover usually sounds synthetic.
+- `./docs/CREATIVE.md`: how to make the video good: the story, the hook, a
+  motif from the brand, on-screen copy, pacing to music, camera, and the
+  review rubric. Read it before writing a brief at peak or mid level.
+- `./docs/TOOLS.md`: every MCP tool with a one-line purpose, generated from
+  the server's own registry.
 
 ## Rules a scene-writing agent must never violate
 
@@ -70,6 +75,14 @@ decides how you get to a scene file:
 Whichever path, every scene still has to pass `STYLE.md`'s hard rules (no
 linear easing, `CinematicScene` always, motion never stops, no em dashes)
 and claim-obligates-visual (`SCRIPT.md`).
+
+Review before any full render, at every level. `render_stills` with
+`perBeat: "review"` writes five frames per beat and one labelled contact
+grid, and returns numeric findings (cropping, text size, reading time,
+contrast, em dashes, safe area, HUD overlap, dead frames) so an agent that
+cannot view images can still review. Look, fix, and render again with the
+next `round`, until the rubric in `CREATIVE.md` passes. Numbers shown on
+screen come from `facts.json` or a capture, never from memory.
 
 Then run `validate_scenes`. It reads the scene source statically: camera
 scale against the content widths declared in the file, a camera that

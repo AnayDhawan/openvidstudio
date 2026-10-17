@@ -270,12 +270,20 @@ export async function openSeekablePage(opts: {
   bundleUrl: string;
   composition: ResolvedComposition;
   timeoutMs?: number;
+  /**
+   * The global frame the composition mounts on. Defaults to 0. A caller about to measure one
+   * beat passes that beat's own frame, so a beat that cannot mount (a missing capture holds
+   * its render open forever) cannot take every other beat's page down with it, which mounting
+   * the first frame of the whole composition would.
+   */
+  initialFrame?: number;
 }): Promise<void> {
   const { page, bundleUrl, composition } = opts;
   const timeoutMs = opts.timeoutMs ?? 20000;
+  const initialFrame = Math.max(0, Math.min(composition.durationInFrames - 1, Math.round(opts.initialFrame ?? 0)));
 
   await page.addInitScript(
-    ({ timeoutMs: t }: { timeoutMs: number }) => {
+    ({ timeoutMs: t, initialFrame: f0 }: { timeoutMs: number; initialFrame: number }) => {
       const w = window as unknown as Record<string, unknown>;
       w.remotion_puppeteerTimeout = t;
       w.remotion_isMainTab = true;
@@ -283,7 +291,7 @@ export async function openSeekablePage(opts: {
       w.remotion_initialMemoryAvailable = null;
       w.remotion_sampleRate = 48000;
       w.remotion_inputProps = "{}";
-      w.remotion_initialFrame = 0;
+      w.remotion_initialFrame = f0;
       w.remotion_attempt = 1;
       w.remotion_proxyPort = null;
       w.remotion_audioEnabled = false;
@@ -298,7 +306,7 @@ export async function openSeekablePage(opts: {
       proc.env = { ...(proc.env ?? {}), NODE_ENV: "production" };
       w.process = proc;
     },
-    { timeoutMs },
+    { timeoutMs, initialFrame },
   );
 
   await page.goto(bundleUrl, { waitUntil: "load", timeout: timeoutMs });

@@ -683,23 +683,31 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
     const composition = await resolveComposition(bundleDir, input.compositionId, remotionBrowser);
     browser = await launchChromium();
 
-    const openPage = async (): Promise<Page> => {
-      const page = await browser!.newPage({
+    // Opened lazily on the beat being measured, at that beat's own first sample frame, never up
+    // front at frame 0: a page that mounts the first beat of the composition fails for every
+    // beat if that one beat cannot render (a capture that was never taken holds its render open).
+    const openPage = async (initialFrame: number): Promise<Page> => {
+      const opened = await browser!.newPage({
         viewport: { width: composition.width, height: composition.height },
         deviceScaleFactor: 1,
       });
-      await openSeekablePage({ page, bundleUrl: server.url, composition, timeoutMs: BEAT_TIMEOUT_MS });
-      return page;
+      try {
+        await openSeekablePage({ page: opened, bundleUrl: server.url, composition, timeoutMs: BEAT_TIMEOUT_MS, initialFrame });
+      } catch (err) {
+        await opened.close().catch(() => undefined);
+        throw err;
+      }
+      return opened;
     };
 
-    let page: Page | null = await openPage();
+    let page: Page | null = null;
 
     for (const beat of input.beats) {
       try {
-        if (!page) page = await openPage();
         const samples: TextProbe[][] = [];
         const shots: string[] = [];
         const frames = sampleFrames(beat);
+        if (!page) page = await openPage(frames[0]!);
         for (const [i, frame] of frames.entries()) {
           await seekToFrame(page, composition.id, frame, BEAT_TIMEOUT_MS);
           const probes = await page.evaluate(probePage, { safeX: SAFE_INSET_X, safeY: SAFE_INSET_Y });

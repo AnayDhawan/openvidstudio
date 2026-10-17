@@ -40,8 +40,8 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
       remotion:
-        specifier: 4.0.532
-        version: 4.0.532(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: 4.0.534
+        version: 4.0.534(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -98,8 +98,8 @@ importers:
         specifier: 19.3.0
         version: 19.3.0(react@19.3.0)
       remotion:
-        specifier: 4.0.532
-        version: 4.0.532(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+        specifier: 4.0.534
+        version: 4.0.534(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       tailwindcss:
         specifier: 4.3.3
         version: 4.3.3

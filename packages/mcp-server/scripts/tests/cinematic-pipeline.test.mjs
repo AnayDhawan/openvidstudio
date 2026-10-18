@@ -119,6 +119,205 @@ console.log("\n== Rhythm: uniform shot lengths draw a warning, never an error ==
   check("write_beats_file still writes a uniform file: a warning does not block", runWriteBeatsFile({ projectRoot: wroteRoot, videoName: "u", beatsJson: file([90, 90, 90, 90]) }).written === true);
 }
 
+console.log("\n== Layers: capture_screenshot splits a page into a background and transparent element layers ==");
+{
+  const captureCore = require(path.join(packageRoot, "..", "capture", "dist", "index.js"));
+  const { runCaptureScreenshot, layerPixelRect } = require(path.join(distDir, "tools", "captureScreenshot.js"));
+
+  // Pure geometry first: where an element's rectangle lands in the saved image.
+  const rect = { x: 100, y: 50, width: 200, height: 80 };
+  const geo = (over = {}) => layerPixelRect(rect, { zoom: 1, deviceScaleFactor: 2, imageWidth: 3200, imageHeight: 2000, ...over });
+  check("layerPixelRect at 2x: CSS rect times 2, plus one pixel of bleed each side", JSON.stringify(geo()) === JSON.stringify({ x: 199, y: 99, width: 402, height: 162 }));
+  check("...under a 1.25 zoom desync the scale is zoom times dpr (x 249, w 502 with the bleed)", JSON.stringify(geo({ zoom: 1.25 })) === JSON.stringify({ x: 249, y: 124, width: 502, height: 202 }));
+  check("...a fractional edge grows outward, never inward (x 10.3 w 5 at 1x covers 10 to 16, so 9 to 17 with the bleed)", JSON.stringify(layerPixelRect({ x: 10.3, y: 0, width: 5, height: 5 }, { zoom: 1, deviceScaleFactor: 1, imageWidth: 100, imageHeight: 100 })) === JSON.stringify({ x: 9, y: 0, width: 8, height: 6 }));
+  check("...relative to a crop, the crop's origin is subtracted (x 60 css px at 2x is 120, 119 with the bleed)", geo({ crop: { x: 40, y: 20, width: 500, height: 300 }, imageWidth: 1000, imageHeight: 600 })?.x === 119);
+  check("...clamped to the image, and null when it lies wholly outside", geo({ imageWidth: 300 })?.width === 101 && geo({ imageWidth: 150 }) === null);
+
+  let browserAvailable = false;
+  try {
+    const probe = await captureCore.launchChromium();
+    await probe.close();
+    browserAvailable = true;
+  } catch {}
+
+  if (!browserAvailable) {
+    skip("layers against a real page", "real Chromium is not available in this environment");
+  } else {
+    const http = await import("node:http");
+    // Rounded and bordered elements (so their corners are transparent in a layer), a fractional
+    // position, a gradient, text, two elements sharing a class, an infinite spinner that is NOT a
+    // layer (it has to hold still between the shots), and a #stage box for the cropSelector case.
+    const html = `<!doctype html><html><head><style>
+      body { margin: 0; background: #f0f0f0; width: 800px; height: 600px; position: relative; font-family: sans-serif; }
+      #stage { position: absolute; left: 20px; top: 40px; width: 700px; height: 260px; background: #e4e8f0; }
+      #hero { position: absolute; left: 40px; top: 60px; width: 300px; height: 200px; background: #3355ff; border: 4px solid #112299; border-radius: 24px; box-sizing: border-box; }
+      #card { position: absolute; left: 420.5px; top: 90.25px; width: 260px; height: 180px; background: linear-gradient(#ffcc00, #ff6600); border-radius: 12px; }
+      #title { position: absolute; left: 40px; top: 320px; margin: 0; font-size: 48px; color: #222; }
+      .chip { position: absolute; top: 420px; width: 120px; height: 40px; background: #22aa66; border-radius: 20px; }
+      #chip-a { left: 40px; } #chip-b { left: 200px; }
+      #spin { position: absolute; left: 600px; top: 420px; width: 60px; height: 60px; border: 8px solid #bbb; border-top-color: #333; border-radius: 50%; animation: spin 700ms linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style></head><body>
+      <div id="stage"></div><div id="hero"></div><div id="card"></div><h1 id="title">Hello layers</h1>
+      <div class="chip" id="chip-a"></div><div class="chip" id="chip-b"></div><div id="spin"></div>
+    </body></html>`;
+    const server = http.createServer((req, res) => {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(html);
+    });
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const url = `http://127.0.0.1:${server.address().port}/`;
+    const layerRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-layers-"));
+    const viewport = { width: 800, height: 600 };
+
+    // Real bounding boxes, measured independently in a page of the same size.
+    const measure = async (selectors) => {
+      const b = await captureCore.launchChromium();
+      try {
+        const page = await b.newPage({ viewport, deviceScaleFactor: 1 });
+        await page.goto(url);
+        const out = {};
+        for (const s of selectors) {
+          out[s] = await page.$$eval(s, (els) => els.map((el) => {
+            const r = el.getBoundingClientRect();
+            return { x: r.x, y: r.y, width: r.width, height: r.height };
+          }));
+        }
+        return out;
+      } finally {
+        await b.close();
+      }
+    };
+    const boxes = await measure(["#hero", "#card", "#title", ".chip"]);
+
+    // Composites bg plus the layers at their rectangles, in manifest order, and compares it with
+    // the original screenshot. Returns the real numbers so the test prints what the tolerance is.
+    const reconstruct = async (shotPath, manifest, publicDir, { withLayers = true } = {}) => {
+      const base = sharp(path.join(publicDir, manifest.background)).removeAlpha();
+      const parts = withLayers ? manifest.layers.map((l) => ({ input: path.join(publicDir, l.src), left: l.x, top: l.y })) : [];
+      const composed = await (parts.length ? base.composite(parts) : base).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      const original = await sharp(shotPath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      let sum = 0;
+      let max = 0;
+      let over8 = 0;
+      const n = original.info.width * original.info.height;
+      for (let i = 0; i < n; i++) {
+        let worst = 0;
+        for (let c = 0; c < 3; c++) {
+          const d = Math.abs(composed.data[i * composed.info.channels + c] - original.data[i * original.info.channels + c]);
+          sum += d;
+          if (d > worst) worst = d;
+        }
+        if (worst > max) max = worst;
+        if (worst > 8) over8++;
+      }
+      return { mean: sum / (n * 3), max, over8: over8 / n, same: composed.info.width === original.info.width && composed.info.height === original.info.height };
+    };
+
+    try {
+      const shot = await runCaptureScreenshot({
+        projectRoot: layerRoot, beatId: "hook", url, viewport,
+        layers: [{ selector: "#hero", name: "hero" }, { selector: "#card" }, { selector: "#title", depth: 3 }, { selector: ".chip", name: "chip" }],
+      });
+      const publicDir = path.join(layerRoot, "public");
+      const manifestPath = path.join(layerRoot, "public", "images", "hook.layers.json");
+      check("layers: the manifest is written next to the screenshot as <out>.layers.json", fs.existsSync(manifestPath) && shot.layers?.manifestPath === manifestPath);
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+      check("...with exactly the shape the camera's LayeredShot reads: width, height, background, layers[{src,x,y,width,height,depth}]",
+        Object.keys(manifest).sort().join() === "background,height,layers,width" &&
+          manifest.layers.every((l) => Object.keys(l).sort().join() === "depth,height,src,width,x,y"));
+      const mainMeta = await sharp(shot.outPath).metadata();
+      check(`...in capture pixels: the size is the screenshot's own (${manifest.width}x${manifest.height})`, manifest.width === mainMeta.width && manifest.height === mainMeta.height && manifest.width === 1600);
+      check("...paths are relative to public/, like the main image", manifest.background === "images/hook-bg.png" && manifest.layers.every((l) => l.src.startsWith("images/hook-layer-") && fs.existsSync(path.join(publicDir, l.src))));
+      check("one layer per matched element: hero, card, title and the two chips make five", manifest.layers.length === 5);
+      check("...a selector matching two elements gets numbered names, a lone one keeps its own",
+        manifest.layers.map((l) => path.basename(l.src)).join() === "hook-layer-hero.png,hook-layer-card.png,hook-layer-title.png,hook-layer-chip-1.png,hook-layer-chip-2.png");
+      check("depth defaults to a 0.5 spread in order (0.5, 1, then the explicit 3, then 2 for the chips' entry)", manifest.layers.map((l) => l.depth).join() === "0.5,1,3,2,2");
+
+      // Rectangles against the real boxes, at the capture's 2x.
+      const expected = [...boxes["#hero"], ...boxes["#card"], ...boxes["#title"], ...boxes[".chip"]];
+      let worstEdge = 0;
+      manifest.layers.forEach((l, i) => {
+        const e = expected[i];
+        worstEdge = Math.max(worstEdge, Math.abs(l.x - e.x * 2), Math.abs(l.y - e.y * 2), Math.abs(l.x + l.width - (e.x + e.width) * 2), Math.abs(l.y + l.height - (e.y + e.height) * 2));
+      });
+      // Half a pixel from rounding outward (a card at y 90.25 css is 180.5 at 2x) plus the one pixel of bleed.
+      check(`the manifest rectangles match the elements' real bounding boxes (worst edge ${worstEdge.toFixed(2)} px of 2x capture, 1.5 allowed: rounding plus 1px bleed)`, worstEdge <= 1.5);
+
+      // Each layer is a transparent-background PNG of the manifest's size, opaque where the element is.
+      let allAlpha = true;
+      let allSized = true;
+      for (const l of manifest.layers) {
+        const meta = await sharp(path.join(publicDir, l.src)).metadata();
+        if (!meta.hasAlpha) allAlpha = false;
+        if (meta.width !== l.width || meta.height !== l.height) allSized = false;
+      }
+      check("every layer PNG has an alpha channel and is exactly its manifest size", allAlpha && allSized);
+      const hero = manifest.layers[0];
+      const heroPixels = await sharp(path.join(publicDir, hero.src)).raw().toBuffer({ resolveWithObject: true });
+      const alphaAt = (x, y) => heroPixels.data[(y * heroPixels.info.width + x) * heroPixels.info.channels + 3];
+      check(`the hero layer is transparent in its rounded corner and opaque in the middle (alpha ${alphaAt(1, 1)} and ${alphaAt(hero.width >> 1, hero.height >> 1)})`, alphaAt(1, 1) === 0 && alphaAt(hero.width >> 1, hero.height >> 1) === 255);
+      const bg = await sharp(path.join(publicDir, manifest.background)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      const bgAt = (x, y) => [0, 1, 2].map((c) => bg.data[(y * bg.info.width + x) * bg.info.channels + c]).join();
+      check(`the background has the layer elements gone: the hero's centre is the stage colour behind it (${bgAt(hero.x + (hero.width >> 1), hero.y + (hero.height >> 1))})`, bgAt(hero.x + (hero.width >> 1), hero.y + (hero.height >> 1)) === "228,232,240");
+
+      // Reassembly: the point of the whole thing.
+      const full = await reconstruct(shot.outPath, manifest, publicDir);
+      check(`bg plus layers at their rectangles reproduces the screenshot (mean error ${full.mean.toFixed(4)} of 255, worst pixel ${full.max}, ${(full.over8 * 100).toFixed(3)}% of pixels off by more than 8)`,
+        full.same && full.mean < 0.01 && full.max <= 4 && full.over8 === 0);
+      const bgOnly = await reconstruct(shot.outPath, manifest, publicDir, { withLayers: false });
+      check(`control: the background alone does not (${(bgOnly.over8 * 100).toFixed(1)}% of pixels off by more than 8)`, bgOnly.over8 > 0.05);
+      const sidecars = fs.readdirSync(path.join(layerRoot, "public", "images")).filter((f) => f.endsWith(".png")).length;
+      check("only the screenshot, the background and the five layers are PNGs (nothing left over from isolating elements)", sidecars === 7);
+
+      // A 1x capture with a fractional element position, and a cropSelector.
+      const one = await runCaptureScreenshot({
+        projectRoot: layerRoot, beatId: "one", url, viewport, deviceScaleFactor: 1,
+        layers: [{ selector: "#hero" }, { selector: "#card" }],
+      });
+      const oneManifest = JSON.parse(fs.readFileSync(path.join(layerRoot, "public", "images", "one.layers.json"), "utf8"));
+      const oneFull = await reconstruct(one.outPath, oneManifest, publicDir);
+      check(`at 1x with a card on a fractional pixel the reassembly still holds (mean ${oneFull.mean.toFixed(4)}, ${(oneFull.over8 * 100).toFixed(3)}% off by more than 8)`, oneFull.same && oneFull.mean < 0.01 && oneFull.max <= 4 && oneFull.over8 === 0);
+
+      const cropped = await runCaptureScreenshot({
+        projectRoot: layerRoot, beatId: "crop", url, viewport, cropSelector: "#stage",
+        layers: [{ selector: "#hero" }, { selector: "#card" }],
+      });
+      const cropManifest = JSON.parse(fs.readFileSync(path.join(layerRoot, "public", "images", "crop.layers.json"), "utf8"));
+      const cropFull = await reconstruct(cropped.outPath, cropManifest, publicDir);
+      check(`with a cropSelector the rectangles are relative to the crop and the reassembly holds (${cropManifest.width}x${cropManifest.height}, mean ${cropFull.mean.toFixed(4)}, ${(cropFull.over8 * 100).toFixed(3)}% off)`,
+        cropManifest.width === 1400 && cropManifest.height === 520 && cropFull.same && cropFull.mean < 0.01 && cropFull.max <= 4 && cropFull.over8 === 0);
+      check("...hero sits 20 css px in from the stage's left and 20 down, so at 2x its rectangle starts at (39, 39) with the bleed", cropManifest.layers[0].x === 39 && cropManifest.layers[0].y === 39);
+
+      // Refusals name the selector, and leave nothing behind.
+      let missing = null;
+      try {
+        await runCaptureScreenshot({ projectRoot: layerRoot, beatId: "bad", url, viewport, layers: [{ selector: "#hero" }, { selector: "#nope" }] });
+      } catch (err) {
+        missing = err;
+      }
+      check("control: an unknown selector throws, naming it", missing !== null && String(missing.message).includes("#nope"));
+      check("...and no manifest or layer files were written for it", !fs.existsSync(path.join(layerRoot, "public", "images", "bad.layers.json")) && !fs.existsSync(path.join(layerRoot, "public", "images", "bad-bg.png")));
+      let invalid = null;
+      try {
+        await runCaptureScreenshot({ projectRoot: layerRoot, beatId: "bad2", url, viewport, layers: [{ selector: "##" }] });
+      } catch (err) {
+        invalid = err;
+      }
+      check("a selector that is not valid CSS throws, naming it", invalid !== null && String(invalid.message).includes("##"));
+      let outside = null;
+      try {
+        await runCaptureScreenshot({ projectRoot: layerRoot, beatId: "bad3", url, viewport, cropSelector: "#stage", layers: [{ selector: "#title" }] });
+      } catch (err) {
+        outside = err;
+      }
+      check("an element outside the captured crop throws rather than being skipped", outside !== null && String(outside.message).includes("#title"));
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  }
+}
+
 const templateNodeModules = path.join(monorepoTemplateDir, "node_modules");
 if (!fs.existsSync(templateNodeModules)) {
   skip("transition renders", "no resolvable node_modules to scaffold a renderable project from");

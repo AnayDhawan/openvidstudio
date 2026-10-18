@@ -208,7 +208,7 @@ console.log("\n== C9: chapters from the beats, and credits read from disk ==");
   );
   check("an imported track is credited by title, source and licence", describe(imported, "imp").r.credits.some((c) => c === 'Music: "Rain on Glass" from example/open-lofi (CC0-1.0).'));
 
-  const builtin = make("pul", {}, undefined, { file: "pulse-bed.mp3" });
+  const builtin = make("pul", {}, undefined, { file: "music-bed.mp3" });
   check("the built-in bed is credited as synthesized", describe(builtin, "pul").r.credits.some((c) => /synthesized by openvidstudio's built-in generator/.test(c)));
 
   const unknown = make("unk", {}, undefined, { file: "mystery.mp3" });

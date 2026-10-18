@@ -27,8 +27,8 @@ export interface StitchCompositionInput {
   baseLanguage?: string;
   /**
    * Overrides the auto-detected music bed and its mix level. `file` is a filename under
-   * public/audio/ (same convention as the auto-detected pulse-bed.mp3/music-bed.mp3, not
-   * an arbitrary path). `volume` defaults to 0.18 (today's under-narration level) when
+   * public/audio/ (same convention as the auto-detected music-bed.mp3, not an arbitrary
+   * path). `volume` defaults to 0.18 (today's under-narration level) when
    * beats.json's narration is "voice" or omitted, and 1.0 (full level, there is no VO to
    * duck under) when narration is "none".
    */
@@ -53,10 +53,9 @@ export interface StitchCompositionResult {
   voBeatsMissing: string[];
   musicBedFound: boolean;
   /**
-   * Which bed actually got used, when one did: "music-bed.mp3" (the ambient drone) or
-   * "pulse-bed.mp3" (the beat-locked rhythmic bed, see STYLE.md's "Beat-locked cuts").
-   * pulse-bed.mp3 wins if a project has copied in both, since a project that went to the
-   * trouble of adding the rhythmic bed almost always means to use it.
+   * Which bed actually got used, when one did: the auto-detected "music-bed.mp3" (the
+   * built-in ambient bed, or the file compose_score writes by default), a track picked
+   * with musicBed, or a hand-picked layer carried over from the previous stitch.
    */
   musicBedFile: string | null;
   /** The mix level actually applied to musicBedFile, honest about the default that was picked. */
@@ -64,7 +63,7 @@ export interface StitchCompositionResult {
   /**
    * Where the music layer came from: "explicit" (musicBed input), "preserved" (the track and
    * level the previous stitch of this video had, so a hand-picked bed survives a re-stitch),
-   * "auto" (pulse-bed.mp3 / music-bed.mp3 found in public/audio), or "none".
+   * "auto" (music-bed.mp3 found in public/audio), or "none".
    */
   musicBedSource: "explicit" | "preserved" | "auto" | "none";
   /**
@@ -188,7 +187,7 @@ function sceneImportPath(b: BeatLike): string {
   return normalized.startsWith("./") || normalized.startsWith("../") ? normalized : `./${normalized}`;
 }
 
-const AUTO_MUSIC_BEDS = ["pulse-bed.mp3", "music-bed.mp3"];
+const AUTO_MUSIC_BEDS = ["music-bed.mp3"];
 
 /**
  * The music layer a previous stitch of this video wrote, if any. Re-stitching regenerates the
@@ -210,8 +209,8 @@ export function readExistingMusicLayer(
   if (!Number.isFinite(volume)) return null;
   const file = m[1]!;
   // "pinned" = a person chose this layer, so a re-stitch must not replace it. Auto-detected
-  // beds are deliberately not pinned: dropping pulse-bed.mp3 into a project that was stitched
-  // with music-bed.mp3 should still upgrade it, as before.
+  // beds are deliberately not pinned: a music-bed.mp3 that appears (or is replaced by
+  // compose_score) after the first stitch should be picked up on the next one.
   const marker = text.match(/ovs-music-source: (\w+)/)?.[1];
   const pinned = marker === "explicit" || marker === "preserved" || !AUTO_MUSIC_BEDS.includes(file);
   return { file, volume, pinned };
@@ -506,9 +505,8 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     musicBedFile = existingLayer.file;
     musicBedSource = "preserved";
   } else {
-    const pulseBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "pulse-bed.mp3"));
     const musicBedPresent = fs.existsSync(path.join(projectRoot, "public", "audio", "music-bed.mp3"));
-    musicBedFile = pulseBedPresent ? "pulse-bed.mp3" : musicBedPresent ? "music-bed.mp3" : null;
+    musicBedFile = musicBedPresent ? "music-bed.mp3" : null;
     musicBedSource = musicBedFile ? "auto" : "none";
   }
   const musicBedFound = musicBedFile !== null;
@@ -596,11 +594,10 @@ export function registerStitchComposition(server: McpServer): void {
         "PascalCase convention scaffold_scene uses -- beats without a scaffolded scene file will fail to " +
         "type-check, scaffold every beat first), a <Series> of <Series.Sequence> per beat, a VO Audio layer " +
         "per beat only where public/audio/vo/<beatId>.mp3 actually exists on disk, and a looping " +
-        "full-duration music bed layer if public/audio/pulse-bed.mp3 or public/audio/music-bed.mp3 exists " +
-        "(pulse-bed wins if both are present). pulse-bed.mp3 is the beat-locked rhythmic bed from the " +
-        "built-in pack, generated at a known 112bpm with an exact cue grid in public/sfx/pulse-bed.cues.json " +
-        "(or plan_music_cues for any other track), so scene cuts can land on a beat instead of an arbitrary " +
-        "second. music-bed.mp3 is the older ambient drone with no pulse to cut against. Also (re)registers the " +
+        "full-duration music bed layer if public/audio/music-bed.mp3 exists. The scaffold ships an ambient " +
+        "music-bed.mp3 with no pulse to cut against; compose_score writes an original arc-matched score to the " +
+        "same name, with an exact cue grid next to it (plan_music_cues produces one for any other track), so " +
+        "scene cuts can land on a beat instead of an arbitrary second. Also (re)registers the " +
         "composition in src/Root.tsx (via an internal src/videos/.registry.json this tool owns), without " +
         "clobbering compositions a prior stitch_composition call registered for a different video in the " +
         "same project. Pass languages to emit one composition per language: the picture is shared and only the "
@@ -610,7 +607,7 @@ export function registerStitchComposition(server: McpServer): void {
         + "fully narrated in English and half narrated in Hindi is a failure of the Hindi cut and saying so "
         + "once for the whole stitch would hide which cut is broken. Pass musicBed to override the "
         + "auto-detected bed file and its mix level: file is a filename under public/audio/ (same convention "
-        + "as the auto-detected pulse-bed.mp3/music-bed.mp3), volume defaults to 0.18 when beats.json's "
+        + "as the auto-detected music-bed.mp3), volume defaults to 0.18 when beats.json's "
         + "narration is \"voice\" or omitted (today's under-narration tuning) and 1.0 when narration is "
         + "\"none\" (there is no VO to duck under). When musicBed is omitted and a previous stitch of this "
         + "video already wrote a music layer whose file still exists, that track and level are preserved "

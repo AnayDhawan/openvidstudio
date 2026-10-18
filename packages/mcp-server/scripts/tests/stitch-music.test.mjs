@@ -97,22 +97,32 @@ console.log("\n== a hand-picked track survives a re-stitch (#64) ==");
 
   // A layer written by hand into the generated file, with no marker, on a name the tool would never auto-pick.
   const hand = makeProject();
-  touchAudio(hand.root, "pulse-bed.mp3");
+  touchAudio(hand.root, "music-bed.mp3");
   touchAudio(hand.root, "custom.mp3");
   stitch(hand);
-  fs.writeFileSync(hand.demo, demoText(hand).replace(/<Audio src=\{staticFile\("audio\/pulse-bed.mp3"\)\} volume=\{[0-9.]+\} loop \/>/, '<Audio src={staticFile("audio/custom.mp3")} volume={0.33} loop />').replace("ovs-music-source: auto", "by hand"));
+  fs.writeFileSync(hand.demo, demoText(hand).replace(/<Audio src=\{staticFile\("audio\/music-bed.mp3"\)\} volume=\{[0-9.]+\} loop \/>/, '<Audio src={staticFile("audio/custom.mp3")} volume={0.33} loop />').replace("ovs-music-source: auto", "by hand"));
   const kept = stitch(hand);
   check("a hand-edited layer on a non-default file is preserved with its level", kept.musicBedFile === "custom.mp3" && kept.musicBedVolume === 0.33 && kept.musicBedSource === "preserved");
 }
 
-console.log("\n== auto-detected beds still upgrade ==");
+console.log("\n== auto-detected beds are re-evaluated, and pulse-bed is gone ==");
 {
   const p = makeProject();
+  check("a project with no bed stitches with none", stitch(p).musicBedSource === "none");
   touchAudio(p.root, "music-bed.mp3");
-  check("first stitch picks music-bed.mp3", stitch(p).musicBedFile === "music-bed.mp3");
-  touchAudio(p.root, "pulse-bed.mp3");
-  const upgraded = stitch(p);
-  check("dropping in pulse-bed.mp3 still wins on the next stitch, because the old pick was only auto", upgraded.musicBedFile === "pulse-bed.mp3" && upgraded.musicBedSource === "auto");
+  const found = stitch(p);
+  check("dropping music-bed.mp3 in is picked up on the next stitch, because the earlier result was only auto", found.musicBedFile === "music-bed.mp3" && found.musicBedSource === "auto");
+
+  // pulse-bed.mp3 was a kick and hat click track and was removed. A project that still
+  // carries a copy must not have it picked automatically.
+  const legacy = makeProject();
+  touchAudio(legacy.root, "pulse-bed.mp3");
+  const ignored = stitch(legacy);
+  check("a leftover pulse-bed.mp3 is no longer auto-picked", ignored.musicBedFile === null && ignored.musicBedSource === "none");
+  touchAudio(legacy.root, "music-bed.mp3");
+  check("with both present, music-bed.mp3 wins", stitch(legacy).musicBedFile === "music-bed.mp3");
+  const explicitLegacy = stitch(legacy, { file: "pulse-bed.mp3" });
+  check("it can still be chosen explicitly", explicitLegacy.musicBedFile === "pulse-bed.mp3" && explicitLegacy.musicBedSource === "explicit");
 }
 
 console.log("\n== the cue grid reaches scenes (useMusicClock) ==");

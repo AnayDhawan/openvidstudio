@@ -117,12 +117,12 @@ product's README doesn't say it that way, the video shouldn't either.
 
 ## Beat-locked cuts
 
-When a video's music bed is `pulse-bed.mp3` (or any other track `plan_music_cues` has a
-grid for), scene cuts can land on the beat instead of at an arbitrary second. Read
-`public/sfx/pulse-bed.cues.json` for the built-in bed, or call `plan_music_cues` for any
-other track, before writing `beats.json`'s `start` values.
+When a video's music bed is a `compose_score` track (or any other track `plan_music_cues`
+has a grid for), scene cuts can land on the beat instead of at an arbitrary second. Read
+the `<stem>.cues.json` next to a composed track, or call `plan_music_cues` for any other
+track, before writing `beats.json`'s `start` values.
 
-- `strongCues` are the sparse, strong moments (bar downbeats for pulse-bed). Snap a
+- `strongCues` are the sparse, strong moments (bar downbeats for a composed score). Snap a
   handful of major reveals here: a hard cut into a new scene, a hero reveal, the outro
   logo landing. Shift the reveal's start to within about 0.15s of the nearest strong cue.
 - `beats` is the full beat grid. Snap sequential reveals here: cards or stats arriving one

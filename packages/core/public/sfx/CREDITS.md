@@ -6,8 +6,7 @@ nothing to breach. Three different reasons for that, so all three are recorded.
 ## Synthesized in this repo
 
 `bell.wav`, `blip.wav`, `click.wav`, `success.wav`, `whoosh.wav` and `music-bed.mp3`
-come from `scripts/gen-sfx.sh` (ffmpeg, sine and anoisesrc). `pulse-bed.mp3` and its
-`pulse-bed.cues.json` come from `scripts/generate-pulse-bed.mjs`. No sampled or
+come from `scripts/gen-sfx.sh` (ffmpeg, sine and anoisesrc). No sampled or
 licensed material went into any of them.
 
 ## Copyright-free recording

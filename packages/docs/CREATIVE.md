@@ -98,8 +98,11 @@ Cuts on the beat feel intentional; cuts between beats feel accidental.
 - `plan_beats` with `snapToBars` puts every beat boundary on a downbeat. `useMusicClock(beatId)`
   gives a scene `at(bar, beat)` as a local frame, plus `beatPulse()`, `onBeat()` and
   `onDownbeat()`, so a reveal can land on the impact and a glow can breathe with the pulse.
-- Beds from `pulse-bed`, the CC0 catalogs or the user still go through `plan_music_cues` and give
-  the same grid.
+- Beds from the CC0 catalogs or the user still go through `plan_music_cues` and give the same
+  grid.
+- No drum machine under a voiceover. Evenly repeated short hits read as a ticking clock;
+  `compose_score` defaults to no percussion for that reason, and `finalize_video` warns when
+  the final audio still ticks.
 - Let the music rest. A bar of near silence before the payoff makes the payoff louder.
 - Narration sits on top: keep the bed under it, and do not let a hit fall on a stressed word.
 

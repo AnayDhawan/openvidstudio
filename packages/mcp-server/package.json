@@ -1,7 +1,7 @@
 {
   "name": "@openvidstudio/mcp-server",
   "version": "0.2.0",
-  "description": "MCP server exposing openvidstudio's mechanical pipeline tools: project scaffolding, beats validation, scene stubs, composition stitching, render, QC frame extraction, and capture driven by @openvidstudio/capture.",
+  "description": "MCP server for openvidstudio: plan, capture, narrate, score, render and finalize a video of your real product, driven by an AI coding agent.",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=20"

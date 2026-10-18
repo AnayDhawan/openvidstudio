@@ -429,6 +429,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   text.
 - **`validate_beats` warns about a metronome.** Four or more beats whose longest is under 2.5 times
   the shortest read as uniform; the result now carries an always-present `warnings` array.
+- **Native 9:16.** A project can be 1080x1920 from `init_project`'s `videoConfig`, and the core
+  primitives follow the composition instead of assuming 1920x1080: `CinematicScene`'s stage,
+  `DotGrid`, `Letterbox` (bars are 64/1080 of the frame height) and `RepoCta`'s camera.
+  `defineDesignSystem` takes a `stage` option, so the grid margins scale to the frame (84/231/196 at
+  1080x1920; 150/130/110 at 1920x1080 exactly as before). `validate_scenes` judges framing against the
+  project's own frame size, so a 1500px block is an error in a 1080 wide frame and fine in a 1920 one.
+  Landscape renders are byte-identical to before (checked on dots, bars and the end card).
+- **`export_rendition` `reels` format.** 1080x1920, H.264 and AAC, 30 fps, faststart, from a native
+  vertical render. A 1920x1080 or 4:5 source is refused with nothing written and a pointer to
+  rendering natively vertical or to `reformat_vertical`. An unknown format is now an error instead of
+  silently falling through to store frames.
 
 ### Changed
 

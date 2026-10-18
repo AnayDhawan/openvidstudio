@@ -513,6 +513,126 @@ section(
   },
 );
 
+// ============================================================ 4. Handheld and impact shake
+
+section(
+  "4. handheld sway and impact shake: deterministic, zero in holds, decaying after a hit",
+  [
+    {
+      // Pure functions over a run of frames, plus the hooks read at the frame the page is seeked to.
+      id: "hh-readout",
+      frames: 130,
+      source: sceneFile(
+        "HhReadout",
+        ["handheldOffset", "impactShake", "useHandheld", "useImpactShake"],
+        `<HhInner />`,
+        {
+          extra: String.raw`
+const HhInner: React.FC = () => {
+  const hand = useHandheld(6, { holds: [[40, 70]] });
+  const shake = useImpactShake([20, 90]);
+  const frames = Array.from({ length: 130 }, (_, i) => i);
+  const data = {
+    hook: hand,
+    shakeHook: shake,
+    sway: frames.map((f) => handheldOffset(f, 4, 1)),
+    swayAgain: frames.map((f) => handheldOffset(f, 4, 1)),
+    swaySeed2: frames.map((f) => handheldOffset(f, 4, 2)),
+    raw6: frames.map((f) => handheldOffset(f, 6, 1)),
+    hit: frames.map((f) => impactShake(f, [30], { amplitude: 10, decay: 8 })),
+    hitAgain: frames.map((f) => impactShake(f, [30], { amplitude: 10, decay: 8 })),
+    twoHits: frames.map((f) => impactShake(f, [30, 80], { amplitude: 10, decay: 8 })),
+  };
+  return <div id="hh-readout" style={{ color: "#fff", fontSize: 10, whiteSpace: "pre" }}>{JSON.stringify(data)}</div>;
+};
+`,
+        },
+      ),
+    },
+    {
+      id: "hh-handheld",
+      frames: 90,
+      source: directedScene("HhHandheld", "", {
+        body: `<DirectedShot src={staticFile("images/halves.png")} focus={{ x: 960, y: 540 }} push={1.2} handheld={6} />`,
+      }),
+    },
+    {
+      id: "hh-shake",
+      frames: 90,
+      source: directedScene("HhShake", "", {
+        body: `<DirectedShot src={staticFile("images/halves.png")} focus={{ x: 960, y: 540 }} push={1.2} shake={[20]} />`,
+      }),
+    },
+    {
+      id: "hh-none",
+      frames: 30,
+      source: directedScene("HhNone", "", {
+        body: `<DirectedShot src={staticFile("images/halves.png")} focus={{ x: 960, y: 540 }} push={1.2} />`,
+      }),
+    },
+  ],
+  async (t) => {
+    const read = async (local) => JSON.parse(await t.text(t.frameOf("hh-readout", local), "#hh-readout"));
+    const mag = (o) => Math.hypot(o.x, o.y);
+    const base = await read(0);
+
+    // handheldOffset: bounded, moving, deterministic, seed-dependent.
+    check("handheldOffset is deterministic (same inputs, same output)", JSON.stringify(base.sway) === JSON.stringify(base.swayAgain));
+    check("handheldOffset stays inside its amplitude (4px) on both axes", base.sway.every((o) => Math.abs(o.x) <= 4 && Math.abs(o.y) <= 4));
+    const maxSway = Math.max(...base.sway.map(mag));
+    console.log(`  sway at amount 4: largest offset ${maxSway.toFixed(2)}px, largest roll ${Math.max(...base.sway.map((o) => Math.abs(o.rot))).toFixed(3)} deg`);
+    check("...and it actually moves (largest offset > 2px)", maxSway > 2);
+    check("a different seed gives a different path", JSON.stringify(base.sway) !== JSON.stringify(base.swaySeed2));
+    check("the two axes do not move in lockstep", base.sway.some((o) => Math.abs(Math.abs(o.x) - Math.abs(o.y)) > 0.5));
+
+    // useHandheld with a hold window 40..70.
+    const inHold = [];
+    for (const f of [40, 55, 70]) inHold.push((await read(f)).hook);
+    check("useHandheld is exactly zero inside a hold window", inHold.every((o) => o.x === 0 && o.y === 0 && o.rot === 0));
+    const outside = [];
+    for (const f of [10, 22, 95, 110]) outside.push(await read(f));
+    check("...and nonzero outside it", outside.every((d) => mag(d.hook) > 0.01));
+    check("...matching the plain sway once the ramp is over", outside.every((d, i) => Math.abs(d.hook.x - d.raw6[[10, 22, 95, 110][i]].x) < 1e-9));
+    const nearEdge = await read(38);
+    check("it eases into the hold: two frames before the window it is damped", mag(nearEdge.hook) < mag({ x: nearEdge.raw6[38].x, y: nearEdge.raw6[38].y }) * 0.9);
+
+    // impactShake: 0 before the hit, the peak at it, decayed by 3x the decay constant.
+    const hit = base.hit;
+    check("impactShake is exactly zero before the impact frame", hit.slice(0, 30).every((o) => o.x === 0 && o.y === 0 && o.rot === 0));
+    const peak = Math.max(...hit.map(mag));
+    console.log(`  impact at 30, amplitude 10: peak ${peak.toFixed(2)}px at frame ${hit.findIndex((o) => mag(o) === peak)}; at +24 frames ${mag(hit[54]).toFixed(3)}px`);
+    check("the peak is on the impact frame and equals the amplitude", hit.findIndex((o) => mag(o) === peak) === 30 && Math.abs(peak - 10) < 1e-9);
+    check("it decays below 10% of the amplitude within 3x decay (24 frames) and stays there", hit.slice(54).every((o) => mag(o) < 1));
+    check("it is deterministic", JSON.stringify(hit) === JSON.stringify(base.hitAgain));
+    check("a second impact starts from zero again and peaks on its own frame", base.twoHits.slice(50, 80).every((o) => mag(o) < 1) && mag(base.twoHits[80]) > 8);
+
+    // The hook version, read at the frame the page is on.
+    check("useImpactShake is zero the frame before the hit and at full strength on it", mag((await read(19)).shakeHook) === 0 && Math.abs(mag((await read(20)).shakeHook) - 12) < 1e-9);
+    check("...and a later hit fires on its own frame", mag((await read(89)).shakeHook) < 1 && Math.abs(mag((await read(90)).shakeHook) - 12) < 0.01);
+
+    // DirectedShot applies it to the whole shot.
+    const shift = (frame) =>
+      t.eval(frame, () => {
+        const el = document.querySelector("[data-ovs-handheld]");
+        if (!el) return null;
+        // The element scales and rotates about its own centre, so the matrix translation is the shift.
+        const m = new DOMMatrix(getComputedStyle(el).transform);
+        return { x: m.e, y: m.f };
+      });
+    const hand = [];
+    for (const f of [5, 17, 31, 46, 60, 75]) hand.push(await shift(t.frameOf("hh-handheld", f)));
+    console.log(`  DirectedShot handheld={6}: offsets ${hand.map((o) => (o ? mag(o).toFixed(1) : "none")).join(" ")}`);
+    check("DirectedShot handheld={6} moves the shot, never past 6px", hand.every((o) => o && mag(o) <= 6.0001) && hand.filter((o) => mag(o) > 0.2).length >= 4);
+    check("...and the offset changes frame to frame", new Set(hand.map((o) => o.x.toFixed(2))).size >= 5);
+    check("control: a DirectedShot without handheld or shake has no shake wrapper at all", (await shift(t.frameOf("hh-none", 10))) === null);
+    const before = await shift(t.frameOf("hh-shake", 19));
+    const at = await shift(t.frameOf("hh-shake", 20));
+    const later = await shift(t.frameOf("hh-shake", 44));
+    console.log(`  DirectedShot shake={[20]}: before ${mag(before).toFixed(2)}px, at the hit ${mag(at).toFixed(2)}px, +24 frames ${mag(later).toFixed(2)}px`);
+    check("DirectedShot shake: still before the hit, hard at it, settled 24 frames later", mag(before) < 0.01 && mag(at) > 10 && mag(later) < 1.3);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");

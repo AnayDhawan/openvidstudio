@@ -23,6 +23,13 @@ import type { CamKeyframe } from "./camera";
 import { CursorActor } from "./CursorActor";
 import type { CursorKeyframe } from "./CursorActor";
 import { E, tween } from "./motion";
+import {
+  DEFAULT_SHAKE_AMPLITUDE,
+  HANDHELD_ROLL_PER_PX,
+  SHAKE_ROLL_PER_PX,
+  useHandheld,
+  useImpactShake,
+} from "./handheld";
 import { resolveShot } from "./shots";
 import type { ShotName } from "./shots";
 
@@ -66,6 +73,10 @@ export interface DirectedShotProps {
   protect?: CaptureRect[];
   /** Rack focus: the sharp region slides from `focus` to this point, in capture pixels, across the move. */
   rackTo?: { x: number; y: number };
+  /** Handheld sway: the largest drift in px at 1080p. Default 0 (a locked-off camera). 3 to 8 reads as a person holding it. */
+  handheld?: number;
+  /** Local frames of impacts (a click, a slam, a beat): the shot jolts on each and settles within about 24 frames. */
+  shake?: number[];
   /** Cursor path and click frames, in capture pixels. */
   cursor?: { path: CursorKeyframe[]; clicks?: number[] };
   /** The box the shot fills. Defaults to the composition frame. */
@@ -151,6 +162,8 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   depthOfField = 0,
   protect,
   rackTo,
+  handheld = 0,
+  shake,
   cursor,
   width,
   height,
@@ -160,6 +173,19 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   const video = useVideoConfig();
   const W = width ?? video.width;
   const H = height ?? video.height;
+
+  // Sway and shake move the whole shot (picture, blur layer and cursor together) like a camera body.
+  // The hooks run every frame so the call order never changes; they return zeros when unused.
+  const sway = useHandheld(handheld);
+  const hit = useImpactShake(shake ?? []);
+  const shaken = handheld > 0 || (shake?.length ?? 0) > 0;
+  const shift = { x: sway.x + hit.x, y: sway.y + hit.y, rot: sway.rot + hit.rot };
+  // Scale up just enough that the largest possible shift never shows the edge of the box.
+  const k = H / 1080;
+  const reach =
+    handheld * k * (1 + (HANDHELD_ROLL_PER_PX * Math.max(W, H)) / 2 / 57.3) +
+    ((shake?.length ?? 0) > 0 ? DEFAULT_SHAKE_AMPLITUDE * k * (1 + (SHAKE_ROLL_PER_PX * Math.max(W, H)) / 2 / 57.3) : 0);
+  const overscan = 1 + (2 * reach) / Math.min(W, H);
   const focus = focusProp ?? { x: captureWidth / 2, y: captureHeight / 2 };
 
   const keyframes = directedKeyframes({ W, H, captureWidth, captureHeight, focus, push, tilt, move, shot });
@@ -188,8 +214,8 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   });
   const clip = holes.length ? `path(evenodd, "M0 0 H${W} V${H} H0 Z ${holes.join(" ")}")` : undefined;
 
-  return (
-    <div data-ovs-directed-shot="" style={{ position: "relative", width: W, height: H, overflow: "hidden", ...style }}>
+  const picture = (
+    <>
       <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
         {src ? (
           <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: captureWidth, height: captureHeight }} />
@@ -222,6 +248,26 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
           </CameraRig>
         </div>
       ) : null}
+    </>
+  );
+
+  return (
+    <div data-ovs-directed-shot="" style={{ position: "relative", width: W, height: H, overflow: "hidden", ...style }}>
+      {shaken ? (
+        <div
+          data-ovs-handheld=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            transformOrigin: "50% 50%",
+            transform: `translate(${shift.x}px, ${shift.y}px) rotate(${shift.rot}deg) scale(${overscan})`,
+          }}
+        >
+          {picture}
+        </div>
+      ) : (
+        picture
+      )}
     </div>
   );
 };

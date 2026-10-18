@@ -20,6 +20,10 @@ export type { DirectedShotProps, DirectedKeyframeOptions, CaptureRect } from "./
 export { resolveShot, SHOT_NAMES } from "./shots";
 export type { ShotName, ShotOptions, ResolvedShot } from "./shots";
 
+// Cinematic shots (camera half): handheld sway and impact shake
+export { handheldOffset, holdWeight, useHandheld, impactShake, useImpactShake } from "./handheld";
+export type { ShakeOffset } from "./handheld";
+
 // Music-first timing: the score's grid as scene-local frames (C3)
 export { MusicClockProvider, useMusicClock, createMusicClock } from "./musicClock";
 export type { MusicCues, MusicClock } from "./musicClock";

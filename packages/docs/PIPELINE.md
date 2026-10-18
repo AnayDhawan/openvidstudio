@@ -245,6 +245,10 @@ Then `validate_scenes` with `render: true` is the gate before stitching and rend
         claim
 
 ## 5. Render + exports
+Every tool rejects an input it does not take, naming the key, listing the valid ones and suggesting
+the closest, so `render_video { quality: "draft" }` fails at once instead of running a full render
+(the option is `draft: true`).
+
 - `npx remotion render <composition-id> output/<video>.mp4`
 - After the first full render, prefer `render_video` with `incremental: true`.
   Each beat renders to `output/segments/<video>/<beatId>.mp4` and the segments

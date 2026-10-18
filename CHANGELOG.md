@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Tools now reject an input they do not take, instead of silently dropping it (#119).** The MCP SDK builds a zod object from each tool's input shape and zod strips unknown keys, so `render_video { quality: "draft" }` (the option is `draft: true`) ran a full-quality render of about 15 minutes. Every tool is now registered with a strict schema: the error names the unknown key, lists the valid ones and suggests the closest ("did you mean `projectRoot`?").
+
 - **`write_beats_file` now returns the `validate_beats` warnings on a successful write.** The result is `{ written: true, path, warnings }`, so an agent that goes straight to the write still sees notes such as "shot lengths are nearly uniform". Warnings never block the write (#118).
 
 - **The brand palette now reaches the render (#61).** The template's `sideEffects: ["*.css"]`

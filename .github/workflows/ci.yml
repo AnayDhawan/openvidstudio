@@ -48,6 +48,7 @@ jobs:
           node-version: "20"
           cache: "pnpm"
       - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @openvidstudio/capture build
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npx --yes playwright install --with-deps chromium

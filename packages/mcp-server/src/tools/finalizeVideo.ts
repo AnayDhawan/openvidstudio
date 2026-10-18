@@ -72,6 +72,12 @@ export function buildLoudnormApplyArgs(
   outPath: string,
   target: LoudnormTarget,
   measured: LoudnessMeasurement,
+  /**
+   * The video's own duration in seconds. loudnorm's lookahead makes its output about 100 ms
+   * longer than its input, which would leave the audio running three frames past the picture,
+   * so the file is cut at the video's end. Omit to leave the output length to ffmpeg.
+   */
+  videoDurationSeconds?: number,
 ): string[] {
   const filter =
     `loudnorm=I=${target.lufs}:TP=${target.truePeakDb}:LRA=${target.lra}` +
@@ -98,6 +104,7 @@ export function buildLoudnormApplyArgs(
     "48000",
     "-movflags",
     "+faststart",
+    ...(videoDurationSeconds !== undefined ? ["-t", videoDurationSeconds.toFixed(6)] : []),
     outPath,
   ];
 }
@@ -120,6 +127,18 @@ export function parseLoudnormJson(stderr: string): LoudnessMeasurement {
     threshold: num("input_thresh"),
     targetOffset: num("target_offset"),
   };
+}
+
+/** The first video stream's duration, or null if ffprobe cannot read one. */
+async function videoDurationSeconds(inPathRel: string, projectRoot: string): Promise<number | null> {
+  const r = await spawnCapture(
+    "ffprobe",
+    ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=duration", "-of", "csv=p=0", inPathRel],
+    projectRoot,
+  );
+  if (r.code !== 0) return null;
+  const value = Number.parseFloat(r.stdout.trim());
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 async function measure(inPathRel: string, projectRoot: string, target: LoudnormTarget): Promise<LoudnessMeasurement> {
@@ -196,7 +215,12 @@ export async function runFinalizeVideo(input: FinalizeVideoInput): Promise<Final
   let loudness: FinalizeVideoResult["loudness"] = null;
   if (hasAudio) {
     const before = await measure(inRel, projectRoot, target);
-    const apply = await spawnCapture("ffmpeg", buildLoudnormApplyArgs(inRel, outRel, target, before), projectRoot);
+    const videoSeconds = await videoDurationSeconds(inRel, projectRoot);
+    const apply = await spawnCapture(
+      "ffmpeg",
+      buildLoudnormApplyArgs(inRel, outRel, target, before, videoSeconds ?? undefined),
+      projectRoot,
+    );
     if (apply.code !== 0) throw new Error(`Loudness normalisation failed:\n${apply.stderr.slice(-1200)}`);
     const after = await measure(outRel, projectRoot, target);
     const withinTolerance = Math.abs(after.integratedLufs - target.lufs) <= LOUDNESS_TOLERANCE_LU;

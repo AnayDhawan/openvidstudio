@@ -10,9 +10,9 @@ import { runTool } from "./mcp";
 /**
  * Finding and importing a music bed from two public-domain catalogs.
  *
- * The built-in pack has two beds and both are synthesized: music-bed.mp3 (an ambient
- * drone) and pulse-bed.mp3 (112bpm, exact cue grid). They exist so a scaffolded project
- * has music at all without anyone downloading anything, and they are deliberately plain.
+ * The built-in pack has one bed, synthesized: music-bed.mp3, an ambient drone. It exists
+ * so a scaffolded project has music at all without anyone downloading anything, and it is
+ * deliberately plain.
  * A launch video usually wants a real track. That used to mean sending the user to
  * Pixabay by hand, the same path plan_sound_effects takes for effects.
  *
@@ -658,7 +658,7 @@ export async function runImportMusicBed(input: ImportMusicBedInput): Promise<Imp
     ledgerFile: rel(ledgerAbs),
     licenceNote: "CC0-1.0. No credit line is required in the video description.",
     nextStep:
-      relFile === "public/audio/music-bed.mp3" || relFile === "public/audio/pulse-bed.mp3"
+      relFile === "public/audio/music-bed.mp3"
         ? "stitch_composition will pick this up as the bed on its next run. Call plan_music_cues on it to cut on the beat."
         : `Call plan_music_cues on ${relFile} for its beat grid, or move it to public/audio/music-bed.mp3 to have stitch_composition attach it automatically.`,
   };

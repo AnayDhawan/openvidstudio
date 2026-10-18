@@ -176,9 +176,10 @@ in a separate process and random values differ per frame, which shows up as flic
 | `color` | `string` | `color.textPrimary` |
 | `glowColor` | `string` | |
 | `align` | `"center" \| "left"` | `"center"` |
-| `sfx` | `boolean` | `true` |
+| `sfx` | `boolean` | `false` |
 
-Per word entrance. Renders nothing before `at`.
+Per word entrance. Renders nothing before `at`. `sfx` adds a blip per word; it is off by
+default because a blip every few frames sounds like a ticking clock under a title.
 
 ### `Caption`
 

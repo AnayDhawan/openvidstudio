@@ -41,10 +41,10 @@ is your app, captured live.
 - **A directed video, not a screen recording** - push-ins, drift, shallow depth of
   field, an oversized cursor, narration, and a synthesized music bed turn plain
   captures into something you'd ship.
-- **License-clean music, start to finish** - the built-in `pulse-bed.mp3` is
-  generated at a fixed 112bpm so its cue grid is exact, and `find_music_bed` searches
-  two CC0 public-domain catalogs (about 9,400 tracks) when you want a real track.
-  No attribution line, no content ID claim, nothing to clear.
+- **License-clean music, start to finish** - `compose_score` writes an original score
+  with an exact cue grid and no drums to tick under your voiceover, and
+  `find_music_bed` searches two CC0 public-domain catalogs (about 9,400 tracks) when you
+  want a real track. No attribution line, no content ID claim, nothing to clear.
 - **Not only web apps** - a desktop window, an Android device or iOS Simulator, and a
   terminal session are all capturable, so a CLI tool or a Linux distro gets real
   footage instead of a hand-drawn panel standing in for it.
@@ -102,8 +102,9 @@ is your app, captured live.
 
 ### Music
 
-- The built-in `pulse-bed.mp3` runs at a fixed 112bpm, so its cue grid is exact and
-  carries no rights question
+- `compose_score` writes an original score for the video's arc, with an exact cue grid
+  and no rights question. It has no percussion by default, because evenly repeated hits
+  sound like a ticking clock under a voiceover
 - `plan_music_cues` reads that grid, or estimates one for any track you bring, so a
   scene cut lands on the beat instead of an arbitrary second
 - `find_music_bed` searches two CC0 public-domain catalogs, about 9,400 tracks, for a

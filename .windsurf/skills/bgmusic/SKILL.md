@@ -1,6 +1,6 @@
 ---
 name: bgmusic
-description: Use when a video needs background music beyond the two synthesized beds that ship with openvidstudio, or the user says "find music", "background music", "music bed", "bgm", "the music is boring", "something lo-fi", or asks for a track for a demo, launch or promo video. Searches two CC0 public-domain catalogs, imports one track, and shapes it into a bed. Not for sound effects (plan_sound_effects) and not for voice (generate_narration).
+description: Use when a video needs background music beyond the synthesized ambient bed that ships with openvidstudio, or the user says "find music", "background music", "music bed", "bgm", "the music is boring", "something lo-fi", or asks for a track for a demo, launch or promo video. Searches two CC0 public-domain catalogs, imports one track, and shapes it into a bed. Not for sound effects (plan_sound_effects) and not for voice (generate_narration).
 ---
 
 # bgmusic
@@ -10,15 +10,16 @@ library or owing anyone a credit line.
 
 ## When the built-ins are enough
 
-`public/sfx/` already ships two beds and neither costs a request:
+`public/sfx/` already ships one bed and it costs no request:
 
 - `music-bed.mp3`, a 60s ambient drone. Fine under a short technical walkthrough.
-- `pulse-bed.mp3`, 112bpm with an exact cue grid in `pulse-bed.cues.json`. The only
-  track where beat-locked cuts are exact rather than estimated, because it was
-  synthesized rather than analyzed.
 
-Use them when the video is short, narration-led, or the music only has to not be
-silence. Go looking when the video is a launch or promo piece and the bed carries mood.
+For beat-locked cuts that are exact rather than estimated, `compose_score` writes an
+original score with its cue grid next to it. It has no drums by default, on purpose:
+evenly repeated short hits sound like a ticking clock under a voiceover.
+
+Use the built-in bed when the video is short, narration-led, or the music only has to not
+be silence. Go looking when the video is a launch or promo piece and the bed carries mood.
 
 ## The two catalogs
 
@@ -87,8 +88,8 @@ and a bed that opens on a downbeat needs no editing to feel deliberate.
 
 ### 3. plan_music_cues
 
-Call it on the imported file. For any track that is not `pulse-bed.mp3` the grid is
-estimated from an onset envelope, so treat it as planning guidance: snap a handful of
+Call it on the imported file. For any track that did not come from `compose_score` the
+grid is estimated from an onset envelope, so treat it as planning guidance: snap a handful of
 major reveals to `strongCues`, not every cut. `docs/STYLE.md` has the tolerances.
 
 ## Costs and limits

@@ -395,4 +395,16 @@ export const DirectedOnly: React.FC = () => (
   skip("Part 52: C4 primitives real render", "no resolvable node_modules to scaffold a renderable project from");
 }
 
+console.log("\n== a title does not blip on every word by default ==");
+{
+  // TitleSlam used to play a blip per word, 4 frames apart, which is a rapid tick under any title.
+  // It is opt-in now. The vendored core copy in the scaffolded project is what a video renders with.
+  const kinetic = fs.readFileSync(path.join(tmpRoot, "openvidstudio-core", "src", "KineticText.tsx"), "utf8");
+  const titleSlam = kinetic.slice(kinetic.indexOf("export const TitleSlam"), kinetic.indexOf("export const", kinetic.indexOf("export const TitleSlam") + 10));
+  check("TitleSlam's sfx prop defaults to off", /sfx\s*=\s*false/.test(titleSlam) && !/sfx\s*=\s*true/.test(titleSlam));
+  const api = fs.readFileSync(path.join(monorepoRoot, "packages", "docs", "API.md"), "utf8");
+  const titleSection = api.slice(api.indexOf("### `TitleSlam`"), api.indexOf("###", api.indexOf("### `TitleSlam`") + 10));
+  check("API.md documents that default", /\| `sfx` \| `boolean` \| `false` \|/.test(titleSection));
+}
+
 finish();

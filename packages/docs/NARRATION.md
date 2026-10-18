@@ -177,12 +177,27 @@ Writes `public/audio/music-bed.mp3` by default, exactly where `stitch_compositio
 own auto-detection already looks, so a video that had no music wiring at all before
 needs none added after. Pass `outFile` to use a different filename, for A/B-ing two
 takes. Alongside the mp3, two more files land next to it: `music-bed.cues.json`, with
-`source: "generated"` so `plan_music_cues` treats it as ground truth the same way it
-already does for the built-in `pulse-bed.mp3` (an exact beat grid, not an estimate, so
-cuts can land on it with no re-analysis step), and `music-bed.spectrogram.png`, a
-diagnostic worth opening if a mix check below flags something.
+`source: "generated"` so `plan_music_cues` treats it as ground truth (an exact beat grid,
+not an estimate, so cuts can land on it with no re-analysis step), and
+`music-bed.spectrogram.png`, a diagnostic worth opening if a mix check below flags
+something.
 
 A `warnings` array in the result surfaces the mastering engine's own checks rather than
 leaving them readable only by opening the cues file: a band-balance verdict other than
-"ok" (the mix leaning all-bass or all-hiss, say), a detected click, a true peak over the
-limiter's ceiling, or an integrated loudness far from target.
+"ok" (the mix leaning all-bass or all-hiss, say), a detected click, a periodic tick
+pattern (see below), a true peak over the limiter's ceiling, or an integrated loudness far
+from target.
+
+### Why the score has no drums
+
+Short, bright hits that repeat evenly (a hi-hat on every offbeat, a tick on every beat, a
+sixteenth-note pluck that never rests) sound like a clock under a voiceover, whatever
+instrument they are played on. `compose_score` therefore defaults to `percussion: "none"`:
+no kick, clap, hat or tick, and the bass and arp play uneven rhythms with small timing and
+level changes so nothing repeats identically. `percussion: "full"` brings back the old
+drum-machine arrangement if you want it.
+
+The check behind that warning measures the energy above 5 kHz, smooths it to a 1 ms
+envelope, removes the slow trend, and looks for a repeat between 150 and 800 ms. A clean
+bed scores near 0.04; the old arrangement scored 0.8. `finalize_video` runs the same
+measurement on the final audio, so a ticking track you brought yourself gets flagged too.

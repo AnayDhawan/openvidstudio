@@ -268,7 +268,7 @@ function buildCredits(projectRoot: string, videoName: string, beats: BeatLike[])
       credits.push(`Music: "${provenance.title}"${repo}${licence}.`);
     } else if (cues?.source === "generated") {
       credits.push("Music: an original score composed for this video with openvidstudio's compose_score. Pure synthesis, no samples, nothing to license.");
-    } else if (layer.file === "pulse-bed.mp3" || layer.file === "music-bed.mp3") {
+    } else if (layer.file === "music-bed.mp3") {
       credits.push("Music: a bed synthesized by openvidstudio's built-in generator. No samples, nothing to license.");
     } else {
       credits.push(`Music: ${layer.file} (its source was not recorded in this project, so add the credit by hand).`);

@@ -137,4 +137,55 @@ console.log("\n== Part 2b: C3 compose_score real generation ==");
   }
 }
 
+console.log("\n== compose_score: no percussion tick by default ==");
+{
+  const python = spawnSync(process.platform === "win32" ? "where" : "which", ["python"], { encoding: "utf8" });
+  const deps = python.status === 0
+    ? spawnSync("python", ["-c", "import numpy, scipy, soundfile, pyloudnorm, matplotlib"], { encoding: "utf8" })
+    : { status: 1 };
+  if (deps.status !== 0) {
+    skip("compose_score percussion tick check", "python DSP dependencies are not installed");
+  } else {
+    const { runComposeScore, computeWarnings } = require(path.join(distDir, "tools", "composeScore.js"));
+    // tension, groove and peak are the sections that used to carry the per-beat tick, the
+    // off-beat hat and the 16th-note grid. 12 bars at 120bpm is 24 seconds.
+    const music = {
+      bpm: 120,
+      key: "A minor",
+      sectionMap: [
+        { label: "tension", startBar: 0, endBar: 4 },
+        { label: "groove", startBar: 4, endBar: 8 },
+        { label: "peak", startBar: 8, endBar: 12 },
+      ],
+      impactPoints: [{ name: "peak", bar: 8 }],
+    };
+    const quiet = runComposeScore({ projectRoot: path.join(tmpRoot, "tick-none"), videoName: "tick-none", mode: "bed", music });
+    const ticking = runComposeScore({
+      projectRoot: path.join(tmpRoot, "tick-full"),
+      videoName: "tick-full",
+      mode: "bed",
+      music,
+      percussion: "full",
+    });
+    const quietTick = quiet.cues.checks?.percussionTick;
+    const fullTick = ticking.cues.checks?.percussionTick;
+    check("default score reports a percussionTick check", !!quietTick && typeof quietTick.peak === "number");
+    check(
+      `default score has no periodic high-frequency transients (autocorrelation ${quietTick?.peak} < 0.3)`,
+      !!quietTick && quietTick.peak < 0.3 && quietTick.verdict === "ok",
+    );
+    check("default score raises no tick warning", !quiet.warnings.some((w) => /periodic|tick/i.test(w)));
+    check(
+      `control: percussion "full" (the old tick/hat/kick grid) is caught by the same check (autocorrelation ${fullTick?.peak} >= 0.3)`,
+      !!fullTick && fullTick.peak >= 0.3 && fullTick.verdict !== "ok",
+    );
+    check("control: the full-percussion score raises a tick warning", ticking.warnings.some((w) => /periodic|tick/i.test(w)));
+    check(
+      "computeWarnings turns a periodic verdict into a warning",
+      computeWarnings({ checks: { percussionTick: { peak: 0.9, lagMs: 625, verdict: "periodic" } } }).some((w) => /625/.test(w)),
+    );
+    check("default score still has no clicks", quiet.cues.checks?.clickCount === 0);
+  }
+}
+
 finish();

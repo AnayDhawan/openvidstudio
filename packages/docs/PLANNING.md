@@ -18,7 +18,7 @@ Before §1's fixed questions, before drafting anything: ask two questions.
      arc-matched score (`compose_score`, see `NARRATION.md`). Custom scenes, not
      templates. Three or more rounds of stills review.
    - **mid**: strong defaults. The arc from §3 below (hook, problem, demo
-     x2-3, differentiator, cta). The built-in `pulse-bed.mp3` or a CC0
+     x2-3, differentiator, cta). The built-in ambient `music-bed.mp3` or a CC0
      track. A mix of templates and the occasional custom scene where a
      template genuinely falls short. One or two review rounds.
    - **literal**: do exactly what's specified. No added beats, no

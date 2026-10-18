@@ -33,6 +33,10 @@ spec.json fields:
                    (-15 LUFS under narration, -14 LUFS for music-only) when
                    targetLufs is not given.
     targetLufs     number, overrides the mode default.
+    percussion     "none" (default) or "full". "none" renders no kick, clap, hat or
+                   tick, and gives the bass and arp uneven rhythms with small timing
+                   and level variation, so nothing repeats identically on a fixed
+                   grid. "full" is the old drum-machine arrangement, kept as an opt-in.
     truePeakMaxDbtp  number, default -1.0.
     seed           integer, default 7. Every run with the same spec and seed
                    produces byte-identical output.
@@ -160,6 +164,57 @@ ARP_CUTOFF = {"intro": 700, "tension": 2000, "reveal": 5200, "groove": 4000,
               "break": 1500, "peak": 7200, "outro": 2400}
 
 ARP_PAT = [0, 1, 2, 3, 2, 1, 2, 3, 0, 1, 2, 3, 2, 3, 1, 2]
+
+# Percussion mode. "none" is the default: any perfectly even, short-decay, identically
+# voiced hit reads as a ticking clock under a voiceover, so the none mode has no kick,
+# clap, hat or tick, and the bass and arp play uneven rhythms with small timing and
+# level variation. "full" keeps the original drum-machine arrangement.
+PERCUSSION = "none"
+
+# Which of the bar's 16 sixteenth steps (arp) or 8 eighth steps (bass) sound, per bar,
+# in "none" mode. Several patterns rotate by bar so the same shape never repeats back
+# to back. Step 0 always plays so the harmony stays anchored.
+ARP_RHYTHMS = [
+    [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1],
+    [1, 0, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 1],
+    [1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0],
+    [1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 0, 1],
+]
+BASS_RHYTHMS = [
+    [1, 0, 1, 1, 0, 1, 1, 0],
+    [1, 0, 0, 1, 1, 0, 1, 1],
+    [1, 1, 0, 1, 0, 1, 0, 1],
+    [1, 0, 1, 0, 1, 1, 0, 1],
+]
+
+
+def full_percussion():
+    return PERCUSSION == "full"
+
+
+def human_t(t, ms=5.0):
+    """A small random offset in seconds, so two hits never land on the exact grid."""
+    return max(0.0, t + rng.uniform(-ms, ms) / 1000.0)
+
+
+def human_lvl(level, spread=0.14):
+    return level * rng.uniform(1 - spread, 1 + spread)
+
+
+def arp_steps(bar_index, steps=16):
+    """Sixteenth steps of the bar that play. All of them in "full" mode."""
+    if full_percussion():
+        return list(range(steps))
+    pattern = ARP_RHYTHMS[(bar_index * 3 + 1) % len(ARP_RHYTHMS)]
+    return [k for k in range(steps) if pattern[k]]
+
+
+def bass_steps(bar_index):
+    """Eighth steps of the bar that play. All eight in "full" mode."""
+    if full_percussion():
+        return list(range(8))
+    pattern = BASS_RHYTHMS[(bar_index * 5 + 2) % len(BASS_RHYTHMS)]
+    return [k for k in range(8) if pattern[k]]
 
 
 def role_sequence(mode, label, nbars):
@@ -444,28 +499,38 @@ def drone(t0, length, level=0.5):
 
 def groove_bar(b, notes, *, kick_on=True, clap_on=False, hat16=False, openhat=False,
                bass=True, arp=True, arp_lvl=0.8, bass_lvl=0.8):
-    if kick_on:
+    if full_percussion():
+        if kick_on:
+            for k in range(4):
+                kick(bar_t(b, k), 0.95)
+        if clap_on:
+            for k in (1, 3):
+                clap(bar_t(b, k), 0.8)
         for k in range(4):
-            kick(bar_t(b, k), 0.95)
-    if clap_on:
-        for k in (1, 3):
-            clap(bar_t(b, k), 0.8)
-    for k in range(4):
-        hat(bar_t(b, k + 0.5), 0.55, pan=0.15)
-        if openhat:
-            hat(bar_t(b, k + 0.5), 0.28, open_=True, pan=-0.1)
-    if hat16:
-        for k in range(16):
-            if k % 2 == 1:
-                continue
-            hat(bar_t(b, k * 0.25), 0.22, pan=-0.2 if k % 4 else 0.2)
+            hat(bar_t(b, k + 0.5), 0.55, pan=0.15)
+            if openhat:
+                hat(bar_t(b, k + 0.5), 0.28, open_=True, pan=-0.1)
+        if hat16:
+            for k in range(16):
+                if k % 2 == 1:
+                    continue
+                hat(bar_t(b, k * 0.25), 0.22, pan=-0.2 if k % 4 else 0.2)
     if bass:
-        for k in range(8):
-            bass_note(notes["bass"], bar_t(b, k * 0.5), BEAT * 0.45, bass_lvl * (1.0 if k % 2 else 0.8), cutoff=700)
+        for k in bass_steps(b):
+            if full_percussion():
+                bass_note(notes["bass"], bar_t(b, k * 0.5), BEAT * 0.45, bass_lvl * (1.0 if k % 2 else 0.8), cutoff=700)
+            else:
+                bass_note(notes["bass"], human_t(bar_t(b, k * 0.5), 4.0), BEAT * rng.uniform(0.4, 0.6),
+                          human_lvl(bass_lvl * (1.0 if k % 2 else 0.8)), cutoff=700)
     if arp:
         tones = notes["arp"]
-        for k in range(16):
-            pluck(tones[ARP_PAT[k]], bar_t(b, k * 0.25), arp_lvl * (1.0 if k % 4 == 0 else 0.75))
+        for k in arp_steps(b):
+            lvl = arp_lvl * (1.0 if k % 4 == 0 else 0.75)
+            if full_percussion():
+                pluck(tones[ARP_PAT[k]], bar_t(b, k * 0.25), lvl)
+            else:
+                pluck(tones[ARP_PAT[k]], human_t(bar_t(b, k * 0.25)), human_lvl(lvl, 0.2),
+                      decay=rng.uniform(0.11, 0.24), pan=rng.uniform(-0.3, 0.3))
 
 
 def lead_motif(start_bar, nbars, roles, level=0.7, octave=0):
@@ -501,10 +566,15 @@ def render_tension(start_bar, nbars, roles):
     for i, role in enumerate(roles):
         b = start_bar + i
         notes = chord_notes(TONIC_PC, MODE, role)
-        for k in range(4):
-            tick(bar_t(b, k), 0.65 if k % 2 == 0 else 0.5, high=(k % 2 == 0))
-        for k in range(8):
-            bass_note(notes["bass"], bar_t(b, k * 0.5), BEAT * 0.42, 0.52 + 0.04 * i, cutoff=360 + 70 * i)
+        if full_percussion():
+            for k in range(4):
+                tick(bar_t(b, k), 0.65 if k % 2 == 0 else 0.5, high=(k % 2 == 0))
+        for k in bass_steps(b):
+            if full_percussion():
+                bass_note(notes["bass"], bar_t(b, k * 0.5), BEAT * 0.42, 0.52 + 0.04 * i, cutoff=360 + 70 * i)
+            else:
+                bass_note(notes["bass"], human_t(bar_t(b, k * 0.5), 4.0), BEAT * rng.uniform(0.38, 0.55),
+                          human_lvl(0.52 + 0.04 * i), cutoff=360 + 70 * i)
     # chromatic string climb across the section, one note per bar up to climb_steps
     for i in range(climb_steps):
         b = start_bar + (i * nbars) // climb_steps
@@ -525,9 +595,13 @@ def render_reveal(start_bar, nbars, roles):
         notes = chord_notes(TONIC_PC, MODE, role)
         pad_chord(notes["pad"], bar_t(start_bar + i), BAR, 0.95, add9=(i == 0))
         tones = notes["arp"]
-        for k in range(16):
+        for k in arp_steps(start_bar + i):
             level = 0.2 + 0.35 * ((i * 16 + k) / max(1, nbars * 16))
-            pluck(tones[ARP_PAT[k]], bar_t(start_bar + i, k * 0.25), level)
+            if full_percussion():
+                pluck(tones[ARP_PAT[k]], bar_t(start_bar + i, k * 0.25), level)
+            else:
+                pluck(tones[ARP_PAT[k]], human_t(bar_t(start_bar + i, k * 0.25)), human_lvl(level, 0.2),
+                      decay=rng.uniform(0.11, 0.24), pan=rng.uniform(-0.3, 0.3))
     riser(bar_t(start_bar + nbars), BAR * 0.5, 0.5)
 
 
@@ -555,11 +629,17 @@ def render_break(start_bar, nbars, roles):
         b = start_bar + i
         notes = chord_notes(TONIC_PC, MODE, role)
         pad_chord(notes["pad"], bar_t(b), BAR, 0.55)
-        kick(bar_t(b), 0.55)
+        if full_percussion():
+            kick(bar_t(b), 0.55)
         tones = notes["arp"]
+        steps = arp_steps(b)
         for k in range(8):
-            pluck(tones[ARP_PAT[k]], bar_t(b, k * 0.5), 0.3, decay=0.25)
-        if i == nbars - 1:
+            if full_percussion():
+                pluck(tones[ARP_PAT[k]], bar_t(b, k * 0.5), 0.3, decay=0.25)
+            elif k * 2 in steps:
+                pluck(tones[ARP_PAT[k]], human_t(bar_t(b, k * 0.5)), human_lvl(0.3, 0.2),
+                      decay=rng.uniform(0.18, 0.32), pan=rng.uniform(-0.3, 0.3))
+        if i == nbars - 1 and full_percussion():
             # snare-roll build into whatever follows: accelerating clap density
             for k in range(16):
                 clap(bar_t(b, k * 0.25), 0.2 + 0.5 * k / 16)
@@ -648,6 +728,50 @@ def detect_clicks(mix, threshold_sigma=12.0, window=256):
     return int(hits.size), sample_times
 
 
+PERIODIC_TICK_THRESHOLD = 0.3
+
+
+def hf_periodicity(mix, lo_ms=150, hi_ms=800):
+    """Finds a ticking-clock pattern: short high-frequency bursts that repeat evenly.
+
+    Takes the energy above 5 kHz, smooths it to a 1 ms RMS envelope, and measures how
+    strongly that envelope correlates with itself at lags between lo_ms and hi_ms (a
+    tick every beat or every eighth note at any tempo from about 75 to 400 bpm). A bed
+    with no regular hats or ticks scores near zero (measured 0.03 to 0.18 on clean
+    beds); a hat and tick grid scores 0.4 to 0.99. Returns the strongest lag, its
+    normalized correlation, and a verdict at PERIODIC_TICK_THRESHOLD.
+    """
+    mono = mix.mean(axis=0)
+    if mono.size < SR * 2:
+        return {"peak": 0.0, "lagMs": None, "verdict": "ok", "thresholdPeak": PERIODIC_TICK_THRESHOLD,
+                "note": "shorter than two seconds, not measured"}
+    high = hp(mono, 5000, 4)
+    blk = SR // 1000
+    usable = (high.size // blk) * blk
+    env = np.sqrt((high[:usable].reshape(-1, blk) ** 2).mean(axis=1))
+    # Remove the slow trend (impact and riser decays, section changes) with a 100 ms
+    # moving average, so only fast, repeated bursts are left to correlate. Without this
+    # a single decaying tail correlates with itself at every short lag.
+    trend = np.convolve(env, np.ones(100) / 100, mode="same")
+    env = env - trend
+    m = env.size
+    spec = np.fft.rfft(env, 2 * m)
+    ac = np.fft.irfft(spec * np.conj(spec))[:m]
+    if ac[0] <= 1e-18:
+        return {"peak": 0.0, "lagMs": None, "verdict": "ok", "thresholdPeak": PERIODIC_TICK_THRESHOLD}
+    ac = ac / ac[0]
+    hi = min(hi_ms, m - 1)
+    seg = ac[lo_ms:hi + 1]
+    k = int(np.argmax(seg))
+    peak = float(seg[k])
+    return {
+        "peak": round(peak, 3),
+        "lagMs": int(lo_ms + k),
+        "verdict": "periodic" if peak >= PERIODIC_TICK_THRESHOLD else "ok",
+        "thresholdPeak": PERIODIC_TICK_THRESHOLD,
+    }
+
+
 def true_peak_dbtp(mix, oversample=4):
     up = resample_poly(mix, oversample, 1, axis=1)
     peak = float(np.abs(up).max())
@@ -698,8 +822,11 @@ def main():
     with open(spec_path, "r", encoding="utf-8") as f:
         spec = json.load(f)
 
-    global BPM, BEAT, BAR, N, rng, B, TONIC_PC, MODE
+    global BPM, BEAT, BAR, N, rng, B, TONIC_PC, MODE, PERCUSSION
 
+    PERCUSSION = spec.get("percussion", "none")
+    if PERCUSSION not in ("none", "full"):
+        raise ValueError(f'percussion "{PERCUSSION}" must be "none" or "full"')
     BPM = float(spec["bpm"])
     BEAT = 60 / BPM
     BAR = 4 * BEAT
@@ -823,6 +950,7 @@ def main():
     bars_grid = [round(bar_t(b), 3) for b in range(nbars_total + 1)]
 
     click_count, click_times = detect_clicks(mix)
+    tick_check = hf_periodicity(mix)
     band_balance = band_energy_balance(mix.mean(axis=0))
     section_lufs = per_section_lufs(mix, sections_abs, meter)
 
@@ -841,6 +969,7 @@ def main():
         "bpm": BPM,
         "key": spec["key"],
         "mode": spec.get("mode", "bed"),
+        "percussion": PERCUSSION,
         "bars": nbars_total,
         "durationSeconds": round(dur, 3),
         "beats": beats_grid,
@@ -863,6 +992,7 @@ def main():
             "bandBalance": band_balance,
             "clickCount": click_count,
             "clickSampleTimes": click_times,
+            "percussionTick": tick_check,
             "perSectionLufs": section_lufs,
         },
         "spectrogramPath": out_spec,
@@ -877,6 +1007,7 @@ def main():
     print(f"LUFS {lufs_final:.2f} (target {target_lufs}), true peak {tp_final:.2f} dBTP, sample peak {peak_final:.3f}")
     print(f"band balance: low {band_balance['lowPct']:.1f}% mid {band_balance['midPct']:.1f}% high {band_balance['highPct']:.1f}% ({band_balance['verdict']})")
     print(f"clicks detected: {click_count}")
+    print(f"periodic hf transients: autocorrelation {tick_check['peak']} at {tick_check['lagMs']}ms ({tick_check['verdict']})")
     for entry in section_lufs:
         lufs_str = f"{entry['lufs']:.2f} LUFS" if entry["lufs"] is not None else f"{entry['rmsDbfs']:.2f} dBFS (rms)"
         print(f"  section {entry['label']:8s} bars {entry['startBar']:3d}-{entry['startBar']+entry['durationBars']:<3d} {lufs_str}")

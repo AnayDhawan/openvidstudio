@@ -13,14 +13,12 @@ import { runTool } from "./mcp";
  *
  * Two paths, chosen by whether the track already carries a cue file:
  *
- * 1. The built-in pulse-bed.mp3 (public/sfx/pulse-bed.mp3, copied into every scaffolded
- *    project by init_project) ships with pulse-bed.cues.json sitting right next to it,
- *    written by packages/core/scripts/generate-pulse-bed.mjs at the moment the track was
- *    synthesized. Since the track is generated, not recorded, its beat grid is exact by
- *    construction: this path is a file read, not an analysis.
+ * 1. A track from compose_score has a <stem>.cues.json written next to it at the moment it
+ *    was synthesized, with source "generated". Since the track is generated, not recorded,
+ *    its beat grid is exact by construction: this path is a file read, not an analysis.
  *
- * 2. Any other track -- an imported one, or a video's own custom music bed -- has no such
- *    file, so this decodes it and estimates a beat grid: RMS energy envelope, peak-picked
+ * 2. Any other track -- an imported one, or a hand-made music bed -- has no such file, so
+ *    this decodes it and estimates a beat grid: RMS energy envelope, peak-picked
  *    onsets as strongCues, and a BPM estimate from autocorrelating the onset envelope to
  *    build an evenly-spaced beats[] grid. This is a real but simple detector (energy-based
  *    onset picking plus one autocorrelation pass), not the equivalent of a dedicated music
@@ -28,13 +26,13 @@ import { runTool } from "./mcp";
  *    "optional timing hint, ignore it where it hurts readability" posture the STYLE.md
  *    section already asks for, not as ground truth.
  *
- * The result is cached next to the track as <stem>.cues.json (mirroring pulse-bed's own
- * shape), so a second call against the same file is a read, not a re-analysis.
+ * The result is cached next to the track as <stem>.cues.json (the same shape compose_score
+ * writes), so a second call against the same file is a read, not a re-analysis.
  */
 
 export interface MusicCuesInput {
   projectRoot?: string;
-  /** Path to the audio file, relative to projectRoot. e.g. "public/audio/pulse-bed.mp3". */
+  /** Path to the audio file, relative to projectRoot. e.g. "public/audio/music-bed.mp3". */
   track: string;
   /** Re-run analysis even if a cues file is already cached next to the track. */
   force?: boolean;
@@ -205,8 +203,8 @@ export async function runMusicCues(input: MusicCuesInput): Promise<MusicCuesResu
       })
     : null;
 
-  // A "generated" cues file (pulse-bed.mp3's own, written at synth time by
-  // generate-pulse-bed.mjs) is exact by construction. force is for re-running the
+  // A "generated" cues file (written at synth time by compose_score) is exact by
+  // construction. force is for re-running the
   // estimator against a track that was itself only ever estimated; it must never let a
   // noisier re-analysis silently replace ground truth.
   if (existing?.source === "generated") {
@@ -240,7 +238,7 @@ export async function runMusicCues(input: MusicCuesInput): Promise<MusicCuesResu
   const { bpm, beats } = estimateTempoAndGrid(flux, hopSeconds, peaks, durationSeconds);
 
   // strongCues: the loudest quarter of picked onsets, sorted back into time order. This is
-  // deliberately sparser than beats[], matching pulse-bed's own strongCues-are-bar-downbeats
+  // deliberately sparser than beats[], matching compose_score's strongCues-are-bar-downbeats
   // shape: a handful of moments worth cutting on, not every detected transient.
   const sortedByStrength = [...peaks].sort((a, b) => b.strength - a.strength);
   const strongCount = Math.max(1, Math.round(peaks.length * 0.25));
@@ -270,20 +268,20 @@ export function registerMusicCues(server: McpServer): void {
       description:
         "Returns beats (the full beat grid) and strongCues (bar downbeats or the loudest onsets, a sparser " +
         "set) for a music track, in seconds, so scene cuts can be beat-locked instead of landing at an " +
-        "arbitrary second. For the built-in public/sfx/pulse-bed.mp3 (112bpm, generated, ships in every " +
-        "scaffolded project) this is a file read of the exact cue grid computed when the track was " +
-        "synthesized. For any other track it decodes the audio and estimates a grid from an RMS onset " +
+        "arbitrary second. For a track compose_score wrote, this is a file read of the exact cue grid " +
+        "computed when the track was synthesized. For any other track it decodes the audio and estimates " +
+        "a grid from an RMS onset " +
         "envelope and one autocorrelation pass: a real but simple detector, good enough to plan cuts against, " +
         "not a substitute for listening to the track. Results are cached next to the track as " +
         "<stem>.cues.json, so call again with force to re-analyze. force refuses to run against a generated " +
-        "cues file (pulse-bed.mp3's own): that grid is exact by construction, so force exists to redo an " +
+        "cues file (compose_score's own): that grid is exact by construction, so force exists to redo an " +
         "estimate, never to overwrite ground truth with a noisier one. See STYLE.md's \"Beat-locked cuts\" " +
         "section for how to use the result: snap at most a handful of major reveals to strongCues within " +
         "about 0.15s, snap sequential reveals (cards, stats arriving one by one) to consecutive beats within " +
         "about 0.10s, and ignore a cue outright when honoring it would hurt readability or pacing.",
       inputSchema: {
         projectRoot: z.string().optional(),
-        track: z.string().min(1).describe('Path relative to projectRoot, e.g. "public/audio/pulse-bed.mp3".'),
+        track: z.string().min(1).describe('Path relative to projectRoot, e.g. "public/audio/music-bed.mp3".'),
         force: z.boolean().optional(),
       },
     },

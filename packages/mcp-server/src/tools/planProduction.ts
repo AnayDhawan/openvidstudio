@@ -102,7 +102,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     qcRounds: 2,
     customFraction: 0.3,
     arc: "hook, problem, demo x2-3, differentiator, cta (PIPELINE.md's Simple demo arc)",
-    scoreStrategy: "pulse-bed.mp3 (built-in, beat-locked) or a CC0 track via find_music_bed",
+    scoreStrategy: "the built-in ambient music-bed.mp3 or a CC0 track via find_music_bed",
     authoringSecondsPerBeat: 35,
     scoreSeconds: 20,
   },
@@ -110,7 +110,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     qcRounds: 1,
     customFraction: 0,
     arc: "exactly the beats specified, nothing added",
-    scoreStrategy: "whatever beats.json/the brief specifies; pulse-bed.mp3 if unstated",
+    scoreStrategy: "whatever beats.json/the brief specifies; the built-in music-bed.mp3 if unstated",
     authoringSecondsPerBeat: 10,
     scoreSeconds: 0,
   },
@@ -188,7 +188,7 @@ export function runPlanProductionLogic(
         )}s)`,
       );
     }
-    if (profile.scoreSeconds > 0) cutFirst.push(`use the built-in pulse-bed.mp3 instead of ${profile.scoreStrategy} (saves ~${profile.scoreSeconds}s)`);
+    if (profile.scoreSeconds > 0) cutFirst.push(`use the built-in music-bed.mp3 instead of ${profile.scoreStrategy} (saves ~${profile.scoreSeconds}s)`);
     cutFirst.push(`shorten targetDurationSeconds (currently ${targetDurationSeconds}s)`);
     cutFirst.push(`render draft-only and skip the final pass for review, then render final once approved`);
 

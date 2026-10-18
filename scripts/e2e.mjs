@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * End-to-end pipeline check against a real app: reference/acme-tasks, v1.1 served on
- * :4173 and v1.0 on :4174 (reference/acme-tasks/v1.0-to-v1.1.diff is the change between
+ * End-to-end pipeline check against a real app: evals/acme-tasks, v1.1 served on
+ * :4173 and v1.0 on :4174 (evals/acme-tasks/v1.0-to-v1.1.diff is the change between
  * them; v1.0 is a copy with that diff reverse-applied). Drives the actual compiled MCP
  * server over stdio, the transport a real agent uses, rather than calling package
  * internals directly, so a regression in tool registration, schema or the transport
@@ -15,9 +15,11 @@
  *
  * Prereqs (not started by this script):
  *   - packages/mcp-server built: pnpm --filter @openvidstudio/mcp-server build
- *   - reference/ unzipped from ovs-launch-reference.zip into the repo root (gitignored)
- *   - acme-tasks v1.1 served on :4173 and v1.0 on :4174:
- *       cd reference/acme-tasks && npm i && npx vite build && npx vite preview --port 4173 --strictPort
+ *   - acme-tasks v1.1 served on :4173 and v1.0 on :4174 (a copy outside this repo is fine and
+ *     keeps node_modules out of it):
+ *       cd evals/acme-tasks && npm i && npx vite build && npx vite preview --port 4173 --strictPort
+ *   - for the compose_score step, Python with numpy, scipy, soundfile, pyloudnorm and matplotlib;
+ *     without them that one step is reported as skipped, never as passed
  *       (copy the tree, `patch -p1 -R < v1.0-to-v1.1.diff`, build, serve --port 4174 --strictPort)
  *
  * Usage: node scripts/e2e.mjs [--project <dir>] [--keep]
@@ -113,6 +115,10 @@ const projectRoot = explicitProject ?? fs.mkdtempSync(path.join(os.tmpdir(), "ov
 if (!explicitProject) fs.mkdirSync(projectRoot, { recursive: true });
 
 const results = [];
+async function skipStep(name, reason) {
+  results.push({ name, ok: true, skipped: true, ms: 0 });
+  console.log(`  SKIP ${name}: ${reason}`);
+}
 async function step(name, fn) {
   const started = Date.now();
   try {
@@ -141,9 +147,22 @@ try {
     });
   });
   await step("preflight", () => call("preflight", { projectRoot }));
+  await step("plan_production (mid, 30 min, 12 s)", async () => {
+    const plan = await call("plan_production", { projectRoot, creativeLevel: "mid", timeBudgetMinutes: 30, targetDurationSeconds: 12 });
+    if (typeof plan !== "object" || plan === null || !("fitsBudget" in plan)) throw new Error("plan_production returned no fitsBudget");
+    return plan;
+  });
   await step("extract_brand", () =>
-    call("extract_brand", { projectRoot, sourceRepo: path.join(root, "reference", "acme-tasks") }),
+    call("extract_brand", { projectRoot, sourceRepo: path.join(root, "evals", "acme-tasks") }),
   );
+  await step("plan_beats (snapToBars at 96 bpm)", async () => {
+    const plan = await call("plan_beats", { projectRoot, targetDurationSeconds: 12, features: ["board", "insights"], snapToBars: { bpm: 96 } });
+    const barFrames = (60 / 96) * 4 * 30;
+    if (!plan.snappedToBars || !plan.beats.every((b) => b.start === Math.round(b.startBar * barFrames))) {
+      throw new Error("plan_beats did not land every beat on a downbeat");
+    }
+    return plan;
+  });
 
   const beatsJson = {
     fps: 30,
@@ -175,6 +194,28 @@ try {
       },
     ],
   };
+  await step("write_brief", () =>
+    call("write_brief", {
+      projectRoot,
+      videoName,
+      briefMarkdown: "# Brief\n\nA short launch of a calm task board. The product is the story: one click to capture, one page to see what shipped.",
+      briefJson: {
+        creativeLevel: "mid",
+        logline: "A task board that makes the end of the week feel calm.",
+        audience: "Small teams that ship weekly.",
+        feeling: "Relief at the end of a long week.",
+        storyDevice: { device: "a ticking clock", reason: "the product is about the weekly rhythm." },
+        arc: { hook: "A busy board.", tension: "Work piles up.", turn: "One click captures a task.", proof: "The real board and the real Insights page.", payoff: "The streak says it landed.", cta: "Try the board." },
+        designSystem: { path: `src/videos/${videoName}/design.ts`, paletteRationale: "extract_brand found the orange and teal pair.", motif: "rounded-soft", motifRationale: "the product's cards are rounded.", motionRationale: "slow drift" },
+        music: { bpm: 96, key: "D major", sectionMap: [{ label: "intro", startBar: 1, endBar: 2 }, { label: "peak", startBar: 3, endBar: 5 }], impactPoints: [{ name: "turn", bar: 3, note: "the click" }] },
+        shotList: [
+          { beatId: "hook", real: false, provenance: "a constructed title card", whyConstructed: "a title card is not product UI", focalPoint: "the product name" },
+          { beatId: "board", real: true, provenance: "capture_screenshot of the board", focalPoint: "the new task button" },
+          { beatId: "insights", real: true, provenance: "capture_screenshot of Insights", focalPoint: "the streak card" },
+        ],
+      },
+    }),
+  );
   await step("write_beats_file", () => call("write_beats_file", { projectRoot, videoName, beatsJson }));
   await step("validate_beats", () => call("validate_beats", { projectRoot, videoName, beatsJson }));
 
@@ -196,10 +237,43 @@ try {
   );
   await step("validate_scenes", () => call("validate_scenes", { projectRoot, videoName }));
 
+  const pyOk = (() => {
+    try {
+      execFileSync("python", ["-c", "import numpy, scipy, soundfile, pyloudnorm, matplotlib"], { stdio: "pipe" });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+  if (pyOk) {
+    await step("compose_score (mode music)", async () => {
+      const score = await call("compose_score", { projectRoot, videoName, mode: "music" });
+      if (!score.cues || score.cues.source !== "generated") throw new Error("compose_score wrote no generated cues");
+      return score;
+    });
+  } else {
+    await skipStep("compose_score (mode music)", "Python with numpy, scipy, soundfile, pyloudnorm and matplotlib is not available");
+  }
   await step("stitch_composition", () => call("stitch_composition", { projectRoot, videoName }));
+  await step("render_stills (review round, contact grid, findings)", async () => {
+    const r = await call("render_stills", { projectRoot, videoName, perBeat: "review", round: 1 });
+    if (!r.contactGrid || !fs.existsSync(r.contactGrid.path)) throw new Error("render_stills wrote no contact grid");
+    if (!Array.isArray(r.findings)) throw new Error("render_stills returned no numeric findings");
+    return r;
+  });
   await step("render_video (incremental, draft)", () =>
     call("render_video", { projectRoot, videoName, draft: true, incremental: true, skipBrandLock: true }),
   );
+  await step("collect_facts", async () => {
+    const r = await call("collect_facts", { projectRoot, videoName });
+    if (!fs.existsSync(r.factsPath)) throw new Error("collect_facts wrote no facts.json");
+    return r;
+  });
+  await step("finalize_video (loudness, poster, share, description)", async () => {
+    const r = await call("finalize_video", { projectRoot, videoName, inPath: path.join("output", `${videoName}.mp4`) });
+    if (!r.description?.written || !fs.existsSync(r.description.path)) throw new Error("finalize_video wrote no description");
+    return r;
+  });
   await step("qc_extract_frames", () => call("qc_extract_frames", { projectRoot, videoName }));
   await step("contact_sheet", () => call("contact_sheet", { projectRoot, videoName }));
   await step("export_rendition (gif)", () => call("export_rendition", { projectRoot, videoName, format: "gif" }));
@@ -221,7 +295,7 @@ console.log(`\n${passed}/${results.length} steps passed.`);
 // Registered tools this file does not yet drive -- extend here as each gets covered,
 // rather than treating silence as coverage.
 const notYetCovered = [
-  "plan_beats", "plan_shots", "plan_sound_effects", "plan_music_cues",
+  "plan_shots", "plan_sound_effects", "plan_music_cues",
   "find_music_bed", "import_music_bed", "generate_narration",
   "capture_screen_recording", "capture_desktop", "capture_mobile", "capture_terminal",
   "qc_capture", "reformat_vertical", "release_diff",

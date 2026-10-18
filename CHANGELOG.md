@@ -28,6 +28,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **`write_beats_file` now returns the `validate_beats` warnings on a successful write.** The result is `{ written: true, path, warnings }`, so an agent that goes straight to the write still sees notes such as "shot lengths are nearly uniform". Warnings never block the write (#118).
+
 - **The brand palette now reaches the render (#61).** The template's `sideEffects: ["*.css"]`
   let the bundler drop `src/brand.ts`, so `applyBrand` never ran and every scene rendered in the
   default navy. It now lists `./src/brand.ts`, and `validate_scenes` warns when none of

@@ -539,7 +539,7 @@ later `applyBrand` call never reaches into an already-built `DesignSystem`.
 | `typeScale` | `{ display, headline, body, mono: [min, max] }` | px |
 | `grid` | `{ marginX, marginTop, marginBottom }` | px. Default 150 / 130 / 110 at 1920x1080; scaled to `stage` when one is passed (84 / 231 / 196 at 1080x1920). An explicit `grid` wins |
 | `stage` (input only) | `{ width, height }` | The frame the video renders at, default 1920x1080. Pass `{ width: 1080, height: 1920 }` in a native vertical project. Not stored on the result |
-| `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial"` | Default `"rounded-soft"` |
+| `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial" \| "void-spark"` | Default `"rounded-soft"`. `"void-spark"` is Supernova mode's |
 | `motion` | `{ easing, staggerMs, cameraEnergy, cutRhythmSeconds }` | `easing` names an `E.*` preset by string, not a function reference, so the system stays JSON-serializable |
 | `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade", "push", "wipe", "light-leak"]` |
 | `texture` | `{ grainOpacity, vignetteStrength }` | STYLE.md's default ranges |
@@ -806,3 +806,69 @@ export const Install: React.FC = () => (
 
 Two keyframes so it moves, content centred inside the safe area, caption in the
 overlay, tokens instead of hex.
+
+---
+
+## Supernova: `@openvidstudio/stem`
+
+The primitives for STEM lesson videos (production mode `"supernova"`, 1080x1920). A project made
+with `init_project` `mode: "supernova"` can import them; a standard project cannot. Everything here is
+a pure function of the frame, takes its sizes from `useVideoConfig()` and uses no random numbers.
+Stills are 540x960, rendered for real by `scripts/build-api-gallery.mjs`.
+
+```tsx
+import { Spark, Nova, supernovaDesignSystem } from "@openvidstudio/stem";
+```
+
+### `supernovaDesignSystem(subject)`
+
+The Void + Spark design system for one subject (`"math" | "physics" | "cs" | "chemistry" | "biology"`):
+a flat dark Void (`#07060B`, panels `#0E0C16`, hairline at 5% white), warm white text (`#F3EFE6`, never
+pure white, dim `#8C8799`), one accent per subject (math `#5CC8FF`, physics `#FFB347` with ember
+`#FF7A3D`, cs `#B58CFF`, chemistry `#FF4D5E`, biology `#7CFFB2`), the `"void-spark"` motif, and a layout
+grid that keeps key content clear of the Reels interface (108 / 270 / 420). `design.display` is the
+display face, Space Grotesk; the body face is Inter. Both load from local files.
+
+### `Spark`
+
+![A glowing amber point at the head of a fading arc, a launch trail on the Void](img/api/stem-spark.png)
+
+A luminous point: a bright core, a soft bloom and a fading trail. The pen, the pointer and the particle
+of a lesson, with one on screen at a time.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `path` | `Path \| Keyframe[]` | required | `(t) => ({ x, y })` with `t` in frames since `at`, or keyframes `{ frame, x, y, easing? }` (held at the ends, eased between) |
+| `at` | `number` | `0` | Composition frame it appears. Nothing is drawn before it |
+| `trail` | `number` | `18` | Frames of tail. Brighter near the head |
+| `color` | `string` | the subject's accent | |
+| `subject` | `Subject` | `"math"` | Picks the default colour |
+| `size` | `number` | 1.4% of the shorter side | Radius of the core, px |
+
+Behaviours are helpers that return a `Path`, so they compose: `trace(curve | points, { duration })`,
+`carry(fn, from, to, { duration, map? })` (the Spark rides `y = fn(x)`; `map` is a graph-to-screen
+mapping), `orbit(target, radius, { period })`, `split(parent, n, { at, spread })` (n paths),
+`fall(g, { x, y, vx, vy }, { floorY? })` and `walk(points, { hop, hold })`.
+
+### `Nova`
+
+![A thin shockwave ring part-way out, particles converging on a blurred line of text that is still condensing](img/api/stem-nova.png)
+
+The payoff, once per video, on the aha sentence. Nothing before `at`; then a three-frame flash, a thin
+shockwave ring that decelerates and fades, and the `children` condense from particles. Leave a beat of
+silence in the narration before it.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `at` | `number` | | Composition frame of the flash. Or: |
+| `beatId`, `impact` | `string` | | Take the frame from `useMusicClock(beatId).impact(impact)`, the score's named impact |
+| `origin` | `{ x, y }` | frame centre | |
+| `color`, `subject` | | the subject's accent | |
+| `duration` | `number` | `60` | Frames from the flash until the content is fully formed |
+| `children` | node | | The payoff. Fully formed by `at + duration` |
+
+### The glow budget
+
+One glowing element at a time. Spark and Nova draw their glow through `Glow`, which tags its element
+with `data-ovs-glow` and `data-ovs-glow-level`; `countGlowing(root)` counts the elements above
+`GLOW_VISIBLE_LEVEL`. A Spark is one, a Nova's flash is one (the ring and particles do not glow).

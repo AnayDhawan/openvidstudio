@@ -273,3 +273,94 @@ for (const still of result.stills) {
 }
 console.log(`\n${result.stills.length} stills in ${outDir}`);
 fs.rmSync(project, { recursive: true, force: true });
+
+// ---------------------------------------------------------------------------------------------
+// @openvidstudio/stem (Supernova): its own project, because a lesson is 1080x1920 and uses the Void
+// palette. Stills are written as img/api/stem-<name>.png at 540x960. Each entry is one small scene
+// and the local frames that show it best; add the next primitive here.
+
+const stemProject = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-stem-gallery-"));
+runInitProject({ name: "stemgallery", projectRoot: stemProject, mode: "supernova" });
+fs.symlinkSync(templateModules, path.join(stemProject, "node_modules"), "junction");
+const stemVideoDir = path.join(stemProject, "src", "videos", "stemgallery");
+const stemScenesDir = path.join(stemVideoDir, "custom-scenes");
+fs.mkdirSync(stemScenesDir, { recursive: true });
+
+const STEM_HEAD = `import React from "react";
+import { AbsoluteFill, useVideoConfig } from "remotion";
+import { supernovaDesignSystem, displayStack } from "@openvidstudio/stem";
+`;
+/** One stem scene: `body` is JSX inside a Void-coloured AbsoluteFill, `extraImports` adds to the stem import. */
+function stemScene(id, extraImports, body, subject = "physics") {
+  const component = id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+  fs.writeFileSync(
+    path.join(stemScenesDir, `${component}.tsx`),
+    `${STEM_HEAD}import { ${extraImports} } from "@openvidstudio/stem";
+
+export const ${component}: React.FC = () => {
+  const { width, height } = useVideoConfig();
+  const design = supernovaDesignSystem("${subject}");
+  return (
+    <AbsoluteFill style={{ background: design.color.bg0 }}>
+${body}
+    </AbsoluteFill>
+  );
+};
+`,
+  );
+}
+const stemBeats = [];
+function stemAdd(id, duration, frames) {
+  stemBeats.push({ id, duration, frames });
+}
+
+// Spark: a launch arc with the trail behind the head, partway along.
+stemScene(
+  "stem-spark",
+  "Spark, fall",
+  `      <Spark subject="physics" trail={26} path={fall(0.9, { x: width * 0.12, y: height * 0.62, vx: 9, vy: -26 })} />`,
+);
+stemAdd("stem-spark", 90, { 30: "stem-spark" });
+
+// Nova: the ring part-way out, the payoff condensing at the centre.
+stemScene(
+  "stem-nova",
+  "Nova",
+  `      <Nova at={10} duration={50} subject="physics">
+        <div style={{ position: "absolute", left: 0, right: 0, top: height / 2 - 70, textAlign: "center", fontFamily: displayStack(), fontWeight: 700, fontSize: 120, color: design.color.textPrimary }}>
+          It is a slope.
+        </div>
+      </Nova>`,
+);
+stemAdd("stem-nova", 90, { 24: "stem-nova" });
+
+let stemStart = 0;
+const stemFinal = stemBeats.map((b) => {
+  const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+  const beat = { id: b.id, start: stemStart, duration: b.duration, scene: `./custom-scenes/${component}.tsx` };
+  stemStart += b.duration;
+  return beat;
+});
+fs.writeFileSync(path.join(stemVideoDir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", production: { mode: "supernova" }, beats: stemFinal }));
+runStitchComposition({ projectRoot: stemProject, videoName: "stemgallery" });
+const stemFrames = [];
+const stemNames = new Map();
+for (const fb of stemFinal) {
+  const src = stemBeats.find((b) => b.id === fb.id);
+  for (const [local, name] of Object.entries(src.frames)) {
+    const f = fb.start + Number(local);
+    stemFrames.push(f);
+    stemNames.set(f, name);
+  }
+}
+const stemResult = await runRenderStills({ projectRoot: stemProject, videoName: "stemgallery", frames: stemFrames, findings: false, contactGrid: false });
+for (const still of stemResult.stills) {
+  const name = stemNames.get(still.frame);
+  await sharp(still.path)
+    .resize(540, 960)
+    .png({ palette: true, quality: 85, compressionLevel: 9 })
+    .toFile(path.join(outDir, `${name}.png`));
+  console.log(`wrote img/api/${name}.png  (${fs.statSync(path.join(outDir, `${name}.png`)).size} bytes)`);
+}
+console.log(`\n${stemResult.stills.length} stem stills in ${outDir}`);
+fs.rmSync(stemProject, { recursive: true, force: true });

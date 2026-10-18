@@ -17,3 +17,12 @@ export {
   supernovaDesignSystem,
 } from "./designSystem";
 export type { Subject, SupernovaDesignSystem } from "./designSystem";
+
+export { Glow, countGlowing, GLOW_ATTR, GLOW_LEVEL_ATTR, GLOW_VISIBLE_LEVEL } from "./glow";
+export type { GlowKind } from "./glow";
+export { Spark } from "./Spark";
+export type { SparkProps } from "./Spark";
+export { Nova, NOVA_FLASH_FRAMES } from "./Nova";
+export type { NovaProps } from "./Nova";
+export { keyframePath, resolvePath, polyline, trace, carry, orbit, split, fall, walk } from "./paths";
+export type { Point, Path, Keyframe } from "./paths";

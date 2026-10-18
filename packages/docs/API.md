@@ -867,6 +867,43 @@ silence in the narration before it.
 | `duration` | `number` | `60` | Frames from the flash until the content is fully formed |
 | `children` | node | | The payoff. Fully formed by `at + duration` |
 
+### `Axes`, `Plot`, `NumberLine`
+
+![Projectile motion: a parabola in physics amber on dim axes, the area under its first half shaded, a tangent line, and the peak and range marked](img/api/stem-plot.png)
+
+`Axes` draws labelled axes with ticks and owns the graph-to-screen mapping. Its children are placed in
+graph coordinates: `useAxes()` returns `{ toScreen(x, y), toWorld(px, py), box, xRange, yRange, weight }`,
+so a `Plot`, a label or a Spark's path (`carry(fn, a, b, { duration, map: toScreen })`) can use it.
+
+| `Axes` prop | Type | Default | Notes |
+|---|---|---|---|
+| `xRange`, `yRange` | `[min, max]` | required | Graph units |
+| `box` | `{ x, y, width, height }` | sized to the frame | The plot area, composition px |
+| `xStep`, `yStep` | `number` | a round step, about five ticks | |
+| `xLabel`, `yLabel` | `string` | | |
+| `grid` | `boolean` | `true` | Gridlines at the ticks in the dim token, fainter than the axes |
+| `subject` | `Subject` | `"math"` | Picks the accent children use |
+
+| `Plot` prop | Type | Default | Notes |
+|---|---|---|---|
+| `fn` | `(x) => number` | required | A value that is not finite breaks the line |
+| `domain` | `[a, b]` | the axes' x range | |
+| `samples` | `number` | `240` | Across the domain |
+| `progress` | `0..1` | `1` | How much is drawn. Or `at` and `duration` for a draw-on that eases from 0 to 1 |
+| `color` | `string` | the accent | |
+| `tangent` | `{ at, span?, color? }` | | A tangent at x, once the curve has reached it. `span` is its half-length in x units |
+| `area` | `{ from, to, color? }` | | Shades between the curve and the x axis, as far as the curve has been drawn |
+| `points` | `{ x, label? }[]` | | Dots on the curve, appearing as it reaches them |
+
+`NumberLine` takes `range`, `step`, `points` (`{ value, label? }`), `intervals` (`{ from, to, openFrom?,
+openTo? }`, open ends are hollow) and `arrow` (`{ value, label? }`), plus an optional `box` (`{ x, y,
+width }`). `useNumberLine().toScreen(value)` lets a Spark ride the line.
+
+![A number line from -5 to 5 with an open-ended interval from -3 to 1 in the accent, a labelled point at 2 and an arrow at -4](img/api/stem-numberline.png)
+
+Strokes are never thinner than `lineWeight(width, height)`, 3px at 1080 on the shorter side (the plot
+line is about 1.7 times that). None of these glow: the Spark is the one element that does.
+
 ### The glow budget
 
 One glowing element at a time. Spark and Nova draw their glow through `Glow`, which tags its element

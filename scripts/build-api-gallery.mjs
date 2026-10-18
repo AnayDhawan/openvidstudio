@@ -334,6 +334,24 @@ stemScene(
 );
 stemAdd("stem-nova", 90, { 24: "stem-nova" });
 
+// Axes, Plot, tangent, area, marked points: projectile motion, the first lesson that uses them.
+stemScene(
+  "stem-plot",
+  "Axes, Plot",
+  `      <Axes box={{ x: 130, y: 520, width: 820, height: 640 }} xRange={[0, 48]} yRange={[0, 14]} xStep={10} yStep={2} xLabel="distance (m)" yLabel="height (m)" subject="physics">
+        <Plot fn={(x) => x - (x * x) / 40} domain={[0, 40]} area={{ from: 0, to: 20 }} tangent={{ at: 8, span: 6 }} points={[{ x: 20, label: "peak 10 m" }, { x: 40, label: "range 40 m" }]} />
+      </Axes>`,
+);
+stemAdd("stem-plot", 30, { 10: "stem-plot" });
+
+stemScene(
+  "stem-numberline",
+  "NumberLine",
+  `      <NumberLine box={{ x: 108, y: 960, width: 864 }} range={[-5, 5]} step={1} subject="math" points={[{ value: 2, label: "2" }]} intervals={[{ from: -3, to: 1, openFrom: true }]} arrow={{ value: -4, label: "start" }} />`,
+  "math",
+);
+stemAdd("stem-numberline", 30, { 10: "stem-numberline" });
+
 let stemStart = 0;
 const stemFinal = stemBeats.map((b) => {
   const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");

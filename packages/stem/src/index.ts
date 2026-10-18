@@ -26,3 +26,6 @@ export { Nova, NOVA_FLASH_FRAMES } from "./Nova";
 export type { NovaProps } from "./Nova";
 export { keyframePath, resolvePath, polyline, trace, carry, orbit, split, fall, walk } from "./paths";
 export type { Point, Path, Keyframe } from "./paths";
+
+export { Axes, Plot, NumberLine, useAxes, useNumberLine, lineWeight } from "./graph";
+export type { AxesProps, AxesGeometry, Box, PlotProps, PlotPoint, NumberLineProps, NumberLineGeometry } from "./graph";

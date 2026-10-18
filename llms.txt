@@ -20,6 +20,14 @@ current when the links below move, and keep it short: it is an index, not docume
   it exists, and how to install and run it.
 - [CHANGELOG](https://github.com/AnayDhawan/openvidstudio/blob/main/CHANGELOG.md): what changed
   in each release, newest first.
+- [TOOLS](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/TOOLS.md): every
+  MCP tool with a one-line purpose, generated from the server's own registry (including
+  `compose_score`, the original-score tool, and `render_stills`, the review loop's instrument).
+- [CREATIVE](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/CREATIVE.md): the
+  craft of directing a video: story, hook, motif, copy, pacing to music, camera, review rubric.
+- [PIPELINE](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/PIPELINE.md) and
+  [API](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/API.md): the order of
+  work, and every `@openvidstudio/core` primitive with a rendered still.
 
 ## Contributing
 

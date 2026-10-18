@@ -20,6 +20,19 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The brand palette now reaches the render (#61).** The template's `sideEffects: ["*.css"]`
+  let the bundler drop `src/brand.ts`, so `applyBrand` never ran and every scene rendered in the
+  default navy. It now lists `./src/brand.ts`, and `validate_scenes` warns when none of
+  `brand.ts`'s colours appears in a rendered frame.
+- **`stitch_composition` keeps a hand-picked music track on re-stitch (#64).** A chosen track and
+  its level are preserved; an auto-detected bed still upgrades when a better one is added.
+- **`capture_terminal` on Windows (#66).** Python output is unbuffered and UTF-8 (`PYTHONUNBUFFERED`,
+  `PYTHONUTF8`, `PYTHONIOENCODING` in the child's environment), and a bare `bash`, which resolves
+  to the WSL launcher, is flagged.
+- **`spawnCapture` quotes a `.cmd` shim path that contains a space (#77).**
+- **The tool counts in the README were wrong in three places (#69, #70, #81)** and are now
+  generated and checked.
+
 - **`contact_sheet` no longer always fails.** Its filtergraph fed `tile` one input label
   per frame (`[t0][t1]...tile=...`), but `tile` takes exactly one input stream, so every
   call errored with "More input link labels specified for filter 'tile' than it has
@@ -140,6 +153,45 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   four carry their real colours.
 
 ### Added
+
+- **Director mode.** At the peak and mid creative levels the agent works as a director, not a
+  template filler: a creative brief first (`write_brief`), a design system as code
+  (`defineDesignSystem`), an original score (`compose_score`), scenes written from core's
+  primitives, a mandatory review loop (`render_stills`), render-mode quality gates
+  (`validate_scenes` with `render: true`), a facts pipeline (`collect_facts`), and a final
+  assembly (`finalize_video`, `write_description`). Production modes: peak, mid, literal.
+  - `compose_score` composes an original, arc-matched score from the brief's music plan, with a
+    cues file exact by construction, mastered to -15 LUFS under narration or -14 for music-only
+    (`mode` is required, no default), and numeric checks an agent can read: band balance, clicks,
+    per-section loudness, a spectrogram. Needs Python with numpy, scipy, soundfile, pyloudnorm
+    and matplotlib.
+  - `useMusicClock(beatId)` in core gives a scene `at(bar, beat)`, `beatPulse()`, `onBeat()`,
+    `onDownbeat()`, `impact(label)` and `sectionAt(frame)` as scene-local frames.
+    `stitch_composition` copies the bed's cue grid next to the composition and mounts the
+    provider. `plan_beats` gains `snapToBars` to land every beat boundary on a downbeat.
+  - `DirectedShot` in core turns a flat capture into a push-in with tilt, depth of field and a
+    cursor. `Words`, `DotText`, `PixelLogo`, `PixelWipe`, `Atmosphere`, `DotGrid`, `Flash`,
+    `Black`, `Letterbox`, `ChapterHud`, `Window`, `JsonView`, `ToolChip`, `Pill`, `Check`,
+    `Cross`, `Glass`, `useTyped` and `Caret` are documented in API.md with a real still each.
+  - `scaffold_scene` gains `mode: "template" | "starter" | "blank"`, and a beat's `scene` field
+    points `stitch_composition` at any scene file.
+  - `render_stills` takes `perBeat` (a number, or `"review"` for five frames per beat that
+    straddle every cut), exact `frames`, and `round`; it writes a labelled contact grid and
+    returns the numeric findings, so an agent without image input can review.
+  - `validate_scenes` with `render: true` measures cropping, text size, reading time (3.5
+    words/s plus 0.8 s, shared with `validate_beats`), dead frames, em dashes, contrast against
+    the rendered pixels, the title-safe area, HUD overlap and whether the brand palette reaches a
+    frame. A brief may mark a beat `deliberateHold`. Without `render`, a static check warns
+    about numbers typed into a scene's copy instead of read from `facts.json`.
+  - `write_description` writes YouTube chapters from the beats and a credits section read from
+    disk, and `finalize_video` always writes it. `finalize_video` also normalises loudness to
+    -14 LUFS / -1.5 dBTP and writes a poster and a size-capped share copy.
+  - `CREATIVE.md` (principles), `TOOLS.md` (generated), and the `openvidstudio-director` skill,
+    mirrored to the six agent skill directories.
+- **A per-tool test suite.** `scripts/manual-test.mjs` is now a runner over one file per tool in
+  `scripts/tests/`, each runnable alone. CI runs the ones that need only node.
+- **The tool list and every tool-count claim are generated from the server's registry**
+  (`scripts/generate-tool-docs.mjs`), and CI fails when they drift.
 
 - **`render_video` accepts `async: true`, and a new `job_status` tool.** A real render can
   run 40+ minutes, well past an MCP client's own request timeout (Claude Code's

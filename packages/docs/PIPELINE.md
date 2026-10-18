@@ -70,7 +70,24 @@ Create `<video>/beats.json`:
   visual backs up. Full generalized version of this rule: `SCRIPT.md`.
 
 ## 2. Scenes
-One file per beat. Rules:
+One file per beat. **How a scene gets written depends on the creative level in the brief**
+(`src/videos/<name>/brief.json`, see PLANNING.md 4.9):
+
+- **peak and mid: author the scene.** Compose it from `@openvidstudio/core`'s primitives
+  (API.md) against the video's own `design.ts`. `scaffold_scene` with `mode: "starter"` writes a
+  minimal file wired to that design system with no layout imposed; `mode: "blank"` registers the
+  beat for stitching and writes nothing. The primitives are building blocks, not a template: when
+  the brief's motif needs something the library lacks, write the component, and consider
+  proposing it for core afterwards. Use `useMusicClock(beatId)` to land hits on the score and
+  `DirectedShot` to give a capture a move.
+- **literal, or a tight time budget: use a template.** `scaffold_scene` in its default
+  `"template"` mode emits a scene that renders as-is from the beat's own copy and duration.
+- Either way the scene passes STYLE.md's hard rules, and any number it shows comes from
+  `facts.json` (see Run records and facts below) or a capture, never from memory.
+- Bespoke scenes live anywhere under the video folder; point the beat at the file with
+  `scene: "./scenes/Whatever.tsx"` and `stitch_composition` wires it.
+
+Rules for the scene files themselves:
 - Any beat with `captureMethod: "screenshot"` or `"recording"`: capture it
   per **CAPTURE.md**, not ad hoc. That doc exists because uncorrected
   captures reliably come out small, soft, or bleed in content from a
@@ -140,6 +157,26 @@ caption edit and re-stitch, since everything else in the generated composition f
 regenerated from `beats.json` on every run.
 
 ## 4. Preview + QC loop
+
+### The review loop (mandatory, in every mode, before any full render)
+
+Author a scene, `render_stills`, look, fix, repeat until the rubric in CREATIVE.md passes.
+`render_stills` bundles the project once and renders real frames, about ten times faster than a
+draft render:
+
+- `perBeat: "review"` renders five frames per beat (start+3, 25%, mid, 75%, end-3); the first and
+  last sit just inside the beat, so adjacent beats show both sides of every cut. `perBeat: N`
+  spreads N frames start to end, `at` picks one, `frames` takes exact composition frames.
+- It writes a labelled contact grid (one row per beat when `perBeat` is used: across is time
+  within the beat, down is the cut to the next). `round` keeps each round in its own folder.
+- It also returns the numeric findings `validate_scenes` makes in render mode (cropping, text
+  size, reading time, contrast, em dashes, safe area, HUD overlap, dead frames, brand palette),
+  so an agent without image input reviews from the numbers. A beat that cannot be mounted is
+  reported as skipped, never as clean.
+
+Then `validate_scenes` with `render: true` is the gate before stitching and rendering.
+
+### Frame QC after a render
 - `npm run dev` for live preview while writing scenes.
 - Render, then extract frames at each beat midpoint:
   `ffmpeg -nostdin -ss <t> -i output/<video>.mp4 -frames:v 1 -q:v 3 output/qc/<t>.jpg -y`
@@ -200,6 +237,14 @@ It writes `output/<video>-final.mp4` (the original render is kept), a poster
 frame, and a copy under a size cap (`shareMaxMB`, default 10). Pass `poster:
 false` or `share: false` to skip either. A render with no audio track skips the
 loudness step and says so.
+
+It also writes `output/<video>-DESCRIPTION.md` through `write_description` (`description:
+false` skips it): a YouTube-ready description with a Chapters list built from the beats (the
+first at 0:00, each at least ten seconds, at least three, merging short beats forward; a beat
+may carry an optional `chapter` title), a Credits section read from what is on disk (the music
+source and licence, the narration engine, any sound effect whose licence asks for credit), and
+the disclosure of every constructed sample-content shot in the brief's shot list. A finished
+video is posted with it, which is why it is written on every run.
 
 ### Other outputs from the same render
 

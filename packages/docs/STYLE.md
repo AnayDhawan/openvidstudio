@@ -27,7 +27,34 @@ a rule here, it fails QC.
 7. **Motion never stops.** Every shot has at least a subtle push-in (2-5%
    scale over the shot). Static frame = dead frame = QC fail.
 
+## Non-negotiables, and strong defaults
+
+This file has two kinds of rule.
+
+**Non-negotiable.** No brief overrides these, at any creative level:
+
+- Product UI and product text on screen come only from real captures or real tool output;
+  anything constructed is clearly non-product or disclosed. AI-generated clips never show
+  product UI.
+- Every claim in on-screen text or narration is backed by something shown in the same beat or an
+  adjacent one.
+- No em dashes on screen or in narration.
+- The quality gates pass before the final render: nothing cropped or outside the safe area, text
+  at or above the minimum size and on screen long enough to read, no dead frames (unless the brief
+  marks the hold as deliberate), contrast passing, loudness on target.
+- The user approves the brief and the beats before anything is written or rendered.
+
+**Strong defaults.** Everything else below (a camera that always moves, no linear easing, grain
+and vignette, the palette and type, cut rhythm, the SFX map) is how a video made with this
+pipeline looks unless the brief says otherwise. The brief may override any of them with a stated
+reason, recorded in its `styleOverrides` (`{ rule, reason }`), so the departure is a decision
+someone made and not an accident. At literal level, or without a brief, the defaults stand.
+
 ## Hard rules
+
+The rules in this section are the ones most often broken. They are QC failures. The provenance
+rule and the no-em-dash rule are non-negotiable; for the others, a brief may record an override
+with a reason.
 
 - NO linear easing. Ever. Use `@openvidstudio/core`'s `E.*` presets
   (cinematic bezier / springs).

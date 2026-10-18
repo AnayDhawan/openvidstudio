@@ -331,7 +331,14 @@ Call `write_brief` with two things, written together:
   motif/motion rationale, never a duplicate of design.ts's actual values,
   which live only there); `music` (bpm, key, a labeled section arc,
   impact points); `shotList` (one entry per beat: whether it is a real
-  capture or constructed, and why).
+  capture or constructed, and why, the one focal point, and optionally
+  `deliberateHold: true` for a beat that is meant to hold still, so
+  `validate_scenes` does not report its unchanging frames as dead).
+
+The brief is also where the music is decided: `compose_score` reads its
+`music` field and composes an original score to the section map and impact
+points, and `plan_beats` with `snapToBars` plans the beat boundaries onto the
+score's downbeats. Decide the music before the beats, not after.
 
 Optional: `styleOverrides` (any `STYLE.md` default this video deliberately
 breaks, and why) and `sampleContent` (any beat whose "real" capture is

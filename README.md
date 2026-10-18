@@ -63,9 +63,12 @@ is your app, captured live.
 | **Beats** | Plans, validates, and commits the narration-and-shot skeleton the whole render is built from | `plan_beats` · `validate_beats` · `write_beats_file` |
 | **Capture** | Zoom-compensated browser, desktop, mobile, and terminal capture of the real running app | `capture_screenshot` · `capture_screen_recording` · `capture_desktop` · `capture_mobile` · `capture_terminal` |
 | **Shot planning** | Ranks what the video should show from the repo's own emphasis, with evidence per pick | `plan_shots` |
-| **Scenes** | Renders real Remotion scenes from ten templates, using each beat's own copy | `scaffold_scene` · `validate_scenes` |
+| **Brief and design** | The creative brief (story, arc, design rationale, music plan, shot list) written before any beat, with the design system as code | `write_brief` · `plan_production` |
+| **Scenes** | Hand-built scenes from core's primitives at peak and mid, or ten templates using each beat's own copy for literal briefs | `scaffold_scene` · `stitch_composition` |
+| **Review loop** | Several real frames per beat tiled into one labelled contact grid, plus numeric findings, in a fraction of a render | `render_stills` · `validate_scenes` |
+| **Final assembly** | Loudness to target, a poster, a size-capped share copy and a YouTube-ready description with chapters and credits | `finalize_video` · `write_description` · `collect_facts` |
 | **Narration** | One paced clip per beat, sized to fit without sounding stretched | `generate_narration` |
-| **Music** | A rights-clean synthesized bed by default, or a real CC0 track matched to the mood you want | `plan_music_cues` · `find_music_bed` · `import_music_bed` |
+| **Music** | An original score composed to the brief's arc with an exact cue grid, a rights-clean built-in bed, or a real CC0 track | `compose_score` · `plan_music_cues` · `find_music_bed` · `import_music_bed` |
 | **Sound design** | Works out which effects the built-in pack already covers and where to source the rest | `plan_sound_effects` |
 | **Render** | Sequences scenes and audio, then renders draft or full quality, incrementally | `stitch_composition` · `render_video` · `contact_sheet` |
 | **QC & diffing** | Pulls frames back out, diffs against the last accepted render, and flags docs drift | `qc_extract_frames` · `diff_beats` · `visual_regression` · `docs_drift` · `release_diff` |
@@ -132,6 +135,43 @@ is your app, captured live.
 - `reformat_vertical` produces a 9:16 cut with the crop chosen per beat from the
   manifest
 
+### Director mode
+
+For a launch video, a trailer or anything that should look made rather than assembled,
+pick the **peak** or **mid** creative level at `plan_production`. The agent then works
+like a director instead of filling templates:
+
+1. **A brief first.** `write_brief` records the logline, audience, the one feeling, the
+   story device chosen for this product, an arc with stakes, the design rationale (palette
+   roles, a motif lifted from the brand, type, motion), the music plan and a shot list
+   that marks every shot real or constructed. Nothing is written or rendered until you
+   approve it.
+2. **A design system as code.** `design.ts` from `defineDesignSystem` is what scenes and
+   validators read. Brand tokens seed it; they do not dictate it.
+3. **Music first.** `compose_score` writes an original score to the brief's section map and
+   impact points, with a cue file that is exact by construction and numeric checks (band
+   balance, clicks, per-section loudness, a spectrogram) for an agent that cannot listen.
+   `plan_beats` with `snapToBars` puts every cut on a downbeat, and `useMusicClock` hands a
+   scene `at(bar, beat)`, `beatPulse()` and `onDownbeat()` in local frames.
+4. **Scenes written, not templated.** Core's primitives (`Words`, `DotText`, `PixelLogo`,
+   `PixelWipe`, `DirectedShot`, `Window`, `JsonView`, `ChapterHud` and more) are building
+   blocks. When the brief's motif needs something the library lacks, the agent writes the
+   component.
+5. **A review loop before any full render.** `render_stills` renders five frames per beat,
+   tiles them into one labelled contact grid and returns the numbers (cropping, text size,
+   reading time, contrast, em dashes, safe area, HUD overlap, dead frames). Author, look,
+   fix, repeat until the rubric in [CREATIVE.md](packages/docs/CREATIVE.md) passes.
+6. **Facts, not memory.** Every tool's result is recorded and `collect_facts` merges them into
+   `facts.json`; a number shown on screen comes from there or from a capture.
+7. **Final assembly.** `finalize_video` sets the loudness (-14 LUFS, -1.5 dBTP ceiling),
+   writes a poster and a size-capped share copy, and writes the description with chapters,
+   credits and the disclosure of any constructed sample content.
+
+The three production modes: **peak** (full creative liberty, bespoke everything), **mid**
+(strong defaults, mostly authored scenes) and **literal** (exactly what was specified,
+templates welcome). The agent-facing process is the `openvidstudio-director` skill, and the
+craft is [CREATIVE.md](packages/docs/CREATIVE.md).
+
 ### The capture engine on its own
 
 [`@openvidstudio/capture`](./packages/capture) is published separately: zoom
@@ -192,6 +232,7 @@ pnpm build
 | Chromium | whatever `playwright install` pulls | The browser capture actually drives | yes |
 | Your app | running, reachable | Capture points at a real URL. Nothing serving means nothing to film | yes |
 | edge-tts | any current, Python 3.8+ | Narration | no |
+| numpy, scipy, soundfile, pyloudnorm, matplotlib | any current, Python 3.8+ | `compose_score`, the original-score tool | no |
 
 `preflight` checks every row and names the fix for your platform. Only the Node
 version is enforced numerically; the rest are presence checks.
@@ -208,6 +249,7 @@ instead; `preflight` then checks the configured path too.
 winget install --id Gyan.FFmpeg -e
 npm install playwright && npx playwright install chromium
 pip install edge-tts
+pip install numpy scipy soundfile pyloudnorm matplotlib   # only for compose_score
 
 # macOS
 brew install ffmpeg
@@ -222,6 +264,20 @@ pip install edge-tts
 
 pnpm is not needed to use openvidstudio. It is only for building this repo from a
 clone, which is covered under Quick start.
+
+### Long-running tools and client timeouts
+
+A full render can take many minutes, and an MCP client's own request timeout (often 60 to
+120 seconds) can end the call long before the render does. Pass `async: true` to
+`render_video`: it validates its input immediately, starts the render in the background and
+returns a job id, and `job_status` reports progress (frames rendered, the current beat, the
+tail of the log) until the result is ready. Jobs live in the server process for the
+connection's lifetime, so a job id from before a restart is gone.
+
+`render_stills`, `validate_scenes` with `render: true` and `compose_score` run for tens of
+seconds to a couple of minutes depending on the machine. If a client cuts them off, raise its
+tool timeout rather than retrying, since a retry starts the work again. `plan_production`
+measures this machine's real render speed, so its time estimate is the number to plan with.
 
 ### Scripts
 

@@ -214,6 +214,10 @@ capture.ts or guessing a path convention. Two fields close that gap, both option
   manifest. Omit a key (or the whole object) and the convention path is assumed; no
   existing `beats.json` needs to change to stay valid.
 
+Pacing across beats is checked too: with four or more beats, `validate_beats` warns when the
+longest is under 2.5 times the shortest (a warning, never an error). Uniform lengths read as a
+metronome, so plan one long hold and one short punch before assigning frames, not after.
+
 `artifacts` changes nothing about how capture or render run; it exists so the manifest alone
 describes the finished video's shape. Making render/capture
 independently rerunnable against an edited manifest (patch one field, rerun one

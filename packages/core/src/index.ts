@@ -98,3 +98,8 @@ export { Atmosphere, DotGrid, Flash, Black, Letterbox } from "./atmosphere";
 // UI chrome: windows, JSON viewer, tool chips, badges, glass panel, chapter HUD (C4)
 export { Window, JsonView, Check, Cross, ToolChip, Pill, Glass, ChapterHud } from "./panels";
 export type { Chapter } from "./panels";
+
+// Transition overlays drawn over a hard cut by stitch_composition, so a beat's `transition`
+// field changes the picture without moving any beat boundary
+export { TransitionOverlay, TRANSITION_TYPES, transitionEnvelope } from "./TransitionOverlay";
+export type { TransitionType } from "./TransitionOverlay";

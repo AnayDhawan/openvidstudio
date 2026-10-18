@@ -186,14 +186,25 @@ alone and know exactly what will play and where its assets live, without opening
 capture.ts or guessing a path convention. Two fields close that gap, both optional:
 
 ```
-"transition": "cut" | "whip" | "fade"
+"transition": "cut" | "whip" | "fade" | "push" | "wipe" | "light-leak"
 "artifacts": { "screenshotPath"?: string, "recordingPath"?: string, "voPath"?: string }
 ```
 
-- **`transition`**: the cut/whip/fade choice into this beat. Omit it and `"cut"` is
-  assumed, matching today's SFX default (`PIPELINE.md` §2's Whoosh-on-cuts/whips cue).
-  Setting it explicitly is what makes that choice visible on the manifest instead of
-  only implied by which SFX helper a scene file happens to call.
+- **`transition`**: the way into this beat. Omit it and `"cut"` is assumed. `stitch_composition`
+  draws anything else as an overlay on top of the hard cut (core's `TransitionOverlay`), centred
+  on the beat's first frame, about 0.2s either side at any fps, so no beat start or duration
+  moves and the bar-snapped timing and the audio joins are untouched. Picking one is a creative
+  call, not a default; a video that dissolves every cut reads as a slideshow.
+  - `fade`: dips to the brand background and back. The quiet one, for a change of subject.
+  - `whip`: heavy blur and an accent streak across the frame. Pairs with the `Whoosh` SFX
+    (`PIPELINE.md` §2), which is a separate cue the scene still calls itself.
+  - `push`: a panel slides in from the right, covers the frame on the cut, leaves to the left.
+  - `wipe`: a skewed band with an accent edge crosses left to right.
+  - `light-leak`: warm light in the accent's hue drifts across and peaks on the cut. The one
+    for a reveal or a beat landing on the score.
+  The overlay is not drawn on the first beat (there is no cut into it) and is clamped when the
+  first beat is shorter than the overlay. A scene that wants a transition drawn differently can
+  leave `transition` as `"cut"` and animate its own entrance.
 - **`artifacts`**: explicit overrides of this beat's output paths. Every capture tool
   already defaults to the convention path (`PIPELINE.md`'s Asset conventions table:
   `public/images/<id>.png`, `public/video/<id>.mp4`, `public/audio/vo/<id>.mp3`) and
@@ -203,8 +214,8 @@ capture.ts or guessing a path convention. Two fields close that gap, both option
   manifest. Omit a key (or the whole object) and the convention path is assumed; no
   existing `beats.json` needs to change to stay valid.
 
-Neither field changes how capture or render actually run today; both exist so the
-manifest alone describes the finished video's shape. Making render/capture
+`artifacts` changes nothing about how capture or render run; it exists so the manifest alone
+describes the finished video's shape. Making render/capture
 independently rerunnable against an edited manifest (patch one field, rerun one
 stage, no full regenerate) is the next piece of this work, not part of this addition.
 

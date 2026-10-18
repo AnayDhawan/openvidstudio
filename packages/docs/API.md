@@ -424,7 +424,7 @@ later `applyBrand` call never reaches into an already-built `DesignSystem`.
 | `grid` | `{ marginX, marginTop, marginBottom }` | px, at the 1920x1080 stage |
 | `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial"` | Default `"rounded-soft"` |
 | `motion` | `{ easing, staggerMs, cameraEnergy, cutRhythmSeconds }` | `easing` names an `E.*` preset by string, not a function reference, so the system stays JSON-serializable |
-| `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade"]` |
+| `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade", "push", "wipe", "light-leak"]` |
 | `texture` | `{ grainOpacity, vignetteStrength }` | STYLE.md's default ranges |
 
 ### `contrastRatio(hexA, hexB)`
@@ -553,6 +553,7 @@ as one continuous move across the cut.
 | `Flash` | `at`, `color?` (`#ffffff`), `strength?` (0.55), `dur?` (10) | Brief exposure flash on a hard hit |
 | `Black` | `from`, `to?` | Holds solid black. Omit `to` to hold forever |
 | `Letterbox` | `amount?` (1) | Bars for a cinematic moment. `amount` scales the bar height, 1 = full 64px |
+| `TransitionOverlay` | `type` (`"fade"`, `"whip"`, `"push"`, `"wipe"`, `"light-leak"`), `length?` | A transition drawn over a hard cut, in the colour tokens. Mount it in a `Sequence` that starts `length / 2` frames before the cut (`layout="none"`): it peaks on the cut frame and is clear on its first and last frames. `length` is its total frames and defaults to the Sequence's. `stitch_composition` does this for every beat whose `transition` is not `"cut"`, so a scene rarely mounts one by hand |
 
 | | |
 |---|---|

@@ -19,7 +19,7 @@ export const READING_OVERHEAD_SEC = 0.8;
 const NARRATION_MODES = ["voice", "none"] as const;
 const CREATIVE_LEVELS = ["peak", "mid", "literal"] as const;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;
-const TRANSITIONS = ["cut", "whip", "fade"] as const;
+const TRANSITIONS = ["cut", "whip", "fade", "push", "wipe", "light-leak"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
 const CAPTURE_SOURCES = ["browser", "desktop", "mobile", "terminal"] as const;
 const CROP_FOCUSES = ["left", "center", "right"] as const;
@@ -247,6 +247,14 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       }
     }
 
+    // Checked before the visual rules: those return early for desktop, mobile and terminal
+    // beats, and a typo in a beat's transition is just as wrong on one of those.
+    if ("transition" in beat && beat.transition !== undefined) {
+      if (typeof beat.transition !== "string" || !(TRANSITIONS as readonly string[]).includes(beat.transition)) {
+        errors.push(`${label}: transition must be one of ${TRANSITIONS.map((t) => `"${t}"`).join(", ")} (omit for "cut")`);
+      }
+    }
+
     const visual = beat.visual;
     if (typeof visual !== "object" || visual === null) {
       errors.push(`${label}: missing or invalid "visual"`);
@@ -384,12 +392,6 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     }
     // dom-demo: no additional required fields.
 
-    if ("transition" in beat && beat.transition !== undefined) {
-      if (typeof beat.transition !== "string" || !(TRANSITIONS as readonly string[]).includes(beat.transition)) {
-        errors.push(`${label}: transition must be one of ${TRANSITIONS.map((t) => `"${t}"`).join(", ")} (omit for "cut")`);
-      }
-    }
-
     if ("artifacts" in beat && beat.artifacts !== undefined) {
       const artifacts = beat.artifacts;
       if (typeof artifacts !== "object" || artifacts === null || Array.isArray(artifacts)) {
@@ -467,8 +469,9 @@ export function registerValidateBeats(server: McpServer): void {
         "recording beats, every interactions[] entry is also validated against " +
         "the exact schema capture_screenshot/capture_screen_recording enforce at replay time (click, fill, " +
         "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +
-        "time. Also validates two optional per-beat fields if present: transition (cut/whip/fade, cut assumed " +
-        "if omitted) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
+        "time. Also validates two optional per-beat fields if present: transition (cut, whip, fade, push, wipe " +
+        "or light-leak; cut assumed if omitted; everything but cut is drawn over the cut by stitch_composition " +
+        "without moving any beat boundary) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
         "paths, each a non-empty string). For browser screenshot/recording beats, settle (boolean) and " +
         "settleTimeoutMs (positive number) are also type-checked if present -- see capture_screenshot/" +
         "capture_screen_recording for what they control. Returns { valid, errors } with every failure found, never just the " +

@@ -433,8 +433,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`finalize_video` warns when the final audio ticks (`audio-tick`).** The same
   measurement runs on the mixed audio, so a ticking track you brought yourself is flagged
   too.
-- **The word-by-word reveal blip is off by default** (`KineticText` `sfx`). Click and
-  checklist sounds stay on, since they follow real events.
+- **`TitleSlam`'s per-word blip is off by default** (`sfx={false}`). A blip every four frames
+  is a rapid tick under any title. Click and checklist sounds stay on, since they follow real
+  events.
 - **`stitch_composition` only auto-picks `music-bed.mp3`.** A leftover `pulse-bed.mp3` in a
   project is ignored unless you pass it as `musicBed.file`.
 

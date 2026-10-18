@@ -28,7 +28,8 @@ export const TitleSlam: React.FC<{
   color: textColor = color.textPrimary,
   glowColor,
   align = "center",
-  sfx = true,
+  // Off by default: a blip per word, four frames apart, is a rapid tick under every title.
+  sfx = false,
 }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();

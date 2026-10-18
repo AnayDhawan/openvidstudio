@@ -6,6 +6,7 @@ import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, spawnCapt
 import { runExportRendition, type ExportRenditionResult } from "./exportRendition";
 import { runWriteDescription, type WriteDescriptionResult } from "./writeDescription";
 import { fileBytes, relToProject, writeFactRecord } from "../facts";
+import { describeTick, measureAudioTick, type AudioTickResult } from "../audioTick";
 import { runTool } from "./mcp";
 
 /**
@@ -176,6 +177,11 @@ export interface FinalizeVideoResult {
     withinTolerance: boolean;
     toleranceLu: number;
   } | null;
+  /**
+   * Whether the finished audio has short high-frequency hits repeating evenly (a ticking clock).
+   * Absent when the render has no audio. A "periodic" verdict also adds a note.
+   */
+  audioTick?: AudioTickResult;
   poster?: ExportRenditionResult;
   share?: ExportRenditionResult;
   /** The YouTube-ready description written beside the video, unless description: false. */
@@ -243,6 +249,15 @@ export async function runFinalizeVideo(input: FinalizeVideoInput): Promise<Final
 
   const result: FinalizeVideoResult = { finalPath: outRel, loudness, notes };
 
+  if (hasAudio) {
+    const tick = await measureAudioTick(outRel, projectRoot);
+    if (tick) {
+      result.audioTick = tick;
+      const warning = describeTick(tick);
+      if (warning) notes.push(warning);
+    }
+  }
+
   if (input.poster !== false) {
     result.poster = await runExportRendition({
       projectRoot,
@@ -289,6 +304,7 @@ export async function runFinalizeVideo(input: FinalizeVideoInput): Promise<Final
         afterTruePeakDb: loudness.after.truePeakDb,
         withinTolerance: loudness.withinTolerance,
       },
+      audioTick: result.audioTick ? { peak: result.audioTick.peak, lagMs: result.audioTick.lagMs, verdict: result.audioTick.verdict } : null,
       description: result.description ? relToProject(projectRoot, result.description.path) : null,
       poster: result.poster?.files[0] ?? null,
       posterBeat: result.poster?.posterPick?.beatId ?? null,
@@ -316,8 +332,9 @@ export function registerFinalizeVideo(server: McpServer): void {
         "than the last one) and a share copy under a hard size cap (shareMaxMB, default 10). Pass poster: " +
         "false or share: false to skip either. Also writes output/<videoName>-DESCRIPTION.md (write_description: " +
         "chapters from the beats, credits, and the disclosure of any constructed sample content), because a " +
-        "finished video is posted with it; pass description: false to skip. A render with no audio track skips " +
-        "loudness and says so.",
+        "finished video is posted with it; pass description: false to skip. Also checks the finished audio for " +
+        "a ticking-clock pattern (short high-frequency hits repeating evenly) and adds an audio-tick note with " +
+        "the interval when it finds one. A render with no audio track skips loudness and the tick check, and says so.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),

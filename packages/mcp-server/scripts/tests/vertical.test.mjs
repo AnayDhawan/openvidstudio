@@ -306,4 +306,67 @@ if (have) {
   skip("vertical 1: primitives at 1080x1920", "no resolvable node_modules to scaffold a renderable project from");
 }
 
+
+console.log("\n== vertical 2: validate_scenes reads the frame size from the project, static and render ==");
+if (have) {
+  const { runValidateScenes, runValidateScenesFull } = require(path.join(distDir, "tools", "validateScenes.js"));
+  // Three scenes with a camera that moves (so nothing is "dead") and 1.04x at most, so the visible
+  // box is the frame divided by 1.04: 1038x1846 in a 1080x1920 reel, 1846x1038 in 1920x1080.
+  const camera = (cx, cy) => `[{ frame: 0, x: ${cx}, y: ${cy}, scale: 1 }, { frame: 90, x: ${cx}, y: ${cy}, scale: 1.04, easing: E.drift }]`;
+  const scene = (name, cx, cy, body) => `import React from "react";
+import { CinematicScene, E } from "@openvidstudio/core";
+
+export const ${name}: React.FC = () => (
+  <CinematicScene camera={${camera(cx, cy)}}>
+${body}
+  </CinematicScene>
+);
+`;
+  const line = (style, text) => `    <div style={{ position: "absolute", color: "#fff", ${style} }}>${text}</div>`;
+  const verticalScenes = {
+    // Everything fits inside 1080 wide with room to spare.
+    good: { duration: 120, source: scene("Good", 540, 960, [line("left: 120, top: 700, width: 840, fontSize: 72", "Ship the demo"), line("left: 120, top: 900, width: 840, fontSize: 40", "Ten tools, one pipeline.")].join("\n")) },
+    // A 1500px wide block: fine in a 1920 frame, wider than a whole 1080 frame.
+    wide: { duration: 90, source: scene("Wide", 540, 960, line("left: 60, top: 700, width: 1500, fontSize: 40", "This block is wider than the reel")) },
+    // Placed at x=1500: outside a 1080 frame entirely. Only the render can see a position.
+    offscreen: { duration: 90, source: scene("Offscreen", 540, 960, line('left: 1500, top: 800, fontSize: 40, whiteSpace: "nowrap"', "Placed beyond the right edge")) },
+  };
+  const vcheck = scaffold({ prefix: "ovs-vcheck-", videoName: "vcheck", width: 1080, height: 1920, scenes: verticalScenes });
+  const wcheck = scaffold({
+    prefix: "ovs-wcheck-",
+    videoName: "wcheck",
+    width: 1920,
+    height: 1080,
+    scenes: {
+      good: { duration: 120, source: scene("Good", 960, 540, line("left: 300, top: 360, width: 1200, fontSize: 72", "Ship the demo")) },
+      // The same 1500px block as the reel's "wide": fine here.
+      wide: verticalScenes.wide,
+      // 1900 wide against a 1846 visible box: still caught in landscape.
+      toowide: { duration: 90, source: scene("Toowide", 960, 540, line("left: 10, top: 360, width: 1900, fontSize: 40", "Wider than the visible box")) },
+    },
+  });
+
+  const framing = (res, beatId) => res.findings.filter((f) => f.source === "static" && f.beatId === beatId && /Content declares/.test(f.message));
+  const vStatic = runValidateScenes({ projectRoot: vcheck.root, videoName: "vcheck" });
+  const wStatic = runValidateScenes({ projectRoot: wcheck.root, videoName: "wcheck" });
+  console.log(`  static, 1080x1920: ${JSON.stringify(vStatic.findings.filter((f) => /Content declares/.test(f.message)).map((f) => [f.beatId, f.message.slice(0, 96)]))}`);
+
+  check("1080x1920: a block that fits the frame is not flagged", framing(vStatic, "good").length === 0);
+  check("1080x1920: a 1500px block is flagged as an error, against the 1080x1920 frame (1038x1846 visible at 1.04x)", framing(vStatic, "wide").length === 1 && framing(vStatic, "wide")[0].severity === "error" && framing(vStatic, "wide")[0].message.includes("1038x1846"));
+  check("1920x1080 control: the same 1500px block is fine", framing(wStatic, "wide").length === 0);
+  check("1920x1080 control: a correct scene is not flagged", framing(wStatic, "good").length === 0);
+  check("1920x1080 control: a 1900px block is still flagged, against 1846x1038", framing(wStatic, "toowide").length === 1 && framing(wStatic, "toowide")[0].message.includes("1846x1038"));
+
+  // The render pass reads the real composition size, so a position the static pass cannot see is found.
+  const rendered = await runValidateScenesFull({ projectRoot: vcheck.root, videoName: "vcheck", render: true });
+  const crops = (beatId) => rendered.findings.filter((f) => f.source === "render" && f.beatId === beatId && f.check === "crop");
+  const anyRender = (beatId) => rendered.findings.filter((f) => f.source === "render" && f.beatId === beatId);
+  console.log(`  render, 1080x1920: ${JSON.stringify(rendered.findings.filter((f) => f.source === "render").map((f) => [f.beatId, f.check, f.severity]))}`);
+  check("render mode on the reel measured all three beats", rendered.render?.beatsMeasured === 3 && rendered.render.beatsSkipped.length === 0);
+  check("render: a correct vertical scene has no render findings at all", anyRender("good").length === 0);
+  check("render: text placed at x=1500 in the 1080-wide frame is a crop error", crops("offscreen").length === 1 && crops("offscreen")[0].severity === "error" && crops("offscreen")[0].message.includes("Placed beyond"));
+  check("render: the 1500px block holds only a short line that fits, so only the static pass reports it", crops("wide").length === 0);
+  check("the overflow makes the result not ok", rendered.ok === false);
+}
+
 finish();

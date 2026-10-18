@@ -14,9 +14,11 @@ import { readDeliberateHolds, readTypeMinimums, runRenderChecks } from "./valida
  * The worst failure class in this pipeline is silent wrongness: a scene renders
  * successfully and is simply wrong.
  *
- * The commonest instance is framing. Scenes lay content out on a 1920x1080 stage, but
- * the camera only ever shows stage divided by scale, so at 1.4 that is 1371x771 and
- * anything wider is cropped at the frame edge. Nothing errors. Building one real video
+ * The commonest instance is framing. Scenes lay content out on a stage the size of the
+ * composition (1920x1080 by default, 1080x1920 for a native vertical project: whatever
+ * videoConfig in openvidstudio.config.json says), but the camera only ever shows stage
+ * divided by scale, so at 1.4 a 1920x1080 stage shows 1371x771 and anything wider is
+ * cropped at the frame edge. Nothing errors. Building one real video
  * this cropped three scenes, and it was only caught by rendering stills and looking.
  *
  * This reads the scene sources and reports the mismatches that are visible statically:
@@ -66,9 +68,6 @@ export interface ValidateScenesResult {
     totalMs: number;
   };
 }
-
-const STAGE_W = 1920;
-const STAGE_H = 1080;
 
 interface BeatLike {
   id: string;
@@ -256,7 +255,7 @@ export function runValidateScenes(input: ValidateScenesInput): ValidateScenesRes
 function staticPass(input: ValidateScenesInput): ValidateScenesResult {
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
-  const config = loadConfig(projectRoot);
+  const { width: frameW, height: frameH } = loadConfig(projectRoot).videoConfig;
   const videoDir = path.join(projectRoot, "src", "videos", videoName);
   const scenesDir = path.join(videoDir, "scenes");
   const beatsFile = path.join(videoDir, "beats.json");
@@ -288,11 +287,12 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
     checked++;
     const src = fs.readFileSync(file, "utf8");
 
-    // Framing. The binding number is the scene's highest scale, not its first.
+    // Framing. The binding number is the scene's highest scale, not its first. The frame is the
+    // project's own composition size, so a 1080x1920 reel is judged against 1080 wide, not 1920.
     const scales = cameraScales(src);
     const maxScale = scales.length ? Math.max(...scales) : 1;
-    const visibleW = Math.round(STAGE_W / maxScale);
-    const visibleH = Math.round(STAGE_H / maxScale);
+    const visibleW = Math.round(frameW / maxScale);
+    const visibleH = Math.round(frameH / maxScale);
     for (const w of declaredWidths(src)) {
       if (w > visibleW) {
         findings.push({
@@ -301,7 +301,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
           severity: "error",
           message:
             `Content declares ${w}px wide but the camera reaches scale ${maxScale}, which shows only ` +
-            `${visibleW}x${visibleH} of the stage. It will be cropped at the frame edge and the render ` +
+            `${visibleW}x${visibleH} of the ${frameW}x${frameH} stage. It will be cropped at the frame edge and the render ` +
             `will not warn. Narrow the content or lower the camera scale.`,
         });
       }
@@ -402,7 +402,6 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
     }
   }
 
-  void config;
   const tagged = findings.map((f): SceneFinding => ({ source: "static", ...f }));
   return { ok: !tagged.some((f) => f.severity === "error"), scenesChecked: checked, findings: tagged };
 }
@@ -470,9 +469,10 @@ export function registerValidateScenes(server: McpServer): void {
       title: "Check scenes for problems that render without erroring",
       description:
         "Reads every scene for a video and reports what would otherwise only be caught by watching the " +
-        "output. Chiefly framing: content is laid out on a 1920x1080 stage but the camera shows stage " +
-        "divided by scale, so a panel wider than the visible box is cropped at the frame edge with no " +
-        "warning at all. Also flags scenes whose camera never moves (a static frame fails STYLE.md), " +
+        "output. Chiefly framing: content is laid out on a stage the size of the composition (1920x1080 by " +
+        "default, 1080x1920 for a native vertical project, read from the project's videoConfig) but the " +
+        "camera shows stage divided by scale, so a panel wider than the visible box is cropped at the frame " +
+        "edge with no warning at all. Also flags scenes whose camera never moves (a static frame fails STYLE.md), " +
         "capture assets a scene references that are not on disk, a browser capture whose settle sidecar " +
         "reports a timeout (the frame may be mid-transition -- see capture_screenshot/" +
         "capture_screen_recording's settle/settleTimeoutMs), leftover TODOs, and beats with no " +

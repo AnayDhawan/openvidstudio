@@ -293,8 +293,7 @@ console.log("\n== Part 45: preflight's render benchmark (B) ==");
   }
 }
 
-console.log("
-== preflight asks for Node 20, the version the packages and CI use ==");
+console.log("\n== preflight asks for Node 20, the version the packages and CI use ==");
 {
   const { checkNodeVersion, MIN_NODE_MAJOR } = require(path.join(distDir, "tools", "preflight.js"));
   check("the minimum is 20", MIN_NODE_MAJOR === 20);

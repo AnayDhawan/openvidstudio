@@ -90,7 +90,10 @@ One file per beat. **How a scene gets written depends on the creative level in t
 - **literal, or a tight time budget: use a template.** `scaffold_scene` in its default
   `"template"` mode emits a scene that renders as-is from the beat's own copy and duration.
 - Either way the scene passes STYLE.md's hard rules, and any number it shows comes from
-  `facts.json` (see Run records and facts below) or a capture, never from memory.
+  `facts.json` (see Run records and facts below) or a capture, never from memory. In a
+  Supernova lesson the numbers are computed, not claimed: `validate_scenes` accepts a number that
+  is in the concept card's worked example (`concept.json`) or in an `Equation`'s `tex`, and still
+  flags one that appears nowhere.
 - Bespoke scenes live anywhere under the video folder; point the beat at the file with
   `scene: "./scenes/Whatever.tsx"` and `stitch_composition` wires it.
 
@@ -358,8 +361,12 @@ export const design = supernovaDesignSystem("physics");
 ```
 
 `validate_beats` reads `production.mode` (an unknown value is an error; a silent lesson is a warning),
-`write_brief` takes `mode` and needs no `creativeLevel` for a lesson, and `plan_production` plans a
-lesson with its own arc, no capture time and no creative level.
+`write_brief` takes `mode` and needs no `creativeLevel` for a lesson (and no real or constructed split
+in its shot list), `plan_production` plans a lesson with its own arc, no capture time and no creative
+level, and `validate_scenes` and `write_description` follow it: numbers in a worked example or an
+equation pass, `validate_scenes` in render mode counts glowing elements (more than one is a warning,
+more than two an error, except in a beat with a Nova), and the description says in one line that the
+video is a constructed explanation instead of disclosing shots one by one.
 
 ## Native vertical (9:16)
 

@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
-import { loadConfig } from "../config";
+import { loadConfig, productionMode } from "../config";
 import { runTool } from "./mcp";
 import { readExistingMusicLayer } from "./stitchComposition";
 
@@ -50,6 +50,8 @@ interface BriefLike {
   audience?: string;
   feeling?: string;
   constructedShots: ConstructedShot[];
+  /** True for a Supernova lesson's brief (`mode: "supernova"`). */
+  lesson?: boolean;
 }
 
 interface BeatLike {
@@ -87,7 +89,10 @@ function readBrief(projectRoot: string, videoName: string): BriefLike | undefine
   const feeling = typeof raw.feeling === "string" && raw.feeling.trim().length > 0 ? raw.feeling.trim() : undefined;
 
   const constructedShots: ConstructedShot[] = [];
-  if (raw.shotList !== undefined) {
+  // A lesson is constructed on purpose, all of it: there is no real product being imitated, so there is
+  // no per-shot disclosure to collect (the description carries one line saying so instead).
+  const lesson = raw.mode === "supernova";
+  if (!lesson && raw.shotList !== undefined) {
     if (!Array.isArray(raw.shotList)) {
       throw new Error(`${briefPath}: "shotList" must be an array if present.`);
     }
@@ -146,7 +151,7 @@ function readBrief(projectRoot: string, videoName: string): BriefLike | undefine
     });
   }
 
-  return { logline, audience, feeling, constructedShots };
+  return { logline, audience, feeling, constructedShots, ...(lesson ? { lesson: true } : {}) };
 }
 
 /**
@@ -321,6 +326,7 @@ function buildDescription(
   beatsData: { fps: number; beats: BeatLike[] },
   chapters: { chapters: Chapter[]; skippedBecause?: string },
   credits: string[],
+  lesson = false,
 ): string {
   const { fps, beats } = beatsData;
   const totalFrames = beats.reduce((sum, b) => sum + b.duration, 0);
@@ -368,7 +374,11 @@ function buildDescription(
   }
 
   const constructedShots = brief?.constructedShots ?? [];
-  if (constructedShots.length > 0) {
+  if (lesson) {
+    // Replaces the sample-content disclosure: everything in a lesson is drawn for it.
+    lines.push("This video is a constructed explanation, not footage.");
+    lines.push("");
+  } else if (constructedShots.length > 0) {
     lines.push("## Sample content used in this video");
     lines.push("");
     // One sentence per distinct disclosure: six beats filmed from the same sample app are one fact
@@ -412,13 +422,14 @@ export function runWriteDescription(input: WriteDescriptionInput): WriteDescript
 
   const chapters = buildChapters(beatsData.beats, beatsData.fps);
   const credits = buildCredits(projectRoot, videoName, beatsData.beats);
-  const content = buildDescription(videoName, brief, beatsData, chapters, credits);
+  const lesson = brief?.lesson === true || productionMode(loadConfig(projectRoot)) === "supernova";
+  const content = buildDescription(videoName, brief, beatsData, chapters, credits, lesson);
 
   const outPath = path.join(projectRoot, "output", `${videoName}-DESCRIPTION.md`);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, content, "utf8");
 
-  const constructedShots = brief?.constructedShots ?? [];
+  const constructedShots = lesson ? [] : (brief?.constructedShots ?? []);
   if (constructedShots.length > 0) {
     // Round-trip: read back what actually landed on disk and confirm every disclosure survived,
     // rather than trusting the string already held in memory. A dropped disclosure is a bug in

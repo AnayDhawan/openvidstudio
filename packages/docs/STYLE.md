@@ -40,7 +40,9 @@ This file has two kinds of rule.
 
 - Product UI and product text on screen come only from real captures or real tool output;
   anything constructed is clearly non-product or disclosed. AI-generated clips never show
-  product UI.
+  product UI. (A Supernova lesson has no product behind it, so everything in it is constructed on
+  purpose and the per-shot disclosure is replaced by one line in the description: the video is a
+  constructed explanation, not footage.)
 - Every claim in on-screen text or narration is backed by something shown in the same beat or an
   adjacent one.
 - No em dashes on screen or in narration.

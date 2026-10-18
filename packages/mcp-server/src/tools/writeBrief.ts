@@ -302,7 +302,20 @@ export function validateBriefLogic(briefJson: unknown): ValidateBriefResult {
     }
   }
 
-  if (!Array.isArray(b.shotList) || b.shotList.length === 0) {
+  // A lesson has no real product to be real or constructed about: everything in it is drawn on purpose, so
+  // the real/constructed split and the reasons for it do not apply. A shot list is optional there, and an
+  // entry only has to say which beat it is about.
+  const lesson = b.mode === "supernova";
+  if (lesson) {
+    if (b.shotList !== undefined && !Array.isArray(b.shotList)) {
+      errors.push(`shotList must be an array of { beatId } when present`);
+    } else if (Array.isArray(b.shotList)) {
+      b.shotList.forEach((raw, i) => {
+        if (!isPlainObject(raw)) errors.push(`shotList[${i}] must be an object: { beatId }`);
+        else requireNonEmptyString(raw, "beatId", `shotList[${i}].`, errors);
+      });
+    }
+  } else if (!Array.isArray(b.shotList) || b.shotList.length === 0) {
     errors.push(`shotList must be a non-empty array of { beatId, real, provenance, focalPoint }`);
   } else {
     b.shotList.forEach((raw, i) => {

@@ -29,3 +29,7 @@ export type { Point, Path, Keyframe } from "./paths";
 
 export { Axes, Plot, NumberLine, useAxes, useNumberLine, lineWeight } from "./graph";
 export type { AxesProps, AxesGeometry, Box, PlotProps, PlotPoint, NumberLineProps, NumberLineGeometry } from "./graph";
+
+export { Equation, EQUATION_TERM_FRAMES } from "./Equation";
+export type { EquationProps } from "./Equation";
+export { texToSvg, loadMathJax } from "./mathjax";

@@ -61,14 +61,16 @@ function setStemDependency(projectRoot: string, present: boolean): void {
 
 /**
  * Makes @openvidstudio/stem importable from a supernova project: the vendored package, the
- * dependency on it, and its display font in public/fonts/ (where the project's local font loader
- * looks). Safe on a project that already has any of them.
+ * dependency on it, its display font in public/fonts/ (where the project's local font loader looks)
+ * and the maths renderer's runtime in public/mathjax/. Safe on a project that already has any of them.
  */
 function installStem(projectRoot: string): void {
   copyTemplateTree(path.join(TEMPLATE_DIR, STEM_DIR), path.join(projectRoot, STEM_DIR));
   setStemDependency(projectRoot, true);
-  const fonts = path.join(projectRoot, STEM_DIR, "public", "fonts");
-  if (fs.existsSync(fonts)) copyTemplateTree(fonts, path.join(projectRoot, "public", "fonts"));
+  const stemPublic = path.join(projectRoot, STEM_DIR, "public");
+  for (const dir of ["fonts", "mathjax"]) {
+    if (fs.existsSync(path.join(stemPublic, dir))) copyTemplateTree(path.join(stemPublic, dir), path.join(projectRoot, "public", dir));
+  }
 }
 
 /**

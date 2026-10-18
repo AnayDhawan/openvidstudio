@@ -867,6 +867,46 @@ silence in the narration before it.
 | `duration` | `number` | `60` | Frames from the flash until the content is fully formed |
 | `children` | node | | The payoff. Fully formed by `at + duration` |
 
+### `Equation`
+
+![The quadratic formula in sans-serif maths on the Void, at 1080x1920](img/api/stem-equation.png)
+
+An equation typeset in sans-serif maths and revealed term by term: each top-level term fades in and rises
+a little, one after the next, as a pure function of the frame (never a fade of the whole thing).
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `tex` | `string` | required | The equation as TeX |
+| `spoken` | `string` | **required** | The equation as it is said, in plain words: "x squared plus one". Required by the types (and at runtime), and exposed on the element as `data-spoken`, so `check_script` can compare it with the narration of the beat |
+| `at` | `number` | `0` | Composition frame the first term appears |
+| `stagger` | `number` | `7` | Frames between one term and the next |
+| `size` | `number` | 8.5% of the shorter side | Font size in px |
+| `color` | `string` | the Void's warm white | |
+| `center` | `{ x, y }` | frame centre | |
+
+Terms are the children of the equation's top-level row, so `\frac{d}{dx}\left(x^{2}+1\right)=2x` reveals as
+the fraction, `(`, `x²`, `+`, `1`, `)`, `=`, `2`, `x`. A fully revealed equation is pixel for pixel the same as
+the unrevealed one. `texToSvg(tex)` gives the SVG markup directly.
+
+**Why MathJax 4 with the Fira font, not KaTeX.** The visible goal is sans-serif maths, which is the biggest
+break from the usual serif look. Measured on the same three equations at 1080 wide (MathJax and Fira first,
+then KaTeX with `\mathsf`, the closest it gets):
+
+![Three equations in sans-serif maths, MathJax with the Fira font: a derivative of x squared plus one, the quadratic formula and an integral](img/supernova/maths-mathjax-fira.png)
+
+| | MathJax 4 + Fira (SVG) | KaTeX 0.19 |
+|---|---|---|
+| Look | Sans throughout: math italics, Greek, `sin` and `cos` in one family | Hybrid: `\mathsf` makes Latin letters upright sans, but `sin`, `cos`, `theta` and every operator stay serif, and variables lose their italics |
+| Offline | Runs from the project's `public/mathjax/` (copied by `init_project`), no font files, glyphs are vector paths | Needs its CSS and about six font files shipped and loaded |
+| Size | about 1.3MB of scripts, plus 2.2MB of Fira glyph ranges loaded on demand | about 360KB |
+| Time | 3 equations typeset in about 140ms after a one-off start-up of about 0.5s | 3 equations in 6ms |
+| Determinism | Same TeX, same markup, so a frame is a pure function of the frame | Same |
+
+![The same equations in KaTeX with \mathsf: serif sin, cos and theta, upright variables](img/supernova/maths-katex.png)
+
+MathJax costs more to load and to typeset, once per document, and that is paid for a look that KaTeX cannot
+produce. Its speech and braille workers are switched off (they would fetch 800KB of rule files).
+
 ### `Axes`, `Plot`, `NumberLine`
 
 ![Projectile motion: a parabola in physics amber on dim axes, the area under its first half shaded, a tangent line, and the peak and range marked](img/api/stem-plot.png)

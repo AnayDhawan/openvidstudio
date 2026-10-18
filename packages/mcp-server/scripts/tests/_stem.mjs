@@ -71,7 +71,16 @@ export async function inBrowser(project, fn) {
     page.on("console", (msg) => {
       if (msg.type() === "error") errors.push(msg.text());
     });
-    await bridge.openSeekablePage({ page, bundleUrl: server.url, composition: comp, timeoutMs: 30000 });
+    page.on("requestfailed", (r) => errors.push(`request failed: ${r.url()}`));
+    page.on("response", (r) => {
+      if (r.status() >= 400) errors.push(`HTTP ${r.status()}: ${r.url()}`);
+    });
+    try {
+      await bridge.openSeekablePage({ page, bundleUrl: server.url, composition: comp, timeoutMs: 30000 });
+    } catch (err) {
+      console.log(`  page did not become ready. Page errors: ${JSON.stringify(errors.slice(0, 6))}`);
+      throw err;
+    }
     const seek = (beatId, local) => bridge.seekToFrame(page, comp.id, project.beatStart[beatId] + local, 30000);
     let shot = 0;
     /** Seeks to a frame of a beat and returns its pixels. */

@@ -16,6 +16,8 @@
  * doesn't yet have a way to point Remotion at an already-installed browser instead (that's
  * tracked separately), so this script warms that cache before the network-blocked render
  * that's the actual point of the check.
+ *
+ * It then does the same for a Supernova (STEM lesson) project holding an Equation and a Spark.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -113,3 +115,59 @@ if (!fs.existsSync(outPath) || fs.statSync(outPath).size === 0) {
 }
 
 console.log(`PASS: offline render of TerminalReplay/RepoCta/ChecklistPanel succeeded (${fs.statSync(outPath).size} bytes).`);
+
+// Supernova (#111): a lesson project renders an Equation and a Spark with the network blocked. The
+// maths renderer (MathJax 4 and its Fira font) and the display font are served from the project's own
+// public/ folder, so nothing is fetched; a loader that reached for a CDN would fail here.
+const lessonRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-offline-lesson-"));
+const lessonName = "mathcheck";
+const lessonInit = await callOnce("init_project", { name: lessonName, projectRoot: lessonRoot, mode: "supernova" }, {});
+if (!lessonInit?.projectRoot) fail("init_project (supernova) did not return a projectRoot");
+for (const rel of ["public/mathjax/tex-svg-nofont.js", "public/mathjax/fira/svg.js", "public/fonts/space-grotesk-latin-700-normal.woff2"]) {
+  if (!fs.existsSync(path.join(lessonRoot, rel))) fail(`a supernova project is missing ${rel}`);
+}
+execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["install"], {
+  cwd: lessonRoot,
+  stdio: "inherit",
+  shell: process.platform === "win32",
+});
+const lessonDir = path.join(lessonRoot, "src", "videos", lessonName);
+fs.mkdirSync(path.join(lessonDir, "custom-scenes"), { recursive: true });
+fs.writeFileSync(
+  path.join(lessonDir, "custom-scenes", "Slope.tsx"),
+  `import React from "react";
+import { AbsoluteFill, useVideoConfig } from "remotion";
+import { Equation, Spark, supernovaDesignSystem, trace } from "@openvidstudio/stem";
+
+export const Slope: React.FC = () => {
+  const { width, height } = useVideoConfig();
+  const design = supernovaDesignSystem("math");
+  return (
+    <AbsoluteFill style={{ background: design.color.bg0 }}>
+      <Equation tex={String.raw\`\\frac{d}{dx}\\left(x^{2}+1\\right)=2x\`} spoken="d by d x of x squared plus one equals two x" at={5} />
+      <Spark subject="math" path={trace([{ x: width * 0.2, y: height * 0.7 }, { x: width * 0.8, y: height * 0.7 }], { duration: 60 })} />
+    </AbsoluteFill>
+  );
+};
+`,
+);
+fs.writeFileSync(
+  path.join(lessonDir, "beats.json"),
+  JSON.stringify({ fps: 30, narration: "none", production: { mode: "supernova" }, beats: [{ id: "slope", start: 0, duration: 90, scene: "./custom-scenes/Slope.tsx" }] }),
+);
+const lessonStitched = await callOnce("stitch_composition", { projectRoot: lessonRoot, videoName: lessonName }, {});
+if (lessonStitched?.written !== true) fail(`stitch_composition (lesson) did not write: ${JSON.stringify(lessonStitched)}`);
+// A first render of any project fetches a few things once (as the warm-up above does for the first
+// project), so this one is rendered with the network first too; the blocked render is what is checked.
+console.log("warm-up render of the lesson (network allowed)...");
+const lessonWarm = await callOnce("render_video", { projectRoot: lessonRoot, videoName: lessonName, draft: true, skipBrandLock: true }, {});
+if (lessonWarm?.success !== true) fail(`lesson warm-up render failed: ${lessonWarm?.stderr?.slice(-2000)}`);
+fs.rmSync(path.join(lessonRoot, "output", `${lessonName}.mp4`), { force: true });
+console.log("network-blocked render of an Equation and a Spark...");
+const lessonBlocked = await callOnce("render_video", { projectRoot: lessonRoot, videoName: lessonName, draft: true, skipBrandLock: true }, blockedEnv);
+if (lessonBlocked?.success !== true) {
+  fail(`network-blocked lesson render failed (a maths or font loader reaching the network?):\n${lessonBlocked?.stderr?.slice(-4000)}`);
+}
+const lessonOut = path.join(lessonRoot, "output", `${lessonName}.mp4`);
+if (!fs.existsSync(lessonOut) || fs.statSync(lessonOut).size === 0) fail(`lesson render reported success but ${lessonOut} is missing or empty`);
+console.log(`PASS: offline render of an Equation and a Spark in a supernova project succeeded (${fs.statSync(lessonOut).size} bytes).`);

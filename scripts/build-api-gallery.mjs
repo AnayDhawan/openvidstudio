@@ -352,6 +352,15 @@ stemScene(
 );
 stemAdd("stem-numberline", 30, { 10: "stem-numberline" });
 
+// Equation: revealed term by term, here fully in, sans-serif maths on the Void.
+stemScene(
+  "stem-equation",
+  "Equation",
+  `      <Equation tex={String.raw\`x=\\frac{-b\\pm\\sqrt{b^{2}-4ac}}{2a}\`} spoken="x equals minus b plus or minus the square root of b squared minus four a c, all over two a" size={110} at={0} />`,
+  "math",
+);
+stemAdd("stem-equation", 90, { 70: "stem-equation" });
+
 let stemStart = 0;
 const stemFinal = stemBeats.map((b) => {
   const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");

@@ -293,4 +293,16 @@ console.log("\n== Part 45: preflight's render benchmark (B) ==");
   }
 }
 
+console.log("
+== preflight asks for Node 20, the version the packages and CI use ==");
+{
+  const { checkNodeVersion, MIN_NODE_MAJOR } = require(path.join(distDir, "tools", "preflight.js"));
+  check("the minimum is 20", MIN_NODE_MAJOR === 20);
+  check("Node 20.0.0 and 22.4.1 pass", checkNodeVersion("20.0.0").ok && checkNodeVersion("22.4.1").ok);
+  check("Node 18.20.4 no longer passes (the packages declare >=20)", checkNodeVersion("18.20.4").ok === false);
+  check("Node 19.9.0 does not pass either", checkNodeVersion("19.9.0").ok === false);
+  check("the fix names the version it wants", /Node 20 or newer/.test(checkNodeVersion("18.0.0").fix ?? ""));
+  check("a passing version has no fix text", checkNodeVersion("20.1.0").fix === undefined);
+}
+
 finish();

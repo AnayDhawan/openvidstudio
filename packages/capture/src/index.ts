@@ -17,3 +17,4 @@ export * from "./cursor";
 export * from "./captureSidecar";
 export * from "./native";
 export * from "./terminal";
+export * from "./layers";

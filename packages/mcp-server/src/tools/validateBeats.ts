@@ -8,9 +8,18 @@ import { writeFactRecord } from "../facts";
 export interface ValidateBeatsResult {
   valid: boolean;
   errors: string[];
+  /**
+   * Things worth a second look that never make a draft invalid: write_beats_file still
+   * writes it. Empty when there is nothing to say.
+   */
+  warnings: string[];
 }
 
 const EM_DASH = "—";
+/** Fewer beats than this is not a rhythm yet, so shot lengths are not compared. */
+const RHYTHM_MIN_BEATS = 4;
+/** The longest beat should be at least this many times the shortest, or the shots read as evenly spaced ticks. */
+const RHYTHM_MIN_SPREAD = 2.5;
 const MIN_PACE = 2.3;
 const MAX_PACE = 2.9;
 /** SCRIPT.md's reading-time budget for onScreenText on a narration:"none" beat. */
@@ -19,7 +28,7 @@ export const READING_OVERHEAD_SEC = 0.8;
 const NARRATION_MODES = ["voice", "none"] as const;
 const CREATIVE_LEVELS = ["peak", "mid", "literal"] as const;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;
-const TRANSITIONS = ["cut", "whip", "fade"] as const;
+const TRANSITIONS = ["cut", "whip", "fade", "push", "wipe", "light-leak"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
 const CAPTURE_SOURCES = ["browser", "desktop", "mobile", "terminal"] as const;
 const CROP_FOCUSES = ["left", "center", "right"] as const;
@@ -42,9 +51,10 @@ function wordCount(text: string): number {
  */
 export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   const errors: string[] = [];
+  const warnings: string[] = [];
 
   if (typeof beatsJson !== "object" || beatsJson === null) {
-    return { valid: false, errors: ["beatsJson must be an object"] };
+    return { valid: false, errors: ["beatsJson must be an object"], warnings: [] };
   }
   const root = beatsJson as Record<string, unknown>;
 
@@ -81,7 +91,7 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   }
 
   if (!Array.isArray(root.beats)) {
-    return { valid: false, errors: ["beatsJson.beats must be an array"] };
+    return { valid: false, errors: ["beatsJson.beats must be an array"], warnings: [] };
   }
   const beats = root.beats as unknown[];
   if (beats.length === 0) {
@@ -89,6 +99,7 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   }
 
   const seenIds = new Set<string>();
+  const lengths: { id: string; duration: number }[] = [];
   let expectedStart = 0;
 
   beats.forEach((raw, i) => {
@@ -122,6 +133,8 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     }
     if (!hasDuration) {
       errors.push(`${label}: missing or invalid "duration" (must be a positive number)`);
+    } else {
+      lengths.push({ id: typeof beat.id === "string" ? beat.id : `beat[${i}]`, duration: duration as number });
     }
     if (hasStart && hasDuration) {
       expectedStart = (start as number) + (duration as number);
@@ -244,6 +257,14 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
             errors.push(`${label}: vertical.crop must be { x, y, width, height } with non-negative numbers`);
           }
         }
+      }
+    }
+
+    // Checked before the visual rules: those return early for desktop, mobile and terminal
+    // beats, and a typo in a beat's transition is just as wrong on one of those.
+    if ("transition" in beat && beat.transition !== undefined) {
+      if (typeof beat.transition !== "string" || !(TRANSITIONS as readonly string[]).includes(beat.transition)) {
+        errors.push(`${label}: transition must be one of ${TRANSITIONS.map((t) => `"${t}"`).join(", ")} (omit for "cut")`);
       }
     }
 
@@ -384,12 +405,6 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     }
     // dom-demo: no additional required fields.
 
-    if ("transition" in beat && beat.transition !== undefined) {
-      if (typeof beat.transition !== "string" || !(TRANSITIONS as readonly string[]).includes(beat.transition)) {
-        errors.push(`${label}: transition must be one of ${TRANSITIONS.map((t) => `"${t}"`).join(", ")} (omit for "cut")`);
-      }
-    }
-
     if ("artifacts" in beat && beat.artifacts !== undefined) {
       const artifacts = beat.artifacts;
       if (typeof artifacts !== "object" || artifacts === null || Array.isArray(artifacts)) {
@@ -412,7 +427,32 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     }
   });
 
-  return { valid: errors.length === 0, errors };
+  const rhythm = rhythmWarning(lengths, fps);
+  if (rhythm) warnings.push(rhythm);
+
+  return { valid: errors.length === 0, errors, warnings };
+}
+
+/**
+ * Uniform shot lengths read as a metronome: a cut every few seconds on the same count, whatever
+ * the content is doing. Warn-only, because plenty of good videos are deliberately even and the
+ * numbers cannot tell those from an unconsidered default. Needs enough beats to be a pattern, and
+ * a longest beat under 2.5x the shortest.
+ */
+function rhythmWarning(lengths: { id: string; duration: number }[], fps: number): string | null {
+  if (lengths.length < RHYTHM_MIN_BEATS) return null;
+  const longest = lengths.reduce((a, b) => (b.duration > a.duration ? b : a));
+  const shortest = lengths.reduce((a, b) => (b.duration < a.duration ? b : a));
+  const spread = longest.duration / shortest.duration;
+  if (spread >= RHYTHM_MIN_SPREAD) return null;
+  const seconds = (frames: number) => `${(frames / fps).toFixed(1)}s`;
+  return (
+    `Shot lengths are nearly uniform: across ${lengths.length} beats the longest ("${longest.id}", ` +
+    `${longest.duration} frames, ${seconds(longest.duration)}) is only ${spread.toFixed(2)}x the shortest ` +
+    `("${shortest.id}", ${shortest.duration} frames, ${seconds(shortest.duration)}). Evenly sized shots read as a ` +
+    `metronome. Give the strongest beat one long hold, and make another a short punch of a second or two, so ` +
+    `the longest is at least ${RHYTHM_MIN_SPREAD}x the shortest. This is a note, not an error.`
+  );
 }
 
 export interface ValidateBeatsInput {
@@ -431,11 +471,15 @@ export function runValidateBeats(input: ValidateBeatsInput): ValidateBeatsResult
       facts: {
         ok: result.valid,
         errors: result.errors.length,
+        warnings: result.warnings.length,
         // Errors are labelled `beat "<id>": ...` when they belong to one beat.
-        findings: result.errors.map((message) => {
-          const m = message.match(/^beat "([^"]+)": ([\s\S]*)$/);
-          return m ? { beatId: m[1], severity: "error", message: m[2] } : { severity: "error", message };
-        }),
+        findings: [
+          ...result.errors.map((message) => {
+            const m = message.match(/^beat "([^"]+)": ([\s\S]*)$/);
+            return m ? { beatId: m[1], severity: "error", message: m[2] } : { severity: "error", message };
+          }),
+          ...result.warnings.map((message) => ({ severity: "warning", message })),
+        ],
       },
     });
   }
@@ -467,13 +511,16 @@ export function registerValidateBeats(server: McpServer): void {
         "recording beats, every interactions[] entry is also validated against " +
         "the exact schema capture_screenshot/capture_screen_recording enforce at replay time (click, fill, " +
         "select, hover, scroll, wait), so a shape mismatch fails here at draft time instead of at capture " +
-        "time. Also validates two optional per-beat fields if present: transition (cut/whip/fade, cut assumed " +
-        "if omitted) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
+        "time. Also validates two optional per-beat fields if present: transition (cut, whip, fade, push, wipe " +
+        "or light-leak; cut assumed if omitted; everything but cut is drawn over the cut by stitch_composition " +
+        "without moving any beat boundary) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
         "paths, each a non-empty string). For browser screenshot/recording beats, settle (boolean) and " +
         "settleTimeoutMs (positive number) are also type-checked if present -- see capture_screenshot/" +
-        "capture_screen_recording for what they control. Returns { valid, errors } with every failure found, never just the " +
-        "first -- this is the tool's normal answer for an invalid draft, not an exceptional case, so it never " +
-        "throws for a validation failure.",
+        "capture_screen_recording for what they control. Returns { valid, errors, warnings } with every failure found, " +
+        "never just the first -- this is the tool's normal answer for an invalid draft, not an exceptional case, so " +
+        "it never throws for a validation failure. warnings never make a draft invalid: with four or more beats, " +
+        "if the longest is less than 2.5x the shortest, one warns that uniform shot lengths read as a metronome " +
+        "and suggests one long hold and one short punch.",
       inputSchema: {
         beatsJson: z
           .unknown()

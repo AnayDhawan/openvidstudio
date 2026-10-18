@@ -108,6 +108,85 @@ section down. The full-viewport-then-crop approach in steps 4-6 is
 deterministic: one screenshot, one measurement, one crop, no hidden
 re-layout between them.
 
+## Layers: splitting a capture for parallax
+
+A flat screenshot can only be slid or scaled as one piece. To give a camera real parallax, ask
+`capture_screenshot` for `layers`:
+
+```json
+{
+  "beatId": "hook",
+  "url": "http://localhost:3000/dashboard",
+  "layers": [
+    { "selector": "#sidebar", "name": "sidebar" },
+    { "selector": "[data-testid=card]", "name": "card" },
+    { "selector": "#toast", "name": "toast", "depth": 2.5 }
+  ]
+}
+```
+
+Next to `public/images/hook.png` it writes:
+
+| File | What |
+|---|---|
+| `hook-bg.png` | the page with every layer element hidden, same size as the screenshot |
+| `hook-layer-<name>.png` | one transparent PNG per matched element |
+| `hook.layers.json` | the manifest |
+
+```json
+{
+  "width": 3200,
+  "height": 2000,
+  "background": "images/hook-bg.png",
+  "layers": [
+    { "src": "images/hook-layer-sidebar.png", "x": 0, "y": 0, "width": 480, "height": 2000, "depth": 0.5 },
+    { "src": "images/hook-layer-card-1.png", "x": 760, "y": 400, "width": 900, "height": 520, "depth": 1 },
+    { "src": "images/hook-layer-card-2.png", "x": 1760, "y": 400, "width": 900, "height": 520, "depth": 1 },
+    { "src": "images/hook-layer-toast.png", "x": 2400, "y": 1700, "width": 700, "height": 200, "depth": 2.5 }
+  ]
+}
+```
+
+Sizes and positions are in capture pixels, the same space as the screenshot on disk. Paths are
+relative to `public/`, so they go straight into `staticFile`. `depth` says how far from the
+background a layer sits: 0 moves with it and a larger number moves more under a camera pan. It
+defaults to a spread of 0.5, 1, 1.5 in the order you list the selectors; pass `depth` to
+override. A selector that matches several elements gives numbered layers (`card-1`, `card-2`)
+that share its depth.
+
+How it works, and why it is not `locator.screenshot()`: the reasons above against element-scoped
+shots apply here too. So the layers are cut from ordinary full-viewport screenshots. For each
+element the page is switched so everything else is `visibility: hidden` (which, unlike
+`display`, moves nothing) and the page background is transparent, the shot is taken with
+`omitBackground`, then brought into the saved image's space by the same zoom, device-scale and
+`cropSelector` transform as the main image and cropped to the element. The background is the
+same shot with the layer elements hidden. Animations are paused first so the main image, the
+background and every layer show the same instant, and transitions are switched off while the
+toggles happen, otherwise a `transition: all` would keep an element visible for its whole
+duration.
+
+Checking the result: composite `-bg.png` and the layers at their `x`, `y` in manifest order and
+compare with the screenshot. On a test page with rounded and gradient elements, text and a card
+on a fractional pixel, that came out at a mean error of 0.001 of 255 with the worst pixel off by 2.
+
+Limits, so a layer that looks wrong is easy to explain:
+
+- Each rectangle is the element's box plus one capture pixel on every side. Chrome paints a
+  pixel past `getBoundingClientRect` once it snaps to the pixel grid, and a layer cut exactly at
+  the box lost that column. Anything painted further out (a box shadow, an outline, overflow) is
+  not in the layer, and is gone from the background as well, so a card that casts a shadow loses
+  the shadow outside its box. Put the shadow on a wrapper that is itself a layer, or accept it.
+- A layer inside another layer shows up in both: the outer one is cut with its whole subtree.
+  Pick selectors that do not nest, or order them outer first.
+- Overlapping layers are cut as if nothing covered them, so a card partly under a toast is
+  whole in its own layer. Composite in the order of the manifest and the overlap reads as it did
+  on the page, as long as the covering element comes later.
+- A selector that matches nothing, matches an element with no size (`display: none`), is not
+  valid CSS, or lies outside the captured area (outside the `cropSelector` box, or off screen)
+  is an error naming the selector. Nothing is written for a failed call.
+- With a `cropSelector` the rectangles are relative to the crop, since the saved image is the
+  crop.
+
 ## Screen recordings
 
 ### Theme toggles

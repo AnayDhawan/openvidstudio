@@ -186,14 +186,25 @@ alone and know exactly what will play and where its assets live, without opening
 capture.ts or guessing a path convention. Two fields close that gap, both optional:
 
 ```
-"transition": "cut" | "whip" | "fade"
+"transition": "cut" | "whip" | "fade" | "push" | "wipe" | "light-leak"
 "artifacts": { "screenshotPath"?: string, "recordingPath"?: string, "voPath"?: string }
 ```
 
-- **`transition`**: the cut/whip/fade choice into this beat. Omit it and `"cut"` is
-  assumed, matching today's SFX default (`PIPELINE.md` §2's Whoosh-on-cuts/whips cue).
-  Setting it explicitly is what makes that choice visible on the manifest instead of
-  only implied by which SFX helper a scene file happens to call.
+- **`transition`**: the way into this beat. Omit it and `"cut"` is assumed. `stitch_composition`
+  draws anything else as an overlay on top of the hard cut (core's `TransitionOverlay`), centred
+  on the beat's first frame, about 0.2s either side at any fps, so no beat start or duration
+  moves and the bar-snapped timing and the audio joins are untouched. Picking one is a creative
+  call, not a default; a video that dissolves every cut reads as a slideshow.
+  - `fade`: dips to the brand background and back. The quiet one, for a change of subject.
+  - `whip`: heavy blur and an accent streak across the frame. Pairs with the `Whoosh` SFX
+    (`PIPELINE.md` §2), which is a separate cue the scene still calls itself.
+  - `push`: a panel slides in from the right, covers the frame on the cut, leaves to the left.
+  - `wipe`: a skewed band with an accent edge crosses left to right.
+  - `light-leak`: warm light in the accent's hue drifts across and peaks on the cut. The one
+    for a reveal or a beat landing on the score.
+  The overlay is not drawn on the first beat (there is no cut into it) and is clamped when the
+  first beat is shorter than the overlay. A scene that wants a transition drawn differently can
+  leave `transition` as `"cut"` and animate its own entrance.
 - **`artifacts`**: explicit overrides of this beat's output paths. Every capture tool
   already defaults to the convention path (`PIPELINE.md`'s Asset conventions table:
   `public/images/<id>.png`, `public/video/<id>.mp4`, `public/audio/vo/<id>.mp3`) and
@@ -203,8 +214,12 @@ capture.ts or guessing a path convention. Two fields close that gap, both option
   manifest. Omit a key (or the whole object) and the convention path is assumed; no
   existing `beats.json` needs to change to stay valid.
 
-Neither field changes how capture or render actually run today; both exist so the
-manifest alone describes the finished video's shape. Making render/capture
+Pacing across beats is checked too: with four or more beats, `validate_beats` warns when the
+longest is under 2.5 times the shortest (a warning, never an error). Uniform lengths read as a
+metronome, so plan one long hold and one short punch before assigning frames, not after.
+
+`artifacts` changes nothing about how capture or render run; it exists so the manifest alone
+describes the finished video's shape. Making render/capture
 independently rerunnable against an edited manifest (patch one field, rerun one
 stage, no full regenerate) is the next piece of this work, not part of this addition.
 
@@ -404,8 +419,8 @@ of each `captureMethod` so the shapes above are all represented):
     {
       "id": "demo-review",
       "start": 180,
-      "duration": 120,
-      "vo": "Flip a card, and Loomcard scores your confidence on the spot.",
+      "duration": 90,
+      "vo": "Flip a card, and Loomcard scores your confidence.",
       "visual": {
         "captureMethod": "screenshot",
         "url": "https://app.loomcard.example/review",
@@ -417,7 +432,7 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "demo-schedule",
-      "start": 300,
+      "start": 270,
       "duration": 240,
       "vo": "That confidence score adjusts your next review date live, so easy cards fade back and hard ones come around sooner.",
       "transition": "whip",
@@ -435,7 +450,7 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "cta",
-      "start": 540,
+      "start": 510,
       "duration": 180,
       "vo": "Loomcard is free and open source. Star it, try it, or send a pull request.",
       "visual": {
@@ -445,6 +460,9 @@ of each `captureMethod` so the shapes above are all represented):
   ]
 }
 ```
+
+The beat lengths are 6s, 3s, 8s and 6s on purpose: `validate_beats` warns when four or more
+beats have a longest under 2.5x the shortest, because evenly sized shots read as a metronome.
 
 Note the `demo-schedule` beat: the CSV/Anki import feature from intake was
 dropped, not shown, because it isn't wired up yet and no real capture or

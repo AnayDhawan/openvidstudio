@@ -944,6 +944,45 @@ width }`). `useNumberLine().toScreen(value)` lets a Spark ride the line.
 Strokes are never thinner than `lineWeight(width, height)`, 3px at 1080 on the shorter side (the plot
 line is about 1.7 times that). None of these glow: the Spark is the one element that does.
 
+### `FreeBody`
+
+![A block on a slope at rest: weight, the normal force and friction as labelled arrows from its centre, with a 10 N scale bar](img/api/stem-freebody.png)
+
+An object with labelled force arrows, for a physics lesson. The picture is honest: every arrow is exactly
+`magnitude * scale` px from tail to tip and a scale bar says how much that is, so two forces compared by
+eye are compared correctly. Arrows arrive one at a time. A block on a slope at rest (three forces that sum
+to zero) is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `forces` | `{ label, magnitude, angle, color? }[]` | required | `angle` in degrees counter-clockwise from the right (0 right, 90 up, 270 down) |
+| `scale` | `number` | required | Pixels per unit of magnitude |
+| `unit`, `scaleValue` | `string`, `number` | `"N"`, a round value near half the largest force | The scale bar's unit and the length it stands for |
+| `scaleAt` | `{ x, y }` | lower left | Left end of the scale bar |
+| `origin` | `{ x, y }` | frame centre | Where the object is; arrows start at its centre |
+| `objectSize`, `objectRotation`, `objectLabel` | | 9% of the shorter side, 0, none | Rotation in degrees clockwise: -30 puts a block flat on a 30 degree slope that rises to the right |
+| `at`, `stagger`, `order` | | `0`, `18`, as given | When the first arrow starts, frames between arrows, and the order as indices into `forces` |
+| `net` | `boolean` | `false` | Also draw the net force as a dashed arrow once the others are in. Left out when the net is zero |
+
+### `ArrayViz`
+
+![A row of ten sorted numbers with cells 5 to 9 lit and the rest dimmed, pointers low, mid and high under cells 5, 7 and 9](img/api/stem-arrayviz.png)
+
+A row of cells holding values, with named pointers, a highlighted range and a dimmed one: enough to teach
+binary search and a sorting pass. Binary search over a sorted array is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `values` | `(number \| string)[]` | required | One cell each, numbered above |
+| `pointers` | `{ name, index, color?, spark? }[]` | | `index` is a cell, or keyframes `{ frame, index }` that move the pointer (eased, fractional between cells). With `spark: true` the pointer's tip is the Spark, so its move leaves a trail. At most one pointer may (one glowing element at a time) |
+| `highlights` | `{ from, to, color? }[]` | | Cells to fill with the accent, inclusive: the range still in play |
+| `dimmed` | `{ from, to }[]` | | Cells ruled out, inclusive |
+| `origin`, `cellSize` | | centred, fits 84% of the width | |
+| `subject` | `Subject` | `"cs"` | Picks the accent |
+
+`useArrayViz()` returns `{ cellSize, left, top, cellCenter(i) }` so a Spark's path (`walk`) can be built from
+the cells' own positions.
+
 ### The glow budget
 
 One glowing element at a time. Spark and Nova draw their glow through `Glow`, which tags its element

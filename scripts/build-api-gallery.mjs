@@ -361,6 +361,32 @@ stemScene(
 );
 stemAdd("stem-equation", 90, { 70: "stem-equation" });
 
+// FreeBody: a block on a slope at rest, three forces that sum to zero, with the scale bar that keeps it honest.
+stemScene(
+  "stem-freebody",
+  "FreeBody",
+  `      <svg width={width} height={height} style={{ position: "absolute", left: 0, top: 0 }}>
+        <line x1={width * 0.05} y1={height / 2 + 190} x2={width * 0.95} y2={height / 2 - 400} stroke={design.color.textSecondary} strokeWidth={4} />
+      </svg>
+      <FreeBody scale={Math.min(width, height) * 0.006} scaleValue={10} at={0} stagger={10} net objectRotation={-30} objectLabel="m"
+        forces={[
+          { label: "W", magnitude: 50, angle: 270, color: "#FF4D5E" },
+          { label: "N", magnitude: 43.3, angle: 120, color: "#5CC8FF" },
+          { label: "f", magnitude: 25, angle: 30, color: "#FFB347" },
+        ]} />`,
+);
+stemAdd("stem-freebody", 60, { 50: "stem-freebody" });
+
+// ArrayViz: binary search part-way through, the live range lit and the rest dimmed.
+stemScene(
+  "stem-arrayviz",
+  "ArrayViz",
+  `      <ArrayViz values={[2, 5, 8, 12, 16, 23, 38, 56, 72, 91]} highlights={[{ from: 5, to: 9 }]} dimmed={[{ from: 0, to: 4 }]}
+        pointers={[{ name: "low", index: 5 }, { name: "high", index: 9, color: "#FFB347" }, { name: "mid", index: 7, color: "#FF4D5E" }]} />`,
+  "cs",
+);
+stemAdd("stem-arrayviz", 30, { 10: "stem-arrayviz" });
+
 let stemStart = 0;
 const stemFinal = stemBeats.map((b) => {
   const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");

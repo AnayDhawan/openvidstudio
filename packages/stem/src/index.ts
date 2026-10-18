@@ -33,3 +33,8 @@ export type { AxesProps, AxesGeometry, Box, PlotProps, PlotPoint, NumberLineProp
 export { Equation, EQUATION_TERM_FRAMES } from "./Equation";
 export type { EquationProps } from "./Equation";
 export { texToSvg, loadMathJax } from "./mathjax";
+
+export { FreeBody, ARROW_GROW_FRAMES } from "./FreeBody";
+export type { FreeBodyProps, Force } from "./FreeBody";
+export { ArrayViz, useArrayViz } from "./ArrayViz";
+export type { ArrayVizProps, ArrayPointer, ArrayGeometry } from "./ArrayViz";

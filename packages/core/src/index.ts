@@ -94,7 +94,7 @@ export { ChecklistPanel } from "./ChecklistPanel";
 export type { ChecklistItem } from "./ChecklistPanel";
 
 // Cursor actor
-export { CursorActor } from "./CursorActor";
+export { CursorActor, cursorPositionAt } from "./CursorActor";
 export type { CursorKeyframe } from "./CursorActor";
 
 // Repo CTA scene

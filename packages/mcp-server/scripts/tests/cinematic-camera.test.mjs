@@ -950,6 +950,81 @@ const Slider: React.FC = () => {
   },
 );
 
+// ============================================================ 7. CursorActor arcs
+
+const CURSOR_PATH = "[{ frame: 0, x: 200, y: 500 }, { frame: 60, x: 1000, y: 500 }, { frame: 120, x: 1800, y: 500 }, { frame: 140, x: 1810, y: 500 }]";
+
+section(
+  "7. CursorActor: segments arc slightly (alternating sides), overshoot on arrival, exact at keyframes",
+  [
+    {
+      id: "cursor-readout",
+      frames: 30,
+      source: sceneFile(
+        "CursorReadout",
+        ["cursorPositionAt", "E"],
+        `<div id="cursor-readout" style={{ color: "#fff", fontSize: 12, whiteSpace: "pre" }}>{JSON.stringify((() => {
+      const path = ${CURSOR_PATH};
+      const frames = Array.from({ length: 160 }, (_, i) => i);
+      return { pos: frames.map((f) => cursorPositionAt(path, f)), ease: [0.25, 0.5, 0.75].map((t) => E.cinematic(t)) };
+    })())}</div>`,
+      ),
+    },
+    {
+      id: "cursor-live",
+      frames: 160,
+      source: sceneFile("CursorLive", ["CursorActor"], `<CursorActor path={${CURSOR_PATH}} clicks={[60]} sfx={false} />`),
+    },
+  ],
+  async (t) => {
+    const r = JSON.parse(await t.text(t.frameOf("cursor-readout", 0), "#cursor-readout"));
+    const P = r.pos;
+    const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
+    check("the cursor is exactly on every keyframe (frames 0, 60, 120, 140)", near(P[0].x, 200) && near(P[0].y, 500) && near(P[60].x, 1000) && near(P[60].y, 500) && near(P[120].x, 1800) && near(P[120].y, 500) && near(P[140].x, 1810) && near(P[140].y, 500));
+    check("it holds the first and last keyframe outside the path", near(P[159].x, 1810) && near(P[159].y, 500));
+
+    // First segment: 800px long, from 200 to 1000 along y = 500.
+    const seg1 = P.slice(0, 61);
+    const seg2 = P.slice(60, 121);
+    const dev1 = seg1.map((p) => p.y - 500);
+    const dev2 = seg2.map((p) => p.y - 500);
+    const peak1 = dev1.reduce((a, v) => (Math.abs(v) > Math.abs(a) ? v : a), 0);
+    const peak2 = dev2.reduce((a, v) => (Math.abs(v) > Math.abs(a) ? v : a), 0);
+    console.log(`  800px segments: midpoint (frame 30) is ${dev1[30].toFixed(1)}px off the straight line, peak ${peak1.toFixed(1)}px; the next segment peaks ${peak2.toFixed(1)}px`);
+    check("the midpoint of a long segment deviates from the straight line (> 10px of 800)", Math.abs(dev1[30]) > 10);
+    check("the arc is slight: its peak is about 6% of the segment length (40 to 56px of 800)", Math.abs(peak1) > 40 && Math.abs(peak1) < 56);
+    check("the next segment bows to the other side", peak1 * peak2 < 0 && Math.abs(Math.abs(peak2) - Math.abs(peak1)) < 4);
+
+    // Timing: the progress along the segment still follows E.cinematic.
+    const along = (f) => (P[f].x - 200) / 800;
+    const progressAt30 = along(30);
+    console.log(`  progress along the segment at the half-way frame: ${progressAt30.toFixed(3)} (E.cinematic(0.5) = ${r.ease[1].toFixed(3)})`);
+    check("progress along the segment keeps E.cinematic timing (within 0.02 at the half-way frame)", Math.abs(progressAt30 - r.ease[1]) < 0.02);
+
+    // Overshoot on arrival: past the target, then back to it exactly.
+    const farthest = Math.max(...seg1.map((p) => p.x));
+    const overshoot = farthest - 1000;
+    console.log(`  overshoot past the target: ${overshoot.toFixed(1)}px (${((overshoot / 800) * 100).toFixed(2)}% of the segment)`);
+    check("the cursor overshoots the target a little (0.5% to 4% of the segment) and comes back", overshoot > 4 && overshoot < 32 && near(P[60].x, 1000));
+    check("a very short segment (10px) stays within a pixel of its line", P.slice(120, 141).every((p) => Math.abs(p.y - 500) < 1 && p.x >= 1799 && p.x <= 1812));
+
+    // The component draws the cursor where the function says.
+    const live = await t.eval(t.frameOf("cursor-live", 30), () => {
+      const svg = document.querySelector("svg");
+      const b = svg?.getBoundingClientRect();
+      return b ? { x: b.x, y: b.y } : null;
+    });
+    check("CursorActor renders the arrowhead at that arced position (frame 30, within 1px)", live !== null && Math.abs(live.x - P[30].x) < 1 && Math.abs(live.y - P[30].y) < 1);
+    // The click ring anchors on the keyframe, not on wherever the arc has wandered to.
+    const ring = await t.eval(t.frameOf("cursor-live", 62), () => {
+      const rings = [...document.querySelectorAll("div")].filter((d) => getComputedStyle(d).borderRadius === "50%" && getComputedStyle(d).borderTopWidth === "3px");
+      const b = rings[0]?.getBoundingClientRect();
+      return b ? { cx: b.x + b.width / 2, cy: b.y + b.height / 2 } : null;
+    });
+    check("the click ring at frame 60 is centred on the keyframe (1000, 500), within 1px", ring !== null && Math.abs(ring.cx - 1000) < 1 && Math.abs(ring.cy - 500) < 1);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");

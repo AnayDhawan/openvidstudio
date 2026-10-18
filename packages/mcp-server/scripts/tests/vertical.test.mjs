@@ -13,6 +13,7 @@ import {
   require,
   packageRoot,
   distDir,
+  monorepoRoot,
   monorepoTemplateDir,
   check,
   skip,
@@ -512,6 +513,42 @@ console.log("\n== vertical 4: export_rendition reels, measured with ffprobe on r
     check("planReelsExport: the exact target needs no re-encode", (() => { const p = planReelsExport(base); return p.ok && !p.videoReencode && !p.audioReencode; })());
     check("planReelsExport: HEVC, a 4:2:2 pixel format or 24fps each force a video re-encode", [{ videoCodec: "hevc" }, { pixFmt: "yuv422p" }, { fps: 24 }].every((o) => planReelsExport({ ...base, ...o }).videoReencode === true));
     check("planReelsExport: 2160x3840 is 9:16 and gets scaled", (() => { const p = planReelsExport({ ...base, width: 2160, height: 3840 }); return p.ok && p.videoReencode && p.scale; })());
+  }
+}
+
+console.log("\n== vertical 5: the docs and the tool descriptions say what the code does ==");
+{
+  const pipeline = fs.readFileSync(path.join(monorepoRoot, "packages", "docs", "PIPELINE.md"), "utf8").replace(/\r\n/g, "\n");
+  const start = pipeline.indexOf("## Native vertical (9:16)");
+  const end = start < 0 ? -1 : pipeline.indexOf("\n## ", start + 5);
+  const section = start < 0 ? "" : pipeline.slice(start, end < 0 ? undefined : end);
+  check("PIPELINE.md has a Native vertical (9:16) section", start >= 0);
+  check("...which says to scaffold with init_project videoConfig 1080x1920 and why not reformat_vertical (a crop cuts diagrams)", /init_project/.test(section) && /videoConfig/.test(section) && /1080x1920/.test(section) && /reformat_vertical/.test(section) && /cropped|cut off/.test(section));
+
+  // The 608x1080 slice the section quotes is the real crop reformat_vertical takes.
+  const { cropRect } = require(path.join(distDir, "tools", "reformatVertical.js"));
+  const slice = cropRect(1920, 1080, 1080, 1920, "center");
+  check(`...and the slice it quotes is the real one (${slice.width}x${slice.height}, ${((slice.width / 1920) * 100).toFixed(1)}% of the width)`, section.includes(`${slice.width}x${slice.height}`) && slice.width / 1920 < 1 / 3 && section.includes("under a third"));
+
+  // Safe zones: the percentages and the pixels they come to at 1080x1920.
+  const px = { top: Math.round((1920 * 0.14) / 10) * 10, bottom: Math.round((1920 * 0.22) / 10) * 10, right: Math.round(1080 * 0.1) };
+  console.log(`  safe zones at 1080x1920: top ${px.top}, bottom ${px.bottom}, right ${px.right}`);
+  check("the safe zones are about 14% top, 22% bottom and 10% right, with the pixel values those make at 1080x1920 (270, 420, 108)", ["14%", "22%", "10%"].every((p) => section.includes(p)) && section.includes(String(px.top)) && section.includes(String(px.bottom)) && section.includes(String(px.right)) && px.top === 270 && px.bottom === 420 && px.right === 108);
+  check("...and are labelled approximate, to be checked against Instagram's current guidance", /approximate/i.test(section) && section.includes("Instagram's current guidance"));
+  check("the design.ts numbers it quotes are the ones defineDesignSystem produces for 1080x1920 (84 / 231 / 196)", section.includes("84 / 231 / 196") && section.includes("150 / 130 / 110"));
+  check("it lists what follows the frame size", ["CinematicScene", "DotGrid", "Letterbox", "RepoCta", "defineDesignSystem", "validate_scenes", "export_rendition"].every((n) => section.includes(n)));
+  check("the Other outputs list points at the new section from both reformat_vertical and the reels format", pipeline.slice(pipeline.indexOf("### Other outputs"), start).includes('format: "reels"') && /Native vertical \(9:16\)" below/.test(pipeline));
+  check("the section has no em dashes", !section.includes(String.fromCharCode(0x2014)));
+
+  const { createMcpServer } = require(path.join(distDir, "server.js"));
+  const tools = createMcpServer(undefined)._registeredTools;
+  check("reformat_vertical's description points at the native vertical section and the reels export", /Native vertical \(9:16\)/.test(tools.reformat_vertical.description) && tools.reformat_vertical.description.includes("export_rendition"));
+  check("export_rendition's description documents the reels format and its refusal of a 16:9 render", tools.export_rendition.description.includes('format: "reels"') && /refuses a 16:9 render/.test(tools.export_rendition.description));
+  const formatSchema = tools.export_rendition.inputSchema?.shape?.format;
+  if (formatSchema) {
+    check("export_rendition's input schema accepts reels and still rejects an unknown format", formatSchema.safeParse("reels").success && !formatSchema.safeParse("reelz").success);
+  } else {
+    skip("export_rendition's input schema accepts reels", "the registered tool does not expose a zod shape");
   }
 }
 

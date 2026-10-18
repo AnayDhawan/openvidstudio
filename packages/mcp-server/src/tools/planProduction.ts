@@ -14,8 +14,11 @@ import { runTool } from "./mcp";
  *
  * The estimate has two kinds of number in it, and they are not equally solid:
  *  - Render time (draft pass, stills, final pass) is derived from preflight's real
- *    `remotion benchmark` measurement on this machine. This is the part the ±30% accuracy
- *    bar is actually about, and it's real because it's measured, not guessed.
+ *    `remotion benchmark` measurement on this machine, divided by a per-level scene weight
+ *    (a finished video renders slower than the flat benchmark composition). The bundle time per
+ *    review round is measured by the same benchmark. This is the part the ±30% accuracy
+ *    bar is actually about, and it's real because it's measured, not guessed. The scene
+ *    weights are calibrated against recorded runs (see LevelProfile.renderWeight).
  *  - Authoring time (how long writing N bespoke scenes or filling N templates actually
  *    takes) has no machine to benchmark -- it's a per-beat constant, tuned per level
  *    (AUTHORING_SECONDS_PER_BEAT below), and it is the part of this estimate most likely
@@ -58,7 +61,7 @@ export interface PlanProductionResult {
   /** Present when even the unavoidable minimum (one final render) doesn't fit the budget. */
   infeasibleWarning?: string;
   /** How the render-time portion was derived: a real measurement, or an unmeasured fallback. */
-  measurement: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback" };
+  measurement: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback"; bundleSeconds?: number | null };
   warnings: string[];
 }
 
@@ -75,6 +78,12 @@ const STILL_FRAMES_PER_BEAT = 4;
 // to a conservative, clearly-labeled placeholder rather than refusing to plan at all.
 // Matches renderVideo.ts's own async-estimate fallback order of magnitude.
 const FALLBACK_FPS = 2;
+// One bundle of the project costs about this much when preflight could not time one.
+const FALLBACK_BUNDLE_SECONDS = 30;
+// Capturing a beat's real footage (open the page, settle, interact, record) and how many of those
+// captures get repeated once because a selector moved or a frame came out wrong.
+const CAPTURE_SECONDS_PER_BEAT = 45;
+const CAPTURE_RETRY_FRACTION = 0.5;
 
 interface LevelProfile {
   qcRounds: number;
@@ -83,6 +92,13 @@ interface LevelProfile {
   scoreStrategy: string;
   authoringSecondsPerBeat: number;
   scoreSeconds: number;
+  /**
+   * How much slower a finished video of this level renders than preflight's flat benchmark
+   * composition. literal is 1: a real 6-beat literal render matched the benchmark within 5%. peak is
+   * 3.7, from the recorded Acme run: 1800 frames took 15 minutes (2 fps) where the benchmark ran at
+   * 7.3 fps. mid sits between the two and is an engineering estimate until a mid run is timed.
+   */
+  renderWeight: number;
 }
 
 // Authoring-time constants (see the module doc comment): an engineering estimate, most
@@ -97,6 +113,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     scoreStrategy: "compose_score: an original, arc-matched score (Phase C)",
     authoringSecondsPerBeat: 90,
     scoreSeconds: 90,
+    renderWeight: 3.7,
   },
   mid: {
     qcRounds: 2,
@@ -105,6 +122,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     scoreStrategy: "the built-in ambient music-bed.mp3 or a CC0 track via find_music_bed",
     authoringSecondsPerBeat: 35,
     scoreSeconds: 20,
+    renderWeight: 2,
   },
   literal: {
     qcRounds: 1,
@@ -113,6 +131,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     scoreStrategy: "whatever beats.json/the brief specifies; the built-in music-bed.mp3 if unstated",
     authoringSecondsPerBeat: 10,
     scoreSeconds: 0,
+    renderWeight: 1,
   },
 };
 
@@ -122,7 +141,7 @@ const SECONDS_PER_BEAT_ESTIMATE = 10;
 
 export function runPlanProductionLogic(
   input: PlanProductionInput,
-  benchmark: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback" },
+  benchmark: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback"; bundleSeconds?: number | null },
   projectConfig: { fps: number },
 ): PlanProductionResult {
   const profile = LEVEL_PROFILES[input.creativeLevel];
@@ -133,10 +152,17 @@ export function runPlanProductionLogic(
 
   const fps = benchmark.fps ?? FALLBACK_FPS;
   const totalFrames = targetDurationSeconds * projectConfig.fps;
-  const finalRenderSeconds = totalFrames / fps;
-  const draftRenderSeconds = totalFrames / (fps * DRAFT_SPEEDUP);
+  // fps is the flat benchmark composition's speed; a finished video renders at fps / renderWeight.
+  const sceneFps = fps / profile.renderWeight;
+  const finalRenderSeconds = totalFrames / sceneFps;
+  const draftRenderSeconds = totalFrames / (sceneFps * DRAFT_SPEEDUP);
   const stillsFramesTotal = beatCountEstimate * STILL_FRAMES_PER_BEAT;
-  const stillsPassSeconds = stillsFramesTotal / fps;
+  const stillsPassSeconds = stillsFramesTotal / sceneFps;
+  const bundleMeasured = typeof benchmark.bundleSeconds === "number";
+  const bundleSeconds = bundleMeasured ? (benchmark.bundleSeconds as number) : FALLBACK_BUNDLE_SECONDS;
+  // One bundle per review round, one for the draft pass and one for the final render.
+  const bundleCount = profile.qcRounds + 2;
+  const captureSeconds = beatCountEstimate * CAPTURE_SECONDS_PER_BEAT * (1 + CAPTURE_RETRY_FRACTION);
   const authoringSeconds = beatCountEstimate * profile.authoringSecondsPerBeat;
 
   const phases: PhaseEstimate[] = [
@@ -157,19 +183,30 @@ export function runPlanProductionLogic(
         `(engineering estimate, not yet calibrated against real telemetry for peak/mid -- see this tool's module doc comment)`,
     },
     {
+      phase: "capture",
+      seconds: Math.round(captureSeconds),
+      note: `${beatCountEstimate} beats x ${CAPTURE_SECONDS_PER_BEAT}s, plus an allowance for ${Math.round(CAPTURE_RETRY_FRACTION * 100)}% of them to be captured twice (engineering estimate)`,
+    },
+    {
+      phase: "review bundles",
+      seconds: Math.round(bundleSeconds * bundleCount),
+      note: `${bundleCount} bundles (${profile.qcRounds} review round${profile.qcRounds === 1 ? "" : "s"}, the draft pass, the final render) x ${bundleSeconds}s` +
+        (bundleMeasured ? " measured by preflight's benchmark" : " (unmeasured fallback, run preflight with benchmark: true for a real number)"),
+    },
+    {
       phase: "stills QC",
       seconds: Math.round(stillsPassSeconds * profile.qcRounds),
-      note: `${profile.qcRounds} round${profile.qcRounds === 1 ? "" : "s"} x ${stillsFramesTotal} frames at ${fps.toFixed(2)}fps`,
+      note: `${profile.qcRounds} round${profile.qcRounds === 1 ? "" : "s"} x ${stillsFramesTotal} frames at ${sceneFps.toFixed(2)}fps (${fps.toFixed(2)}fps benchmark / ${profile.renderWeight}x ${input.creativeLevel} scene weight)`,
     },
     {
       phase: "draft render",
       seconds: Math.round(draftRenderSeconds),
-      note: `${totalFrames} frames at ~${(fps * DRAFT_SPEEDUP).toFixed(2)}fps (draft: half-res, veryfast preset)`,
+      note: `${totalFrames} frames at ~${(sceneFps * DRAFT_SPEEDUP).toFixed(2)}fps (draft: half-res, veryfast preset)`,
     },
     {
       phase: "final render",
       seconds: Math.round(finalRenderSeconds),
-      note: `${totalFrames} frames at ${fps.toFixed(2)}fps measured${benchmark.source === "fallback" ? " (unmeasured fallback, run preflight with benchmark: true for a real number)" : ""}`,
+      note: `${totalFrames} frames at ${sceneFps.toFixed(2)}fps: the measured ${fps.toFixed(2)}fps benchmark divided by a ${profile.renderWeight}x ${input.creativeLevel} scene weight${benchmark.source === "fallback" ? " (unmeasured fallback, run preflight with benchmark: true for a real number)" : ""}`,
     },
   ];
 
@@ -193,7 +230,7 @@ export function runPlanProductionLogic(
     cutFirst.push(`render draft-only and skip the final pass for review, then render final once approved`);
 
     if (finalRenderSeconds > budgetSeconds) {
-      const feasibleSeconds = Math.floor((budgetSeconds * fps) / projectConfig.fps);
+      const feasibleSeconds = Math.floor((budgetSeconds * sceneFps) / projectConfig.fps);
       infeasibleWarning =
         `Even the unavoidable minimum, one final render (${Math.round(finalRenderSeconds)}s), does not fit the ` +
         `${input.timeBudgetMinutes}min budget at this machine's measured ${fps.toFixed(2)}fps. Feasible alternatives: ` +
@@ -236,7 +273,12 @@ export async function runPlanProduction(input: PlanProductionInput): Promise<Pla
   const preflight = await runPreflight({ projectRoot, benchmark: true });
   const benchmark: PlanProductionResult["measurement"] =
     preflight.benchmarkResult?.ok === true
-      ? { fps: preflight.benchmarkResult.fps, cpuCount: preflight.benchmarkResult.cpuCount, source: "benchmark" }
+      ? {
+          fps: preflight.benchmarkResult.fps,
+          cpuCount: preflight.benchmarkResult.cpuCount,
+          source: "benchmark",
+          bundleSeconds: preflight.benchmarkResult.bundleSeconds ?? null,
+        }
       : { fps: null, cpuCount: null, source: "fallback" };
 
   const result = runPlanProductionLogic(input, benchmark, { fps: config.videoConfig.fps });

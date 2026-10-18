@@ -39,6 +39,11 @@ export interface BenchmarkResult {
   secondsElapsed: number;
   fps: number;
   cpuCount: number;
+  /**
+   * Wall seconds the benchmark command took beyond the render itself: bundling the project's
+   * entry point and starting the browser. plan_production counts one of these per review round.
+   */
+  bundleSeconds?: number;
   /** Present only when ok is false: why no measurement came back. */
   error?: string;
 }
@@ -114,11 +119,13 @@ async function runBenchmark(projectRoot: string, browserExecutable?: string): Pr
   if (!fs.existsSync(path.join(projectRoot, "src", "index.ts"))) {
     return { ok: false, framesTimed: 0, secondsElapsed: 0, fps: 0, cpuCount, error: "src/index.ts not found -- run init_project first" };
   }
+  const startedAt = Date.now();
   const result = await spawnCapture(
     process.platform === "win32" ? "npx.cmd" : "npx",
     buildBenchmarkArgs(projectRoot, { browserExecutable }),
     projectRoot,
   );
+  const wallSeconds = (Date.now() - startedAt) / 1000;
   const seconds = parseBenchmarkSeconds(result.stdout) ?? parseBenchmarkSeconds(result.stderr);
   if (seconds === null || seconds <= 0) {
     return {
@@ -136,6 +143,7 @@ async function runBenchmark(projectRoot: string, browserExecutable?: string): Pr
     secondsElapsed: seconds,
     fps: Number((BENCHMARK_FRAMES / seconds).toFixed(2)),
     cpuCount,
+    bundleSeconds: Number(Math.max(0, wallSeconds - seconds).toFixed(1)),
   };
 }
 

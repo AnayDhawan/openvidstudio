@@ -415,8 +415,8 @@ of each `captureMethod` so the shapes above are all represented):
     {
       "id": "demo-review",
       "start": 180,
-      "duration": 120,
-      "vo": "Flip a card, and Loomcard scores your confidence on the spot.",
+      "duration": 90,
+      "vo": "Flip a card, and Loomcard scores your confidence.",
       "visual": {
         "captureMethod": "screenshot",
         "url": "https://app.loomcard.example/review",
@@ -428,7 +428,7 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "demo-schedule",
-      "start": 300,
+      "start": 270,
       "duration": 240,
       "vo": "That confidence score adjusts your next review date live, so easy cards fade back and hard ones come around sooner.",
       "transition": "whip",
@@ -446,7 +446,7 @@ of each `captureMethod` so the shapes above are all represented):
     },
     {
       "id": "cta",
-      "start": 540,
+      "start": 510,
       "duration": 180,
       "vo": "Loomcard is free and open source. Star it, try it, or send a pull request.",
       "visual": {
@@ -456,6 +456,9 @@ of each `captureMethod` so the shapes above are all represented):
   ]
 }
 ```
+
+The beat lengths are 6s, 3s, 8s and 6s on purpose: `validate_beats` warns when four or more
+beats have a longest under 2.5x the shortest, because evenly sized shots read as a metronome.
 
 Note the `demo-schedule` beat: the CSV/Anki import feature from intake was
 dropped, not shown, because it isn't wired up yet and no real capture or

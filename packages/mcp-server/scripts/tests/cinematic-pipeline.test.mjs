@@ -70,6 +70,55 @@ console.log("\n== Transitions: the vocabulary is accepted and anything else is r
     stitchModule.transitionHalfFrames?.(30) === 6 && stitchModule.transitionHalfFrames?.(60) === 12 && stitchModule.transitionHalfFrames?.(24) === 5);
 }
 
+console.log("\n== Rhythm: uniform shot lengths draw a warning, never an error ==");
+{
+  const file = (durations, extra = {}) => {
+    let start = 0;
+    return {
+      fps: 30,
+      title: "T",
+      narration: "none",
+      beats: durations.map((duration, i) => {
+        const beat = { id: `b${i}`, start, duration, visual: { captureMethod: "dom-demo" } };
+        start += duration;
+        return beat;
+      }),
+      ...extra,
+    };
+  };
+  const rhythm = (r) => r.warnings.filter((w) => /metronome/.test(w));
+
+  const uniform = validateBeatsLogic(file([90, 90, 90, 90, 90]));
+  check("five equal beats still validate: the rhythm note is a warning, not an error", uniform.valid === true && uniform.errors.length === 0);
+  check("...and carry exactly one warning that names the problem (metronome)", rhythm(uniform).length === 1 && uniform.warnings.length === 1);
+  check("...which says what to do (one long hold, one short punch)", /long hold/.test(uniform.warnings[0]) && /short punch/.test(uniform.warnings[0]));
+  check("...and quotes the real numbers (longest 90 frames, shortest 90 frames, 1.00x)", /90 frames/.test(uniform.warnings[0]) && /1\.00x/.test(uniform.warnings[0]));
+
+  const varied = validateBeatsLogic(file([150, 45, 90, 60]));
+  check("four beats with a 3.3x spread draw no warning", varied.valid === true && varied.warnings.length === 0);
+  check("three equal beats draw none (fewer than four is not a rhythm yet)", validateBeatsLogic(file([90, 90, 90])).warnings.length === 0);
+  check("three beats of varied length draw none", validateBeatsLogic(file([150, 45, 90])).warnings.length === 0);
+
+  // The line is "longest less than 2.5x the shortest": 2.5x exactly is fine, a hair under is not.
+  check("a longest exactly 2.5x the shortest (100 vs 40) draws none", validateBeatsLogic(file([100, 40, 70, 70])).warnings.length === 0);
+  check("...and 100 vs 41 (2.44x) does", rhythm(validateBeatsLogic(file([100, 41, 70, 70]))).length === 1);
+  // Control meant to fail if the check ever stops reading the durations: the same four ids
+  // with the spread removed must warn, the one above must not.
+  check("control: [100,40,70,70] and [70,70,70,70] disagree", validateBeatsLogic(file([100, 40, 70, 70])).warnings.length === 0 && rhythm(validateBeatsLogic(file([70, 70, 70, 70]))).length === 1);
+
+  // The documented worked example is the first thing an agent copies, so it must not trip the note.
+  const planning = fs.readFileSync(path.join(packageRoot, "..", "docs", "PLANNING.md"), "utf8").replace(/\r\n/g, "\n");
+  const example = JSON.parse(planning.slice(planning.search(/^## \d+\. Worked example/m)).match(/```json\n([\s\S]*?)\n```/)[1]);
+  const exampleResult = validateBeatsLogic(example);
+  check(`PLANNING.md's worked example is valid and draws no rhythm warning (${example.beats.map((b) => b.duration).join("/")} frames)`, exampleResult.valid === true && exampleResult.warnings.length === 0);
+
+  const withErrors = validateBeatsLogic(file([90, 90, 90, 90], { beats: undefined }));
+  check("a file with no beats array returns no warnings and no crash", Array.isArray(withErrors.warnings) && withErrors.warnings.length === 0 && withErrors.valid === false);
+  const { runWriteBeatsFile } = require(path.join(distDir, "tools", "writeBeatsFile.js"));
+  const wroteRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-rhythm-"));
+  check("write_beats_file still writes a uniform file: a warning does not block", runWriteBeatsFile({ projectRoot: wroteRoot, videoName: "u", beatsJson: file([90, 90, 90, 90]) }).written === true);
+}
+
 const templateNodeModules = path.join(monorepoTemplateDir, "node_modules");
 if (!fs.existsSync(templateNodeModules)) {
   skip("transition renders", "no resolvable node_modules to scaffold a renderable project from");

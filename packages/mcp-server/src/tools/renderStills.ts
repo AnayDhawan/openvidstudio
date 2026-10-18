@@ -84,6 +84,22 @@ export interface RenderStillsInput {
    * cannot view images can still review. Reuses this call's bundle. Defaults to true.
    */
   findings?: boolean;
+  /**
+   * A region of the composition, in composition pixels, to look at closely. Each still then
+   * gets a second file next to it, `<name>-crop.png`, the region re-rendered at a higher scale
+   * (about 960 px wide, at most 4x) rather than stretched from the 1x still, so small text can be
+   * checked for what it really looks like. The whole still is written as usual.
+   */
+  crop?: { x: number; y: number; width: number; height: number };
+}
+
+/** The crop is rendered at the whole number of times that brings it nearest this width, capped below. */
+const CROP_TARGET_WIDTH = 960;
+const CROP_MAX_SCALE = 4;
+
+/** Pure: the render scale for a crop of this width. A whole number, since a fractional one cannot give whole-pixel dimensions. */
+export function cropScale(cropWidth: number): number {
+  return Math.min(CROP_MAX_SCALE, Math.max(1, Math.round(CROP_TARGET_WIDTH / cropWidth)));
 }
 
 export interface RenderStillOutput {
@@ -98,6 +114,8 @@ export interface RenderStillOutput {
   width: number;
   height: number;
   bytes: number;
+  /** Present when `crop` was requested: the region at a higher scale. */
+  crop?: { path: string; width: number; height: number; scale: number };
 }
 
 export interface ContactGridOutput {
@@ -318,6 +336,14 @@ export async function runRenderStills(input: RenderStillsInput): Promise<RenderS
 
   const compositionId = resolveCompositionId(projectRoot, videoName, input.compositionId);
 
+  const crop = input.crop;
+  if (crop) {
+    const whole = [crop.x, crop.y, crop.width, crop.height].every((n) => Number.isInteger(n) && n >= 0);
+    if (!whole || crop.width < 1 || crop.height < 1) {
+      throw new Error(`crop must be { x, y, width, height } in whole composition pixels with a positive width and height. Got ${JSON.stringify(crop)}.`);
+    }
+  }
+
   const baseOutRel = input.outDir ?? path.join("output", "stills", videoName);
   sanitizeRelativeOutPath(projectRoot, baseOutRel, "outDir");
   const outDirRel = input.round === undefined ? baseOutRel : path.join(baseOutRel, `round-${sanitizeSegment(String(input.round), "round")}`);
@@ -339,11 +365,31 @@ export async function runRenderStills(input: RenderStillsInput): Promise<RenderS
   try {
     browser = await openRenderBrowser();
     const composition: ResolvedComposition = await resolveComposition(serveUrl, compositionId, browser);
+    if (crop && (crop.x + crop.width > composition.width || crop.y + crop.height > composition.height)) {
+      throw new Error(
+        `crop ${JSON.stringify(crop)} reaches outside the ${composition.width}x${composition.height} composition. ` +
+          `Give x, y, width and height in composition pixels that stay inside it.`,
+      );
+    }
 
     const stills: RenderStillOutput[] = [];
     for (const p of plan) {
       const outPath = path.join(outDirAbs, fileFor(p));
       const result = await renderStillPng({ serveUrl, composition, frame: p.frame, outPath, browser, scale: input.scale });
+      let cropOutput: RenderStillOutput["crop"];
+      if (crop) {
+        // Re-rendered at a higher scale instead of cropped from the 1x still: enlarging pixels that
+        // were never there would show the blur, not the text.
+        const scale = cropScale(crop.width);
+        const cropPath = outPath.replace(/\.png$/, "-crop.png");
+        const full = outPath.replace(/\.png$/, "-crop-src.png");
+        await renderStillPng({ serveUrl, composition, frame: p.frame, outPath: full, browser, scale });
+        const width = crop.width * scale;
+        const height = crop.height * scale;
+        await sharp(full).extract({ left: crop.x * scale, top: crop.y * scale, width, height }).png().toFile(cropPath);
+        fs.rmSync(full, { force: true });
+        cropOutput = { path: cropPath, width, height, scale };
+      }
       stills.push({
         beatId: p.beatId,
         frame: p.frame,
@@ -353,6 +399,7 @@ export async function runRenderStills(input: RenderStillsInput): Promise<RenderS
         width: result.width,
         height: result.height,
         bytes: result.bytes,
+        ...(cropOutput ? { crop: cropOutput } : {}),
       });
     }
 
@@ -406,7 +453,9 @@ export function registerRenderStills(server: McpServer): void {
         "judged from one image; `round` keeps each review round in its own folder. It also returns " +
         "validate_scenes's numeric render findings for the same beats (cropping, text size, reading time, " +
         "contrast, em dashes, safe area, HUD overlap, dead frames), reusing this call's bundle, so an agent " +
-        "that cannot view images reviews from the numbers; pass findings: false to skip them. The composition " +
+        "that cannot view images reviews from the numbers; pass findings: false to skip them. Pass crop " +
+        "({ x, y, width, height } in composition pixels) to also get each still's region re-rendered at a " +
+        "higher scale as <name>-crop.png, for checking small text. The composition " +
         "id is resolved from src/videos/.registry.json (written by stitch_composition) unless overridden. " +
         "Writes PNGs to output/stills/<videoName>/ by default (gitignored QC output, same convention as " +
         "contact_sheet/qc_extract_frames, not shipped media). Returns { compositionId, stills: [{beatId, " +
@@ -426,6 +475,20 @@ export function registerRenderStills(server: McpServer): void {
         scale: z.number().positive().optional(),
         contactGrid: z.boolean().optional(),
         findings: z.boolean().optional(),
+        crop: z
+          .object({
+            x: z.number().int().nonnegative(),
+            y: z.number().int().nonnegative(),
+            width: z.number().int().positive(),
+            height: z.number().int().positive(),
+          })
+          .optional()
+          .describe(
+            "A region in composition pixels to check closely, for small text. Each still also gets " +
+              "<name>-crop.png next to it: that region re-rendered at a higher scale (a whole number, " +
+              "nearest 960 px wide, at most 4x), not stretched from the 1x still, returned as still.crop " +
+              "{ path, width, height, scale }. A region outside the composition is an error.",
+          ),
       },
     },
     async (input) => runTool("render_stills", () => runRenderStills(input)),

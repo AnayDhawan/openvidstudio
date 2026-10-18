@@ -1,7 +1,8 @@
 // DirectedShot (C4): a nested camera rig that turns a flat capture into a directed move.
 // A screenshot or recording on its own is a rectangle. This pushes into the part that matters,
-// tilts the plane slightly so the move reads as depth, softens everything away from the focal
-// point, and lets the cursor act inside the capture, all in the capture's own pixel space.
+// tilts the plane slightly so the move reads as depth, optionally softens everything away from
+// the focal point (off by default: blur smears the text a product video is selling), and lets
+// the cursor act inside the capture, all in the capture's own pixel space.
 //
 //   <DirectedShot
 //     src={staticFile("images/dashboard.png")}
@@ -17,10 +18,30 @@
 
 import React from "react";
 import { Img, useCurrentFrame, useVideoConfig } from "remotion";
-import { CameraRig, resolveCamera } from "./camera";
+import { CameraRig, projectToScreen, resolveCamera } from "./camera";
 import type { CamKeyframe } from "./camera";
 import { CursorActor } from "./CursorActor";
 import type { CursorKeyframe } from "./CursorActor";
+import { E, tween } from "./motion";
+import {
+  DEFAULT_SHAKE_AMPLITUDE,
+  HANDHELD_ROLL_PER_PX,
+  SHAKE_ROLL_PER_PX,
+  useHandheld,
+  useImpactShake,
+} from "./handheld";
+import { resolveShot } from "./shots";
+import { MotionBlur } from "./motionBlur";
+import type { MotionBlurOptions } from "./motionBlur";
+import type { ShotName } from "./shots";
+
+/** A rectangle in capture pixels. */
+export interface CaptureRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface DirectedShotProps {
   /** Image URL of the capture, usually staticFile("images/<beat>.png"). Use children for anything else. */
@@ -30,16 +51,40 @@ export interface DirectedShotProps {
   /** Natural size of the capture in pixels. Defaults to 1920x1080. */
   captureWidth?: number;
   captureHeight?: number;
-  /** The point in the capture, in capture pixels, that the move pushes into. */
-  focus: { x: number; y: number };
+  /** The point in the capture, in capture pixels, that the move pushes into. Defaults to the middle. */
+  focus?: { x: number; y: number };
   /** End zoom relative to fitting the whole capture in the box. 1 holds the full frame. Default 1.4. */
   push?: number;
+  /**
+   * A named camera move (see shots.ts): pushIn, pullOut, pan, whip, orbit, dutch, hold, drift. It
+   * supplies the zoom, start and end position, tilt, easing and length. `push`, `tilt` and `move`
+   * given explicitly override the preset.
+   */
+  shot?: ShotName;
   /** Rotation at the end of the move, in degrees. Small values (2 to 6) read as depth, larger ones as a gimmick. */
   tilt?: { x?: number; y?: number; z?: number };
   /** The frames, local to the scene, the move runs over. Default 0 to 90. */
   move?: { from?: number; to?: number; easing?: (t: number) => number };
-  /** Blur in px applied away from the focal point. 0 turns it off. Default 6. */
+  /**
+   * Blur in px applied away from the focal point. Default 0 (off): blur smears product text, so it
+   * is something to ask for, not something every shot pays for. Never put it on a shot whose text
+   * has to be read, or list those regions in `protect`.
+   */
   depthOfField?: number;
+  /** Regions of the capture, in capture pixels, that stay sharp under `depthOfField`. Hard edged. */
+  protect?: CaptureRect[];
+  /** Rack focus: the sharp region slides from `focus` to this point, in capture pixels, across the move. */
+  rackTo?: { x: number; y: number };
+  /**
+   * Motion blur while the camera moves (and only then). `true` is a 180 degree shutter with 8
+   * samples; pass { shutterAngle, samples } to tune it. Default: on for the whip shot, off otherwise.
+   * Costs `samples` times the render work for the frames of the move.
+   */
+  blur?: boolean | MotionBlurOptions;
+  /** Handheld sway: the largest drift in px at 1080p. Default 0 (a locked-off camera). 3 to 8 reads as a person holding it. */
+  handheld?: number;
+  /** Local frames of impacts (a click, a slam, a beat): the shot jolts on each and settles within about 24 frames. */
+  shake?: number[];
   /** Cursor path and click frames, in capture pixels. */
   cursor?: { path: CursorKeyframe[]; clicks?: number[] };
   /** The box the shot fills. Defaults to the composition frame. */
@@ -57,16 +102,77 @@ const clampCenter = (value: number, viewport: number, scale: number, size: numbe
   return Math.min(Math.max(value, half), size - half);
 };
 
+export interface DirectedKeyframeOptions {
+  /** The box the shot fills, in px. */
+  W: number;
+  H: number;
+  captureWidth: number;
+  captureHeight: number;
+  focus?: { x: number; y: number };
+  push?: number;
+  tilt?: { x?: number; y?: number; z?: number };
+  move?: { from?: number; to?: number; easing?: (t: number) => number };
+  shot?: ShotName;
+}
+
+/**
+ * The two camera keyframes a DirectedShot renders with. Pure, so a readout or a test can ask where
+ * the camera is at any frame (with resolveCamera) without mounting the component. A shot name
+ * supplies the defaults; every explicit option wins over it.
+ */
+export const directedKeyframes = (o: DirectedKeyframeOptions): CamKeyframe[] => {
+  const { W, H, captureWidth, captureHeight } = o;
+  const centre = { x: captureWidth / 2, y: captureHeight / 2 };
+  const focus = o.focus ?? centre;
+  const plan = o.shot ? resolveShot(o.shot, { focus, push: o.push, captureWidth, captureHeight }) : null;
+
+  const fit = Math.min(W / captureWidth, H / captureHeight);
+  const startScale = fit * (plan ? plan.startScale : 1);
+  const endScale = fit * (plan ? plan.endScale : (o.push ?? 1.4));
+  const from = o.move?.from ?? 0;
+  const to = Math.max(from + 1, o.move?.to ?? (plan ? from + plan.moveFrames : 90));
+  const startAt = plan ? plan.startFocus : centre;
+  const endAt = plan ? plan.endFocus : focus;
+
+  return [
+    {
+      frame: from,
+      x: clampCenter(startAt.x, W, startScale, captureWidth),
+      y: clampCenter(startAt.y, H, startScale, captureHeight),
+      scale: startScale,
+      rotX: plan?.startTilt.x ?? 0,
+      rotY: plan?.startTilt.y ?? 0,
+      rotZ: plan?.startTilt.z ?? 0,
+    },
+    {
+      frame: to,
+      x: clampCenter(endAt.x, W, endScale, captureWidth),
+      y: clampCenter(endAt.y, H, endScale, captureHeight),
+      scale: endScale,
+      rotX: o.tilt?.x ?? plan?.tilt.x ?? 0,
+      rotY: o.tilt?.y ?? plan?.tilt.y ?? 0,
+      rotZ: o.tilt?.z ?? plan?.tilt.z ?? 0,
+      easing: o.move?.easing ?? plan?.easing,
+    },
+  ];
+};
+
 export const DirectedShot: React.FC<DirectedShotProps> = ({
   src,
   children,
   captureWidth = 1920,
   captureHeight = 1080,
-  focus,
-  push = 1.4,
+  focus: focusProp,
+  push,
   tilt,
   move,
-  depthOfField = 6,
+  shot,
+  depthOfField = 0,
+  protect,
+  rackTo,
+  blur,
+  handheld = 0,
+  shake,
   cursor,
   width,
   height,
@@ -77,43 +183,70 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   const W = width ?? video.width;
   const H = height ?? video.height;
 
-  const fit = Math.min(W / captureWidth, H / captureHeight);
-  const endScale = fit * push;
-  const from = move?.from ?? 0;
-  const to = Math.max(from + 1, move?.to ?? 90);
+  // Sway and shake move the whole shot (picture, blur layer and cursor together) like a camera body.
+  // The hooks run every frame so the call order never changes; they return zeros when unused.
+  const sway = useHandheld(handheld);
+  const hit = useImpactShake(shake ?? []);
+  const shaken = handheld > 0 || (shake?.length ?? 0) > 0;
+  const shift = { x: sway.x + hit.x, y: sway.y + hit.y, rot: sway.rot + hit.rot };
+  // Scale up just enough that the largest possible shift never shows the edge of the box.
+  const k = H / 1080;
+  const reach =
+    handheld * k * (1 + (HANDHELD_ROLL_PER_PX * Math.max(W, H)) / 2 / 57.3) +
+    ((shake?.length ?? 0) > 0 ? DEFAULT_SHAKE_AMPLITUDE * k * (1 + (SHAKE_ROLL_PER_PX * Math.max(W, H)) / 2 / 57.3) : 0);
+  const overscan = 1 + (2 * reach) / Math.min(W, H);
+  const focus = focusProp ?? { x: captureWidth / 2, y: captureHeight / 2 };
 
-  const keyframes: CamKeyframe[] = [
-    { frame: from, x: captureWidth / 2, y: captureHeight / 2, scale: fit },
-    {
-      frame: to,
-      x: clampCenter(focus.x, W, endScale, captureWidth),
-      y: clampCenter(focus.y, H, endScale, captureHeight),
-      scale: endScale,
-      rotX: tilt?.x ?? 0,
-      rotY: tilt?.y ?? 0,
-      rotZ: tilt?.z ?? 0,
-      easing: move?.easing,
-    },
-  ];
+  const keyframes = directedKeyframes({ W, H, captureWidth, captureHeight, focus, push, tilt, move, shot });
+  const from = keyframes[0].frame;
+  const to = keyframes[1].frame;
 
-  // Where the focal point is on screen right now, so the sharp region follows it through the move.
+  // The sharp region starts on `focus` and, with rackTo, slides to it across the move.
   const cam = resolveCamera(keyframes, frame);
-  const focusX = W / 2 + (focus.x - cam.x) * cam.scale;
-  const focusY = H / 2 + (focus.y - cam.y) * cam.scale;
-  const mask = `radial-gradient(ellipse ${Math.round(W * 0.34)}px ${Math.round(H * 0.4)}px at ${Math.round(focusX)}px ${Math.round(focusY)}px, transparent 0%, transparent 55%, #000 100%)`;
+  const rack = rackTo ? tween(frame, [from, to], [0, 1], keyframes[1].easing ?? E.cinematic) : 0;
+  const sharpAt = rackTo
+    ? { x: focus.x + (rackTo.x - focus.x) * rack, y: focus.y + (rackTo.y - focus.y) * rack }
+    : focus;
+  const sharp = projectToScreen(cam, W, H, sharpAt.x, sharpAt.y);
+  const mask = `radial-gradient(ellipse ${Math.round(W * 0.34)}px ${Math.round(H * 0.4)}px at ${Math.round(sharp.x)}px ${Math.round(sharp.y)}px, transparent 0%, transparent 55%, #000 100%)`;
 
-  return (
-    <div data-ovs-directed-shot="" style={{ position: "relative", width: W, height: H, overflow: "hidden", ...style }}>
-      <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
-        {src ? (
-          <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: captureWidth, height: captureHeight }} />
-        ) : (
-          children
-        )}
-        {cursor ? <CursorActor path={cursor.path} clicks={cursor.clicks} /> : null}
-      </CameraRig>
+  // Protected regions are holes in the blur layer. Each rect is projected corner by corner so the
+  // hole follows the picture through the move and through a tilt.
+  const holes = (protect ?? []).map((r) => {
+    const corners = [
+      projectToScreen(cam, W, H, r.x, r.y),
+      projectToScreen(cam, W, H, r.x + r.width, r.y),
+      projectToScreen(cam, W, H, r.x + r.width, r.y + r.height),
+      projectToScreen(cam, W, H, r.x, r.y + r.height),
+    ];
+    return `M${corners.map((c) => `${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" L")} Z`;
+  });
+  const clip = holes.length ? `path(evenodd, "M0 0 H${W} V${H} H0 Z ${holes.join(" ")}")` : undefined;
+
+  const rig = (
+    <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
+      {src ? (
+        <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: captureWidth, height: captureHeight }} />
+      ) : (
+        children
+      )}
+    </CameraRig>
+  );
+  // Motion blur wraps the picture only; the cursor rig below stays out of it so the pointer
+  // keeps a crisp edge through a whip.
+  const blurOptions = blur ?? (shot ? resolveShot(shot).blur : false);
+  const picture = (
+    <>
+      {blurOptions ? (
+        <MotionBlur from={from} to={to} {...(typeof blurOptions === "object" ? blurOptions : {})}>
+          {rig}
+        </MotionBlur>
+      ) : (
+        rig
+      )}
       {depthOfField > 0 ? (
         <div
+          data-ovs-dof=""
           style={{
             position: "absolute",
             inset: 0,
@@ -122,9 +255,40 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
             WebkitBackdropFilter: `blur(${depthOfField}px)`,
             maskImage: mask,
             WebkitMaskImage: mask,
+            clipPath: clip,
           }}
         />
       ) : null}
+      {/* The cursor rides a second rig with the same keyframes, above the blur layer. The camera is
+          a pure function of the frame, so it lands exactly where it would have inside the first rig,
+          and depth of field can never smear the one thing the viewer is following. */}
+      {cursor ? (
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
+            <CursorActor path={cursor.path} clicks={cursor.clicks} />
+          </CameraRig>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <div data-ovs-directed-shot="" style={{ position: "relative", width: W, height: H, overflow: "hidden", ...style }}>
+      {shaken ? (
+        <div
+          data-ovs-handheld=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            transformOrigin: "50% 50%",
+            transform: `translate(${shift.x}px, ${shift.y}px) rotate(${shift.rot}deg) scale(${overscan})`,
+          }}
+        >
+          {picture}
+        </div>
+      ) : (
+        picture
+      )}
     </div>
   );
 };

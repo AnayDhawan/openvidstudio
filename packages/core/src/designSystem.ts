@@ -129,7 +129,7 @@ export const DEFAULT_TEXTURE: Texture = {
   vignetteStrength: 0.3,
 };
 
-export const DEFAULT_TRANSITIONS = ["cut", "whip", "fade"];
+export const DEFAULT_TRANSITIONS = ["cut", "whip", "fade", "push", "wipe", "light-leak"];
 
 /**
  * Builds a video's DesignSystem. Call this from src/videos/<name>/design.ts with whatever

@@ -113,12 +113,55 @@ Cuts on the beat feel intentional; cuts between beats feel accidental.
   happening inside the frame (typing, a cursor, a counter).
 - **Ease every move.** No linear easing, ever. The `E.*` presets exist so you never pick one.
 - **Tilt sparingly.** Two to six degrees reads as depth; more reads as a gimmick.
-- **Depth of field points at the focal point.** Blur the rest, never the thing you want read.
+- **Keep text sharp.** Push 105 to 160 percent on a capture with text; past that the words go soft.
+  Depth of field is off unless you ask for it (`depthOfField` defaults to 0), and it never goes on
+  anything the viewer has to read. If a shot really wants a soft background, keep the blur under
+  4px, list every region with words in `protect`, and check a still at phone size before you keep it.
+- **Carry depth some other way.** A slight tilt (`tilt`), handheld sway (`handheld`), and parallax
+  between layers (`LayeredShot`, or `Layer` depth in a hand-built scene) read as depth without
+  touching a single pixel of text. A rack focus (`rackTo`) moves the sharp point from one thing to
+  the next; the blur still stays off the words.
 - **A capture is a flat rectangle until you direct it.** `DirectedShot` pushes into the part of a
-  screenshot that matters, tilts it slightly, softens the edges and lets the cursor act, in the
-  capture's own pixels.
+  screenshot that matters, tilts it slightly and lets the cursor act, in the capture's own pixels.
+  Name the move with `shot` instead of tuning numbers (table below).
 - **One focal point per shot.** If the eye has two places to go, the viewer picks neither.
 - Parallax (`Layer` depth) is for scenes with real foreground and background, not for one panel.
+
+### The shot vocabulary
+
+`<DirectedShot shot="..." />` takes one of these names. Explicit `push`, `tilt` and `move` still win.
+
+| Shot | Use it for |
+|---|---|
+| `pushIn` | The default: from the whole capture in to the one thing that matters |
+| `pullOut` | Ending on the whole product after a close detail; the reveal of context |
+| `pan` | Moving from one part of a wide capture to the next at constant zoom |
+| `whip` | A cut or a jump between two places on the page; short (18 frames), with motion blur |
+| `orbit` | A hero moment on one panel; the camera swings around it a few degrees |
+| `dutch` | Tension or a problem beat; the horizon rolls off level. One per video at most |
+| `hold` | Something inside the frame is doing the work (a cursor, typing, a counter); the camera barely moves |
+| `drift` | Ambient motion under a long hold, a slow breath in and a sub-degree wander |
+
+### Handheld and impact shake
+
+- `handheld` on a `DirectedShot` is a few pixels of drift (3 to 8 at 1080p). It makes a capture
+  read as filmed. Past about 10 it reads as shaky footage, which is a choice, not a default.
+- `shake` takes the local frames of impacts, a click that lands or a hit on the score's impact
+  point (`useMusicClock(...).impact("reveal")`). The shot jolts and settles within a second. Use it
+  two or three times in a video, not on every click.
+- For anything that is not a `DirectedShot`, `useHandheld(amount, { holds })` gives the same sway
+  and is exactly zero inside the `holds` windows, so the frame is still while a cursor clicks or a
+  line is read.
+
+### Captions
+
+- Vary the placement. The same spot in every scene covers the same part of the product every time,
+  and a caption in the same place twice in a row reads as a template. Alternate `position`
+  (`bottom`, `top`, `left`, `right`) beat to beat, never the same spot twice in a row.
+- When you know where the product sits, use `position="auto"` with `avoid` set to that rect, in
+  composition pixels, and the caption takes the side with the most free room.
+- A caption is whole within 8 frames of `at`, whatever its length, so a still never catches it
+  half-typed. Keep it to one thought; a long line wraps inside 90% of the frame width.
 
 ## 8. An SFX map
 

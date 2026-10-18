@@ -141,8 +141,11 @@ export type Visual =
   | HiggsfieldVisual
   | ExistingAssetVisual;
 
-/** PIPELINE.md §2's cut/whip/fade choice, SFX-cued today but never recorded on the beat itself. */
-export type Transition = "cut" | "whip" | "fade";
+/**
+ * The way into a beat. Everything but "cut" is drawn by core's TransitionOverlay on top of
+ * the hard cut, so no beat boundary moves (PLANNING.md §4.5).
+ */
+export type Transition = "cut" | "whip" | "fade" | "push" | "wipe" | "light-leak";
 
 /**
  * Explicit named references to this beat's on-disk outputs. Every tool already agrees on

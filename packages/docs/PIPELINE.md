@@ -37,9 +37,10 @@ Create `<video>/beats.json`:
   full field spec and decision tree; this file just needs every beat to
   carry the field.
 - **`transition`** and **`artifacts`** (both optional, `PLANNING.md` §4.5): the
-  cut/whip/fade choice into a beat, and explicit overrides of that beat's output
-  paths. Omit either and the default (`"cut"`, convention path) is assumed; every
-  existing `beats.json` stays valid without them.
+  way into a beat (`cut`, `whip`, `fade`, `push`, `wipe` or `light-leak`; anything
+  but a cut is drawn over the cut, see §3) and explicit overrides of that beat's
+  output paths. Omit either and the default (`"cut"`, convention path) is assumed;
+  every existing `beats.json` stays valid without them.
 - **Editing an already-written `beats.json`**: run `diff_beats` (new draft in,
   persisted file on disk compared) before re-running anything. It reports, per beat,
   whether it's added/removed/unchanged/changed, which fields changed, whether
@@ -62,6 +63,12 @@ Create `<video>/beats.json`:
     budget ~10-20s/demo beat and check the running total as you add
     beats, don't let it creep past the brief's stated limit "for
     completeness."
+- **Vary the shot lengths.** Four or more beats whose longest is under 2.5 times
+  the shortest read as a metronome: a cut on the same count however much the
+  content changes. `validate_beats` says so as a warning (never an error, and
+  `write_beats_file` still writes the file). Give the strongest claim one long
+  hold and make another beat a short punch. A deliberately even video can ignore
+  the note.
 - No em dashes in any on-screen string or VO line (writing rule).
 - **Claiming a feature in VO obligates showing it.** If a beat's VO
   asserts something the product does, either show the real thing or say
@@ -101,6 +108,15 @@ Rules for the scene files themselves:
   moving recording can't be re-cropped to a DOM rect the way a still
   screenshot can, because the rect would need to track the content frame
   by frame).
+- **Layered screenshots** (parallax). A flat capture can only be slid as one piece. Pass
+  `layers` to `capture_screenshot` (selectors for the elements that should move
+  separately, for example a sidebar, a card, a toast) and it also writes the page with those
+  elements removed (`<id>-bg.png`), one transparent PNG per element, and
+  `<id>.layers.json`, a manifest of where each piece sits in the capture and how far from the
+  background it is (`depth`). `LayeredShot` (API.md) reads that manifest and moves the pieces
+  at different rates under the camera. Layers are cut from the same pixels as the main
+  image, so putting them back at their rectangles reproduces it. Details and limits are in
+  `CAPTURE.md`.
 - **Constructed mockups** (`captureMethod: "dom-demo"`), for a claim the
   product doesn't do yet, or where a real screenshot isn't available or
   would show something contradicting the claim: build it as a hand-coded
@@ -146,6 +162,28 @@ Rules for the scene files themselves:
 `<video>/<Name>Demo.tsx`: `<Series>` mapping `beats.json` ids to scene
 components. Register in the project's `Root.tsx` with duration from beats.
 
+**Transitions.** A beat's `transition` is drawn by core's `TransitionOverlay`, which
+`stitch_composition` mounts in a `Sequence` centred on the beat's first frame: 6 frames
+either side at 30 fps (scaled with fps, so about 0.2s whatever the frame rate), clamped at
+frame 0 and to the beat's own length. It is drawn on top of a hard cut and never replaces
+one, so no beat start or duration moves and the bar-snapped timing and the audio joins stay
+where `beats.json` put them. The overlay is at its peak on the cut frame and clear on its
+first and last frames, and it reads the colour tokens, so it follows a brand applied with
+`applyBrand`:
+
+| `transition` | What is drawn |
+|---|---|
+| `cut` (default) | nothing |
+| `fade` | a dip to the brand background and back |
+| `whip` | a heavy blur with an accent streak that crosses the frame on the cut |
+| `push` | a panel in from the right that covers the frame on the cut and leaves to the left |
+| `wipe` | a skewed band with an accent edge crossing left to right |
+| `light-leak` | warm light in the accent's hue that drifts and peaks on the cut |
+
+Nothing is emitted for a composition with no transitions, and none for the first beat
+(there is no cut into it). To check one, `render_stills` with `perBeat: "review"` puts the
+first and last stills of each beat 3 frames inside it, which is inside the overlay.
+
 **Music-only videos** (`beats.json`'s top-level `narration: "none"`, see `SCRIPT.md`): pass
 `stitch_composition` a `musicBed: { file, volume }` to control the bed and its mix level
 directly; it otherwise defaults the bed to full volume with no narration to duck under.
@@ -167,6 +205,10 @@ draft render:
 - `perBeat: "review"` renders five frames per beat (start+3, 25%, mid, 75%, end-3); the first and
   last sit just inside the beat, so adjacent beats show both sides of every cut. `perBeat: N`
   spreads N frames start to end, `at` picks one, `frames` takes exact composition frames.
+- `crop: { x, y, width, height }` (composition pixels) is for small text. Each still also gets
+  `<name>-crop.png`, that region re-rendered at a higher scale (a whole number, nearest 960 px
+  wide, at most 4x) rather than stretched from the 1x still, which would only show the blur. A
+  region outside the composition is an error.
 - It writes a labelled contact grid (one row per beat when `perBeat` is used: across is time
   within the beat, down is the cut to the next). `round` keeps each round in its own folder.
 - It also returns the numeric findings `validate_scenes` makes in render mode (cropping, text
@@ -423,6 +465,7 @@ VO specifically, silently omits the layer with no warning:
 | Final master, poster, share copy | `output/<video>-final.mp4`, `output/<video>-poster.jpg`, `output/<video>-share.mp4` | `finalize_video` | pick up / upload from here |
 | Run record | `.openvidstudio/runs/<tool>-<timestamp>.json` | `capture_screenshot`, `capture_screen_recording`, `capture_terminal`, `capture_desktop`, `capture_mobile`, `import_higgsfield_clip`, `stitch_composition`, `render_video`, `finalize_video`, `validate_scenes`, `validate_beats` (with `videoName`) | `collect_facts`. Local evidence, not source: gitignore `.openvidstudio/runs/` |
 | Facts | `src/videos/<video>/facts.json` | `collect_facts` | a reviewer, or any check that wants to hold a claim up against what ran. Commit it if you want it reviewed |
+| Layered capture | `public/images/<beatId>-bg.png`, `<beatId>-layer-<name>.png`, `<beatId>.layers.json` | `capture_screenshot` with `layers` | `LayeredShot`, from the manifest. Paths inside it are relative to `public/` |
 | Capture sidecar | `<asset>.capture.json` (next to the screenshot it describes) | `capture_screenshot`, `capture_screen_recording`, `release_diff` | `docs_drift` / `release_diff`, to re-capture at the same CSS viewport and scale the reference actually used |
 
 Every path in this table is also the default a beat's `artifacts` field

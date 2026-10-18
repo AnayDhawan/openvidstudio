@@ -8,10 +8,15 @@ import {
   DEFAULT_DEVICE_SCALE,
   DEFAULT_VIEWPORT,
   detectAndCompensateZoom,
+  hideAllLayers,
   installDeterminism,
   interactionSchema,
   launchChromium,
+  pauseAnimations,
   replayInteractions,
+  restoreLayers,
+  showOnlyLayer,
+  tagLayerElements,
   settlePage,
   viewportSchema,
   writeCaptureSidecar,
@@ -19,6 +24,7 @@ import {
   writeSettleSidecar,
   type CursorPoint,
   type Interaction,
+  type LayerElement,
   type SettleReport,
   type Viewport,
 } from "@openvidstudio/capture";
@@ -84,6 +90,48 @@ export interface CaptureScreenshotInput {
    * timing still needs `settle` (or `reducedMotion`) to land on a repeatable frame.
    */
   deterministic?: boolean;
+  /**
+   * Split the capture into a background and one transparent PNG per matched element, so a
+   * camera can move the layers at different rates (parallax) instead of sliding one flat image.
+   * Written next to the screenshot; see CaptureLayersResult.
+   */
+  layers?: CaptureLayer[];
+}
+
+/** One layer request: every element `selector` matches becomes its own transparent image. */
+export interface CaptureLayer {
+  selector: string;
+  /** File-name stem for the layer (hook-layer-<name>.png). Defaults to one derived from the selector. */
+  name?: string;
+  /**
+   * How far from the background the layer sits: 0 moves with it, larger moves more under a
+   * camera pan. Defaults to a 0.5 spread in order (0.5, 1, 1.5, ...).
+   */
+  depth?: number;
+}
+
+/** One layer as written to the manifest, plus where it came from. */
+export interface CapturedLayer {
+  name: string;
+  selector: string;
+  /** Absolute path of the layer PNG. */
+  path: string;
+  /** Path relative to public/ (or the project root when outPath is outside it), as the manifest has it. */
+  src: string;
+  /** In capture pixels: the same space as the screenshot on disk. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  depth: number;
+}
+
+export interface CaptureLayersResult {
+  /** `<outPath without extension>.layers.json`: {width, height, background, layers: [{src, x, y, width, height, depth}]}. */
+  manifestPath: string;
+  /** `<outPath without extension>-bg.png`: the page with every layer element hidden. */
+  backgroundPath: string;
+  layers: CapturedLayer[];
 }
 
 export interface CaptureScreenshotResult {
@@ -105,6 +153,8 @@ export interface CaptureScreenshotResult {
    * scaffold_scene can build a cursor overlay from real coordinates instead of a guess.
    */
   cursorPoints?: CursorPoint[];
+  /** Present when `layers` was given. */
+  layers?: CaptureLayersResult;
 }
 
 export interface CropRect {
@@ -147,6 +197,64 @@ export async function cropAndUpscale(
     .toBuffer();
 }
 
+const LAYER_EPSILON = 1e-6;
+/**
+ * Pixels a layer's rectangle grows past the element's own box on every side. Chrome snaps what it
+ * paints to the pixel grid and antialiases rounded edges, and measured on a real page it draws a
+ * whole column of pixels past getBoundingClientRect (a card at x 420.5 css, 260 wide, at 2x). A
+ * layer cut exactly at the box lost that column and the reassembly was off there.
+ */
+const LAYER_BLEED = 1;
+
+/**
+ * Where an element's rectangle lands in the saved image, in whole pixels, grown outward to cover
+ * every partly-covered pixel plus LAYER_BLEED more, and clamped to the image. Null when none of it
+ * is inside.
+ *
+ * Without a crop the image is the compensated viewport, so one effective CSS pixel is
+ * `zoom * deviceScaleFactor` image pixels (the same factor cropAndUpscale uses). With a crop the
+ * image is the crop rectangle resampled to `deviceScaleFactor` pixels per CSS pixel, so the zoom
+ * cancels and the crop's own origin is subtracted. Pure, so the desync case is testable without a
+ * browser that can produce one.
+ */
+export function layerPixelRect(
+  rect: CropRect,
+  frame: { zoom: number; deviceScaleFactor: number; crop?: CropRect; imageWidth: number; imageHeight: number },
+): CropRect | null {
+  const scale = frame.crop ? frame.deviceScaleFactor : frame.zoom * frame.deviceScaleFactor;
+  const ox = frame.crop?.x ?? 0;
+  const oy = frame.crop?.y ?? 0;
+  const left = Math.max(0, Math.floor((rect.x - ox) * scale + LAYER_EPSILON) - LAYER_BLEED);
+  const top = Math.max(0, Math.floor((rect.y - oy) * scale + LAYER_EPSILON) - LAYER_BLEED);
+  const right = Math.min(frame.imageWidth, Math.ceil((rect.x + rect.width - ox) * scale - LAYER_EPSILON) + LAYER_BLEED);
+  const bottom = Math.min(frame.imageHeight, Math.ceil((rect.y + rect.height - oy) * scale - LAYER_EPSILON) + LAYER_BLEED);
+  if (right <= left || bottom <= top) return null;
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+function slug(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** The path as the manifest carries it: relative to public/ like staticFile, else to the project root. */
+function manifestRelative(projectRoot: string, absolute: string): string {
+  const fromPublic = path.relative(path.join(projectRoot, "public"), absolute);
+  const rel = fromPublic.startsWith("..") || path.isAbsolute(fromPublic) ? path.relative(projectRoot, absolute) : fromPublic;
+  return rel.split(path.sep).join("/");
+}
+
+/** A name per layer request, checked for safety up front so a bad one fails before a browser opens. */
+function layerBaseNames(layers: CaptureLayer[]): string[] {
+  const used = new Set<string>();
+  return layers.map((layer, i) => {
+    const wanted = layer.name !== undefined ? sanitizeSegment(layer.name, `layers[${i}].name`) : slug(layer.selector) || `layer-${i + 1}`;
+    let name = wanted;
+    for (let n = 2; used.has(name); n++) name = `${wanted}-${n}`;
+    used.add(name);
+    return name;
+  });
+}
+
 export async function runCaptureScreenshot(
   input: CaptureScreenshotInput
 ): Promise<CaptureScreenshotResult> {
@@ -167,6 +275,7 @@ export async function runCaptureScreenshot(
       interactions: input.interactions?.length ?? 0,
       settled: result.settle?.settled ?? null,
       settleWaitedMs: result.settle?.waitedMs ?? null,
+      ...(result.layers ? { layers: result.layers.layers.length } : {}),
     },
   });
   return result;
@@ -182,6 +291,8 @@ async function captureScreenshot(input: CaptureScreenshotInput): Promise<Capture
   const outPathAbs = path.join(projectRoot, outPathRel);
 
   const deviceScaleFactor = input.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE;
+  const layerRequests = input.layers ?? [];
+  const layerNames = layerBaseNames(layerRequests);
 
   const browser = await launchChromium();
   try {
@@ -213,6 +324,24 @@ async function captureScreenshot(input: CaptureScreenshotInput): Promise<Capture
       const settleReport =
         input.settle === false ? null : await settlePage(page, { timeoutMs: input.settleTimeoutMs });
 
+      // Layers are looked up now, while the page is exactly as the main shot will see it. A
+      // selector that matches nothing is an error here, before anything is written: a silently
+      // missing layer would look like a working parallax with one element stuck to the background.
+      const tagged: { request: CaptureLayer; name: string; depth: number; elements: LayerElement[] }[] = [];
+      for (let i = 0; i < layerRequests.length; i++) {
+        const request = layerRequests[i]!;
+        const elements = await tagLayerElements(page, request.selector, i);
+        if (elements.length === 0) {
+          throw new Error(`layers: selector "${request.selector}" matched no element on ${input.url}. Check it against the page after the interactions have run.`);
+        }
+        if (elements.some((e) => !(e.width > 0 && e.height > 0))) {
+          throw new Error(`layers: selector "${request.selector}" matched an element with no size (display: none, or collapsed). Pick a visible one.`);
+        }
+        tagged.push({ request, name: layerNames[i]!, depth: request.depth ?? 0.5 * (i + 1), elements });
+      }
+      // A spinner or a drifting gradient would be at a different phase in each of the shots below.
+      if (tagged.length > 0) await pauseAnimations(page);
+
       // Full-viewport screenshot, no fullPage, no element target: CAPTURE.md explains why
       // element-scoped locator().screenshot() is wrong (it re-measures/auto-scrolls at shot
       // time, independent of what was measured a moment earlier). Buffered in memory; only
@@ -222,12 +351,13 @@ async function captureScreenshot(input: CaptureScreenshotInput): Promise<Capture
       const screenshotBuffer = await page.screenshot({ scale: "device" });
 
       let finalBuffer: Buffer;
+      let cropRect: CropRect | undefined;
       if (input.cropSelector) {
-        const rect = await page.$eval(input.cropSelector, (el) => {
+        cropRect = await page.$eval(input.cropSelector, (el) => {
           const r = el.getBoundingClientRect();
           return { x: r.x, y: r.y, width: r.width, height: r.height };
         });
-        finalBuffer = await cropAndUpscale(screenshotBuffer, rect, zoom * deviceScaleFactor, deviceScaleFactor);
+        finalBuffer = await cropAndUpscale(screenshotBuffer, cropRect, zoom * deviceScaleFactor, deviceScaleFactor);
       } else {
         finalBuffer = screenshotBuffer;
       }
@@ -241,8 +371,74 @@ async function captureScreenshot(input: CaptureScreenshotInput): Promise<Capture
       const width = Math.round(pixelWidth / deviceScaleFactor);
       const height = Math.round(pixelHeight / deviceScaleFactor);
 
+      // Every layer is built in memory first so a refusal (an element outside the crop) leaves the
+      // directory untouched.
+      const layerFiles: { name: string; selector: string; depth: number; rect: CropRect; png: Buffer }[] = [];
+      let backgroundPng: Buffer | null = null;
+      if (tagged.length > 0) {
+        // One transform takes any full-viewport shot to the saved image's space, so each layer is
+        // cut from the same pixels the main image is.
+        const toImageSpace = (buffer: Buffer) =>
+          cropRect ? cropAndUpscale(buffer, cropRect, zoom * deviceScaleFactor, deviceScaleFactor) : Promise.resolve(buffer);
+        const plan: { name: string; selector: string; depth: number; id: string; rect: CropRect }[] = [];
+        for (const t of tagged) {
+          t.elements.forEach((element, n) => {
+            const rect = layerPixelRect(element, { zoom, deviceScaleFactor, crop: cropRect, imageWidth: pixelWidth, imageHeight: pixelHeight });
+            if (!rect) {
+              throw new Error(
+                `layers: selector "${t.request.selector}" matched an element outside the captured area ` +
+                  `(${cropRect ? `the cropSelector "${input.cropSelector}" box` : "the viewport"}), so there is nothing to cut. Scroll it into view or widen the capture.`,
+              );
+            }
+            plan.push({ name: t.elements.length > 1 ? `${t.name}-${n + 1}` : t.name, selector: t.request.selector, depth: t.depth, id: element.id, rect });
+          });
+        }
+        for (const item of plan) {
+          await showOnlyLayer(page, item.id);
+          const shot = await page.screenshot({ scale: "device", omitBackground: true });
+          const full = await toImageSpace(shot);
+          const png = await sharp(full)
+            .extract({ left: item.rect.x, top: item.rect.y, width: item.rect.width, height: item.rect.height })
+            .png()
+            .toBuffer();
+          layerFiles.push({ name: item.name, selector: item.selector, depth: item.depth, rect: item.rect, png });
+          await restoreLayers(page);
+        }
+        await hideAllLayers(page);
+        backgroundPng = await toImageSpace(await page.screenshot({ scale: "device" }));
+        await restoreLayers(page);
+      }
+
       fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
       fs.writeFileSync(outPathAbs, finalBuffer);
+      let layersResult: CaptureLayersResult | undefined;
+      if (backgroundPng) {
+        const stem = path.join(path.dirname(outPathAbs), path.parse(outPathAbs).name);
+        const backgroundPath = `${stem}-bg.png`;
+        fs.writeFileSync(backgroundPath, backgroundPng);
+        const captured: CapturedLayer[] = layerFiles.map((l) => {
+          const file = `${stem}-layer-${l.name}.png`;
+          fs.writeFileSync(file, l.png);
+          return { name: l.name, selector: l.selector, path: file, src: manifestRelative(projectRoot, file), x: l.rect.x, y: l.rect.y, width: l.rect.width, height: l.rect.height, depth: l.depth };
+        });
+        const manifestPath = `${stem}.layers.json`;
+        // The shape LayeredShot reads: sizes in capture pixels, paths relative to public/ like the main image.
+        fs.writeFileSync(
+          manifestPath,
+          JSON.stringify(
+            {
+              width: pixelWidth,
+              height: pixelHeight,
+              background: manifestRelative(projectRoot, backgroundPath),
+              layers: captured.map((l) => ({ src: l.src, x: l.x, y: l.y, width: l.width, height: l.height, depth: l.depth })),
+            },
+            null,
+            2,
+          ) + "\n",
+          "utf8",
+        );
+        layersResult = { manifestPath, backgroundPath, layers: captured };
+      }
       // Otherwise settleReport is only a field in this return value, which nothing
       // downstream keeps: a beat that timed out mid-transition has no evidence of it left
       // once this call returns. The sidecar is what validate_scenes checks statically.
@@ -276,6 +472,7 @@ async function captureScreenshot(input: CaptureScreenshotInput): Promise<Capture
         zoom,
         ...(settleReport ? { settle: settleReport } : {}),
         ...(cursorPoints.length ? { cursorPoints } : {}),
+        ...(layersResult ? { layers: layersResult } : {}),
       };
     } finally {
       await context.close();
@@ -370,6 +567,28 @@ export function registerCaptureScreenshot(server: McpServer): void {
             "Freeze Date.now()/new Date() and seed Math.random() before the page runs, so a page whose " +
               "content depends on either captures identically every run. Off by default. Does not force a " +
               "CSS/JS animation to a specific phase -- pair with settle/reducedMotion for that.",
+          ),
+        layers: z
+          .array(
+            z.object({
+              selector: z.string().min(1),
+              name: z.string().min(1).optional(),
+              depth: z.number().min(0).optional(),
+            }),
+          )
+          .optional()
+          .describe(
+            "Split the capture for parallax. For every element each selector matches, writes a transparent " +
+              "PNG of just that element next to the screenshot (<out>-layer-<name>.png), plus <out>-bg.png (the " +
+              "page with those elements hidden) and <out>.layers.json: {width, height, background, layers: " +
+              "[{src, x, y, width, height, depth}]} in capture pixels, paths relative to public/. depth defaults " +
+              "to a 0.5 spread in request order (0.5, 1, 1.5...): bigger moves more under a camera pan. A " +
+              "selector that matches nothing, matches an element with no size, or lies outside the captured " +
+              "area is an error naming it, never a silent skip. Layers are cut from the same screenshot " +
+              "pipeline as the main image (zoom-compensated, cropSelector-aware), with animations paused " +
+              "so every piece is the same instant. Each layer is the element's box plus one capture pixel of " +
+              "bleed (Chrome paints a pixel past the measured box); shadows and overflow further out are not " +
+              "part of its layer.",
           ),
       },
     },

@@ -1,5 +1,5 @@
 // Cursor as an actor (STYLE.md rule 4): oversized macOS cursor gliding between keyframes
-// with cinematic easing, click = press-scale + expanding ring + click SFX.
+// with cinematic easing along a slight arc, click = press-scale + expanding ring + click SFX.
 
 import React from "react";
 import { useCurrentFrame } from "remotion";
@@ -9,11 +9,22 @@ import { color } from "./tokens";
 
 export type CursorKeyframe = { frame: number; x: number; y: number };
 
+/** How far a segment bows sideways at its widest, as a fraction of the segment's length. */
+const ARC = 0.06;
+/** How far past the target the cursor swings before settling, as a fraction of the segment's length. */
+const OVERSHOOT = 0.025;
+
 /**
  * Cursor position at an arbitrary frame, by the same clamp-and-interpolate rule the actor
  * itself renders with. Pulled out so a click ring can ask "where was the cursor AT FRAME c"
  * once, and freeze that answer, instead of the actor's per-frame render reading whatever the
  * live position happens to be on the frame the ring is drawn.
+ *
+ * A hand does not move in a straight line. Each segment bows to one side (by up to 6% of its
+ * length, alternating sides from one segment to the next so a run of moves does not lean one way),
+ * and the cursor swings a little past the target before it settles, which reads as a person
+ * aiming. The progress along the segment is still E.cinematic, and the position on a keyframe's
+ * own frame is exactly that keyframe.
  */
 function positionAt(sorted: CursorKeyframe[], frame: number): { x: number; y: number } {
   const first = sorted[0];
@@ -24,14 +35,29 @@ function positionAt(sorted: CursorKeyframe[], frame: number): { x: number; y: nu
     if (sorted[i].frame >= frame) {
       const a = sorted[i - 1];
       const b = sorted[i];
+      const progress = tween(frame, [a.frame, b.frame], [0, 1], E.cinematic);
+      const t = (frame - a.frame) / (b.frame - a.frame);
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const length = Math.hypot(dx, dy);
+      if (length < 1e-6) return { x: b.x, y: b.y };
+      const side = i % 2 === 1 ? 1 : -1;
+      const bow = ARC * length * Math.sin(Math.PI * progress) * side;
+      // The overshoot rides the last 45% of the segment's time and is zero again on arrival.
+      const overshoot = t > 0.55 ? OVERSHOOT * length * Math.sin((Math.PI * (t - 0.55)) / 0.45) : 0;
+      const along = progress * length + overshoot;
       return {
-        x: tween(frame, [a.frame, b.frame], [a.x, b.x], E.cinematic),
-        y: tween(frame, [a.frame, b.frame], [a.y, b.y], E.cinematic),
+        x: a.x + (dx / length) * along + (-dy / length) * bow,
+        y: a.y + (dy / length) * along + (dx / length) * bow,
       };
     }
   }
   return { x: last.x, y: last.y };
 }
+
+/** The cursor's position at `frame` along `path`, exactly as CursorActor draws it. */
+export const cursorPositionAt = (path: CursorKeyframe[], frame: number): { x: number; y: number } =>
+  positionAt([...path].sort((a, b) => a.frame - b.frame), frame);
 
 export const CursorActor: React.FC<{
   path: CursorKeyframe[];

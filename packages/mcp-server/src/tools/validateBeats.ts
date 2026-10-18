@@ -38,9 +38,25 @@ const MOBILE_DEVICES = ["android", "ios-simulator"] as const;
 /** Android's screenrecord truncates silently past this, so a longer beat is a latent bug. */
 const ANDROID_MAX_SECONDS = 180;
 
-function wordCount(text: string): number {
+export function wordCount(text: string): number {
   const trimmed = text.trim();
   return trimmed.length === 0 ? 0 : trimmed.split(/\s+/).length;
+}
+
+/**
+ * SCRIPT.md's pacing rule for one spoken line: 2.3 to 2.9 words per second over the beat's length.
+ * `message` is the failure to report, or null when the line is inside the budget. validate_beats and
+ * check_script both read the budget from here, so there is one number.
+ */
+export function voPaceCheck(vo: string, seconds: number): { words: number; pace: number; message: string | null } {
+  const words = wordCount(vo);
+  const pace = words / seconds;
+  const message =
+    pace < MIN_PACE || pace > MAX_PACE
+      ? `VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
+        `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`
+      : null;
+  return { words, pace, message };
 }
 
 /**
@@ -172,14 +188,8 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
         if (hasDuration) {
           const seconds = (duration as number) / fps;
           if (seconds > 0) {
-            const words = wordCount(vo as string);
-            const pace = words / seconds;
-            if (pace < MIN_PACE || pace > MAX_PACE) {
-              errors.push(
-                `${label}: VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
-                  `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`,
-              );
-            }
+            const pace = voPaceCheck(vo as string, seconds);
+            if (pace.message !== null) errors.push(`${label}: ${pace.message}`);
           }
         }
       }

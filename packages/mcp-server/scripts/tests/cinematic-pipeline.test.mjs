@@ -484,4 +484,53 @@ try {
   await browser.close({ silent: true });
 }
 
+console.log("\n== render_stills crop: a zoomed look at small text, rendered at a higher scale ==");
+{
+  const { runRenderStills } = require(path.join(distDir, "tools", "renderStills.js"));
+  makeVideo("tcrop", [{ color: "#0b0e14", duration: 60 }]);
+  fs.writeFileSync(
+    path.join(root, "src", "videos", "tcrop", "custom-scenes", "S0.tsx"),
+    `import React from "react";
+import { AbsoluteFill } from "remotion";
+
+export const S0: React.FC = () => (
+  <AbsoluteFill style={{ background: "#0b0e14" }}>
+    <div style={{ position: "absolute", left: 200, top: 300, fontSize: 14, color: "#ffffff", fontFamily: "Inter, sans-serif" }}>Fine print 0123456789 abcdefgh</div>
+  </AbsoluteFill>
+);
+`,
+    "utf8",
+  );
+  const crop = { x: 190, y: 290, width: 320, height: 40 };
+  const result = await runRenderStills({ projectRoot: root, videoName: "tcrop", frames: [10], crop, findings: false, contactGrid: false });
+  const still = result.stills[0];
+  const cropInfo = still.crop;
+  check("render_stills with crop writes the whole still and a crop next to it", fs.existsSync(still.path) && !!cropInfo && fs.existsSync(cropInfo.path) && cropInfo.path.endsWith("-crop.png"));
+  check(`...the whole still is the composition's own size (${still.width}x${still.height})`, still.width === 1920 && still.height === 1080);
+  check(`...the crop is rendered at ${cropInfo?.scale}x, not stretched: ${crop.width * 3}x${crop.height * 3}`, cropInfo?.scale === 3 && cropInfo.width === 960 && cropInfo.height === 120);
+  const cropMeta = await sharp(cropInfo.path).metadata();
+  check("...and the file on disk is exactly that size", cropMeta.width === 960 && cropMeta.height === 120);
+
+  // The point of rendering at scale rather than resizing: more real detail. Count steep horizontal
+  // steps (text edges) in the crop against the same region of the 1x still stretched to the same size.
+  const steep = async (input) => {
+    const { data, info } = await input.greyscale().raw().toBuffer({ resolveWithObject: true });
+    let n = 0;
+    for (let y = 0; y < info.height; y++) for (let x = 1; x < info.width; x++) if (Math.abs(data[y * info.width + x] - data[y * info.width + x - 1]) > 100) n++;
+    return n;
+  };
+  const real = await steep(sharp(cropInfo.path));
+  const stretched = await steep(sharp(still.path).extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height }).resize(960, 120, { kernel: "lanczos3" }));
+  check(`the rendered crop has far more sharp edges than the 1x still stretched to the same size (${real} against ${stretched} steep steps)`, real > stretched * 2);
+  check("control: with no crop given a still carries no crop entry", (await runRenderStills({ projectRoot: root, videoName: "tcrop", frames: [10], findings: false, contactGrid: false, outDir: path.join("output", "stills", "tcrop-plain") })).stills[0].crop === undefined);
+
+  let outside = null;
+  try {
+    await runRenderStills({ projectRoot: root, videoName: "tcrop", frames: [10], crop: { x: 1800, y: 1000, width: 400, height: 200 }, findings: false });
+  } catch (err) {
+    outside = err;
+  }
+  check("control: a crop reaching outside the composition throws, saying so", outside !== null && /crop/.test(String(outside.message)) && /1920x1080/.test(String(outside.message)));
+}
+
 finish();

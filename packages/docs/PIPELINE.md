@@ -205,6 +205,10 @@ draft render:
 - `perBeat: "review"` renders five frames per beat (start+3, 25%, mid, 75%, end-3); the first and
   last sit just inside the beat, so adjacent beats show both sides of every cut. `perBeat: N`
   spreads N frames start to end, `at` picks one, `frames` takes exact composition frames.
+- `crop: { x, y, width, height }` (composition pixels) is for small text. Each still also gets
+  `<name>-crop.png`, that region re-rendered at a higher scale (a whole number, nearest 960 px
+  wide, at most 4x) rather than stretched from the 1x still, which would only show the blur. A
+  region outside the composition is an error.
 - It writes a labelled contact grid (one row per beat when `perBeat` is used: across is time
   within the beat, down is the cut to the next). `round` keeps each round in its own folder.
 - It also returns the numeric findings `validate_scenes` makes in render mode (cropping, text

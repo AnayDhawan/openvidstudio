@@ -794,7 +794,7 @@ export const Install: React.FC = () => (
         <TerminalReplay
           width={1400}
           steps={[
-            { type: "cmd", text: "npx -y @openvidstudio/mcp-server" },
+            { type: "cmd", text: "node packages/mcp-server/dist/stdio.js" },
             { type: "out", lines: [{ text: "connected over stdio", color: color.success, glow: true }] },
           ]}
         />

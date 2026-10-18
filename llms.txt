@@ -1,14 +1,19 @@
 # openvidstudio
 
-> Free, open-source video-generation add-on for any software project, driven entirely through MCP tools
+> An open-source video pipeline for AI coding agents. A real browser captures your real product, and the agent plans, narrates, scores and renders the video locally, through MCP tools.
 
-openvidstudio is an open-source node project maintained at
+openvidstudio is a Node project maintained at
 [github.com/AnayDhawan/openvidstudio](https://github.com/AnayDhawan/openvidstudio) under the
 Apache-2.0 license. openvidstudio's own code is free for everyone, including companies of any
-size. It renders through Remotion, which is free for individuals and for-profit companies with
-up to 3 employees; a larger company needs a separate Remotion Company License
-([remotion.pro](https://www.remotion.pro/license)) to render with it. See README's Tech stack
-section.
+size. It renders through Remotion, which is free for individuals, non-profits, evaluation use and
+for-profit companies with up to 3 employees; a larger company needs a separate Remotion Company
+License ([remotion.pro](https://www.remotion.pro/license)) to render with it. See the README's
+License section.
+
+Install from a clone (`pnpm install`, `pnpm build`, then point your MCP client at
+`packages/mcp-server/dist/stdio.js`). The npm package `@openvidstudio/mcp-server` is behind the
+repo (0.1.0, about 27 tools, no director mode) because publishing is blocked, so do not rely on
+`npx` for the current tool set.
 
 This file follows the [llms.txt](https://llmstxt.org/) convention: a short, stable,
 plain-language map of the project for language models and the people using them. Keep it
@@ -21,21 +26,21 @@ current when the links below move, and keep it short: it is an index, not docume
 - [CHANGELOG](https://github.com/AnayDhawan/openvidstudio/blob/main/CHANGELOG.md): what changed
   in each release, newest first.
 - [TOOLS](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/TOOLS.md): every
-  MCP tool with a one-line purpose, generated from the server's own registry (including
-  `compose_score`, the original-score tool, and `render_stills`, the review loop's instrument).
+  MCP tool with a one-line purpose, generated from the server's own registry.
 - [CREATIVE](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/CREATIVE.md): the
   craft of directing a video: story, hook, motif, copy, pacing to music, camera, review rubric.
 - [PIPELINE](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/PIPELINE.md) and
   [API](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/API.md): the order of
   work, and every `@openvidstudio/core` primitive with a rendered still.
+- [PLANNING](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/PLANNING.md): the
+  intake flow an agent follows before it writes or renders anything.
 
 ## Contributing
 
 - [CONTRIBUTING](https://github.com/AnayDhawan/openvidstudio/blob/main/CONTRIBUTING.md): setup,
-  the verification commands (`pnpm --filter <package> build`/`test`), and what a good pull
-  request looks like.
+  where things live, how to run the tests, and what a good pull request looks like.
 - [Code of Conduct](https://github.com/AnayDhawan/openvidstudio/blob/main/CODE_OF_CONDUCT.md)
-- Good first issues: Check the issues tab for the current list.
+- [Good first issues](https://github.com/AnayDhawan/openvidstudio/labels/good%20first%20issue)
 
 ## Security
 

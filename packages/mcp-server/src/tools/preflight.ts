@@ -151,18 +151,28 @@ async function urlResponds(url: string, timeoutMs = 4000): Promise<boolean> {
   }
 }
 
+/** The oldest Node major openvidstudio supports. It matches the packages' `engines` field and what CI runs. */
+export const MIN_NODE_MAJOR = 20;
+
+/** Whether a `process.versions.node` string is new enough, and what to tell the user if not. */
+export function checkNodeVersion(version: string): { ok: boolean; fix?: string } {
+  const major = Number.parseInt(version.split(".")[0] ?? "0", 10);
+  if (major >= MIN_NODE_MAJOR) return { ok: true };
+  return { ok: false, fix: `Install Node ${MIN_NODE_MAJOR} or newer from nodejs.org.` };
+}
+
 export async function runPreflight(input: PreflightInput): Promise<PreflightResult> {
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const config = loadConfig(projectRoot);
   const appUrl = input.appUrl ?? config.capture.appUrl;
   const checks: Check[] = [];
 
-  const nodeMajor = Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10);
+  const nodeVersion = checkNodeVersion(process.versions.node);
   checks.push({
     name: "node",
-    ok: nodeMajor >= 18,
+    ok: nodeVersion.ok,
     detail: `node ${process.versions.node}`,
-    fix: nodeMajor >= 18 ? undefined : "Install Node 18 or newer from nodejs.org.",
+    fix: nodeVersion.fix,
     blocking: true,
   });
 

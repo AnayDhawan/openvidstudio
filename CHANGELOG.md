@@ -9,6 +9,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Docs
 
+- **README and CONTRIBUTING rewritten to be plainer and more welcoming.** The README now explains
+  what the tool does in five steps, leads the install with the clone route, and says outright that
+  `npx -y @openvidstudio/mcp-server` installs 0.1.0 from September (about 27 tools, no director
+  mode) while publishing is blocked. It no longer claims `@openvidstudio/capture` is published
+  (it is not on npm) or that `npx` gives forty tools. Node is "20 or newer" everywhere, matching the
+  packages' `engines` field and CI. CONTRIBUTING covers setup, where things live, how to run one
+  test or all of them, and what a good pull request looks like. `llms.txt` and the package
+  descriptions match.
 - **README and llms.txt now disclose Remotion's own license, not just openvidstudio's.**
   openvidstudio's code is Apache-2.0 and free for anyone, but it renders through Remotion,
   which is free only for individuals, non-profits, evaluation use, and for-profit companies
@@ -443,6 +451,9 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **`preflight` asks for Node 20, not 18.** The packages declare `>=20` and CI runs 20, so a Node 18
+  machine passed `preflight` and then failed later. The check is now `checkNodeVersion`, exported and
+  tested.
 - **Depth of field is off by default and never on text.** `DirectedShot`'s `depthOfField` defaulted
   to 6, which blurred product text outside a small ellipse. It now defaults to 0; when it is on,
   `protect` rectangles stay sharp (edge energy 1.000x against 0.006x unprotected), the cursor is

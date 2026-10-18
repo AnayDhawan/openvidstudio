@@ -84,7 +84,7 @@ if (!fs.existsSync(templateNodeModules) || !haveFfmpeg) {
     storyDevice: { device: "a ticking clock", reason: "the product is about the weekly rhythm." },
     arc: { hook: "The week never ends.", tension: "Tasks pile up.", turn: "One click captures a task.", proof: "The real board, live.", payoff: "The week ends on time.", cta: "Try the board." },
     designSystem: { path: `src/videos/${VIDEO}/design.ts`, paletteRationale: "the brand's calm blues", motif: "rounded-soft", motifRationale: "rounded cards in the product", motionRationale: "slow drift" },
-    music: { bpm: 100, key: "A minor", sectionMap: [{ label: "intro", startBar: 1, endBar: 4 }, { label: "peak", startBar: 5, endBar: 12 }], impactPoints: [{ name: "turn", bar: 6, note: "the turn lands" }] },
+    music: { bpm: 100, key: "A minor", sectionMap: [{ label: "intro", startBar: 1, endBar: 5 }, { label: "peak", startBar: 5, endBar: 13 }], impactPoints: [{ name: "turn", bar: 6, note: "the turn lands" }] },
     shotList: [
       { beatId: "hook", real: true, provenance: "capture of the board", focalPoint: "the backlog" },
       { beatId: "turn", real: true, provenance: "capture of the new task flow", focalPoint: "the new task button" },

@@ -207,7 +207,7 @@ try {
         storyDevice: { device: "a ticking clock", reason: "the product is about the weekly rhythm." },
         arc: { hook: "A busy board.", tension: "Work piles up.", turn: "One click captures a task.", proof: "The real board and the real Insights page.", payoff: "The streak says it landed.", cta: "Try the board." },
         designSystem: { path: `src/videos/${videoName}/design.ts`, paletteRationale: "extract_brand found the orange and teal pair.", motif: "rounded-soft", motifRationale: "the product's cards are rounded.", motionRationale: "slow drift" },
-        music: { bpm: 96, key: "D major", sectionMap: [{ label: "intro", startBar: 1, endBar: 2 }, { label: "peak", startBar: 3, endBar: 5 }], impactPoints: [{ name: "turn", bar: 3, note: "the click" }] },
+        music: { bpm: 96, key: "D major", sectionMap: [{ label: "intro", startBar: 1, endBar: 3 }, { label: "peak", startBar: 3, endBar: 6 }], impactPoints: [{ name: "turn", bar: 3, note: "the click" }] },
         shotList: [
           { beatId: "hook", real: false, provenance: "a constructed title card", whyConstructed: "a title card is not product UI", focalPoint: "the product name" },
           { beatId: "board", real: true, provenance: "capture_screenshot of the board", focalPoint: "the new task button" },

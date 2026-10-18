@@ -49,8 +49,8 @@ console.log("\n== Part 51: write_brief -- validation and the two-file write (C1)
       bpm: 100,
       key: "A minor",
       sectionMap: [
-        { label: "intro", startBar: 1, endBar: 4 },
-        { label: "groove", startBar: 5, endBar: 16 },
+        { label: "intro", startBar: 1, endBar: 5 },
+        { label: "groove", startBar: 5, endBar: 17 },
       ],
       impactPoints: [{ name: "turn", bar: 9, note: 'beat "turn" starts at bar 9' }],
     },
@@ -85,6 +85,16 @@ console.log("\n== Part 51: write_brief -- validation and the two-file write (C1)
     "a section with endBar before startBar is rejected",
     !validateBriefLogic(backwardsSection).valid && validateBriefLogic(backwardsSection).errors.some((e) => e.includes("endBar")),
   );
+
+  const gapped = { ...validBrief, music: { ...validBrief.music, sectionMap: [{ label: "intro", startBar: 1, endBar: 4 }, { label: "groove", startBar: 5, endBar: 9 }] } };
+  check(
+    "a gap between sections is rejected here, before compose_score would reject it, naming both sections",
+    !validateBriefLogic(gapped).valid && validateBriefLogic(gapped).errors.some((e) => /sectionMap\[1\]\.startBar \(5\) must equal music\.sectionMap\[0\]\.endBar \(4\)/.test(e)),
+  );
+  const overlapped = { ...validBrief, music: { ...validBrief.music, sectionMap: [{ label: "intro", startBar: 1, endBar: 6 }, { label: "groove", startBar: 5, endBar: 9 }] } };
+  check("an overlap between sections is rejected the same way", !validateBriefLogic(overlapped).valid && validateBriefLogic(overlapped).errors.some((e) => /must equal/.test(e)));
+  const emptySection = { ...validBrief, music: { ...validBrief.music, sectionMap: [{ label: "intro", startBar: 1, endBar: 1 }] } };
+  check("a section of zero bars is rejected", !validateBriefLogic(emptySection).valid && validateBriefLogic(emptySection).errors.some((e) => /must be greater than startBar/.test(e)));
 
   const unexplainedConstructed = {
     ...validBrief,

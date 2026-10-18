@@ -254,8 +254,23 @@ export function validateBriefLogic(briefJson: unknown): ValidateBriefResult {
         if (!hasStart) errors.push(`${prefix}.startBar must be a positive number`);
         const hasEnd = typeof raw.endBar === "number" && raw.endBar > 0;
         if (!hasEnd) errors.push(`${prefix}.endBar must be a positive number`);
-        if (hasStart && hasEnd && (raw.endBar as number) < (raw.startBar as number)) {
-          errors.push(`${prefix}.endBar (${raw.endBar}) must be >= startBar (${raw.startBar})`);
+        if (hasStart && hasEnd && (raw.endBar as number) <= (raw.startBar as number)) {
+          errors.push(`${prefix}.endBar (${raw.endBar}) must be greater than startBar (${raw.startBar})`);
+        }
+      });
+      // compose_score consumes this map as consecutive section lengths and rejects a gap or an
+      // overlap, so a brief that passes here has to be one it can compose. endBar is the first bar
+      // of the next section, not the last bar of this one.
+      const sections = music.sectionMap as unknown[];
+      sections.forEach((raw, i) => {
+        if (i === 0 || !isPlainObject(raw)) return;
+        const prev = sections[i - 1];
+        if (!isPlainObject(prev)) return;
+        if (typeof prev.endBar === "number" && typeof raw.startBar === "number" && prev.endBar !== raw.startBar) {
+          errors.push(
+            `music.sectionMap[${i}].startBar (${raw.startBar}) must equal music.sectionMap[${i - 1}].endBar (${prev.endBar}): ` +
+              `sections connect exactly, and endBar is the first bar of the next section (compose_score rejects a gap or overlap)`,
+          );
         }
       });
     }

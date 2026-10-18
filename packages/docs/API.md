@@ -830,6 +830,36 @@ overlay, tokens instead of hex.
 
 ---
 
+## Catalog primitives
+
+Small components that are not in `@openvidstudio/core` but are in the motion primitives catalog:
+`catalog_motion_primitives` finds one and `add_motion_primitive` copies its source into the video's
+`primitives/` folder, where it is yours to edit. Each imports only `react`, `remotion` and core.
+
+### `CollageBroll`
+
+![A red paper field with two cardstock cards, halftone figures on them, a green arrow between and a yellow disc above](img/api/collagebroll.png)
+
+A halftone paper-collage b-roll beat for an abstract idea between screen captures, made in code: free, and
+nothing in it is invented footage. A flat colour field, black and white halftone cut-outs, a few cardstock accents,
+thin cream keylines, soft low-opacity shadows and fine paper grain. Pieces assemble structure first (structure,
+then people or key cards, then connectors, then the result): each enters from empty space on a spring, in a set
+order, with no fade and no zoom. It is inspired by the look of the MIT-licensed `gbro-collage-broll` skill, which
+generates it with a paid model API; this is written from scratch and calls no model.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `pieces` | `CollagePiece[]` | required | See below |
+| `background` | `string` | `#D9503F` | The flat colour field |
+| `order` | `("structure" \| "people" \| "connector" \| "result")[]` | that order | The order the roles arrive in; within a role, as listed |
+| `at` | `number` | `0` | Composition frame the first piece starts to move. Before it the frame is the empty field |
+| `stagger` | `number` | `10` | Frames between one piece starting and the next |
+
+A piece is `{ src | shape, x, y, width, aspect?, rotation?, tone?, role? }`: `x`, `y` and `width` are fractions of the
+frame (so it follows the frame size); `src` is an image (`staticFile(...)`) cut out in halftone; `shape` is
+`"card"`, `"circle"`, `"person"` or `"arrow"`; `tone` is `"halftone"` (default), `"red"`, `"blue"`, `"yellow"`,
+`"green"` or `"cream"`; `role` says when it arrives (default `"structure"`).
+
 ## Supernova: `@openvidstudio/stem`
 
 The primitives for STEM lesson videos (production mode `"supernova"`, 1080x1920). A project made

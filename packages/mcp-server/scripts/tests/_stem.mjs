@@ -22,11 +22,11 @@ export { sharp, bridge };
  * A supernova project of `width` x `height` with one beat per scene. `scenes` maps a beat id to
  * { source, duration }; beats run end to end. Returns where each beat starts.
  */
-export function lessonProject({ prefix = "ovs-stem-", width, height, scenes, extraFiles = {} }) {
+export function lessonProject({ prefix = "ovs-stem-", width, height, scenes, extraFiles = {}, mode = "supernova" }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   for (let attempt = 1; ; attempt++) {
     try {
-      runInitProject({ name: "lesson", projectRoot: root, mode: "supernova", videoConfig: { fps: 30, width, height } });
+      runInitProject({ name: "lesson", projectRoot: root, ...(mode === "supernova" ? { mode } : {}), videoConfig: { fps: 30, width, height } });
       break;
     } catch (err) {
       if (attempt >= 3) throw err;
@@ -46,7 +46,7 @@ export function lessonProject({ prefix = "ovs-stem-", width, height, scenes, ext
     beats.push({ id, start, duration, scene: `./custom-scenes/${component}.tsx` });
     start += duration;
   }
-  fs.writeFileSync(path.join(videoDir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", production: { mode: "supernova" }, beats }));
+  fs.writeFileSync(path.join(videoDir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", ...(mode === "supernova" ? { production: { mode } } : {}), beats }));
   for (const [rel, content] of Object.entries(extraFiles)) {
     const file = path.join(root, rel);
     fs.mkdirSync(path.dirname(file), { recursive: true });

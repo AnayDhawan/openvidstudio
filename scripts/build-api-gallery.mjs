@@ -194,6 +194,35 @@ scene(
 );
 add("g-directedshot", "GDirected", { 0: "directedshot-start", 80: "directedshot-end" });
 
+// CollageBroll comes from the motion primitives catalog: installed into the project with add_motion_primitive,
+// exactly as an agent would, then used in a scene.
+{
+  const { runAddMotionPrimitive } = require(path.join(dist, "tools", "motionPrimitives.js"));
+  runAddMotionPrimitive({ projectRoot: project, videoName: "gallery", name: "collage-broll" });
+  fs.writeFileSync(
+    path.join(scenesDir, "GCollage.tsx"),
+    `import React from "react";
+import { CollageBroll } from "../primitives/CollageBroll";
+
+export const GCollage: React.FC = () => (
+  <CollageBroll
+    at={0}
+    stagger={5}
+    pieces={[
+      { shape: "card", tone: "blue", x: 0.28, y: 0.46, width: 0.24, aspect: 0.72, rotation: -3, role: "structure" },
+      { shape: "card", tone: "cream", x: 0.72, y: 0.46, width: 0.24, aspect: 0.72, rotation: 2, role: "structure" },
+      { shape: "person", tone: "halftone", x: 0.28, y: 0.52, width: 0.1, aspect: 1.2, role: "people" },
+      { shape: "person", tone: "halftone", x: 0.72, y: 0.52, width: 0.1, aspect: 1.2, role: "people" },
+      { shape: "arrow", tone: "green", x: 0.5, y: 0.46, width: 0.13, aspect: 0.5, role: "connector" },
+      { shape: "circle", tone: "yellow", x: 0.5, y: 0.17, width: 0.12, role: "result" },
+    ]}
+  />
+);
+`,
+  );
+  add("g-collage", "GCollage", { 85: "collagebroll" });
+}
+
 fs.writeFileSync(
   path.join(scenesDir, "GClock.tsx"),
   [

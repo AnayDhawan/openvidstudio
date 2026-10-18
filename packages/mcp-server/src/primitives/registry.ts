@@ -507,12 +507,212 @@ export const BeatTimelineStrip: React.FC<BeatTimelineStripProps> = ({
 };
 `;
 
+const collageBroll: MotionPrimitive = {
+  name: "collage-broll",
+  title: "Halftone paper-collage b-roll",
+  description:
+    "A flat colour field, black and white halftone cut-outs, cardstock accents, cream keylines, soft shadows and " +
+    "paper grain. Pieces assemble structure first, then people, connectors and the result, each entering from empty " +
+    "space on a spring with no fade or zoom. A free, honest b-roll beat for an abstract idea between screen captures.",
+  keywords: ["collage", "b-roll", "broll", "halftone", "paper", "cutout", "cut-out", "abstract", "diagram", "assembly", "cardstock"],
+  componentName: "CollageBroll",
+  source: "",
+};
+collageBroll.source = `${HEADER(collageBroll)}
+import React from "react";
+import { useCurrentFrame, useVideoConfig, spring } from "remotion";
+import { jitter, SPRING } from "@openvidstudio/core";
+
+/** The roles a piece can play, in the order the collage assembles by default. */
+export type CollageRole = "structure" | "people" | "connector" | "result";
+
+export type CollageTone = "halftone" | "red" | "blue" | "yellow" | "green" | "cream";
+
+export interface CollagePiece {
+  /** An image (staticFile(...)). It is cut out in black and white halftone. Give this or shape. */
+  src?: string;
+  /** A built-in shape. "card" is a rectangle, "person" a head and shoulders, "arrow" a connector. */
+  shape?: "card" | "circle" | "person" | "arrow";
+  /** Centre, as a fraction of the frame width and height (0 to 1). */
+  x: number;
+  y: number;
+  /** Width as a fraction of the frame width. Height follows aspect (default 1). */
+  width: number;
+  aspect?: number;
+  /** Degrees, clockwise. Default 0. */
+  rotation?: number;
+  /** "halftone" is black and white halftone; the others are flat cardstock accents. Default "halftone". */
+  tone?: CollageTone;
+  /** When in the assembly it arrives. Default "structure". */
+  role?: CollageRole;
+}
+
+export interface CollageBrollProps {
+  pieces: CollagePiece[];
+  /** The flat colour field. Default a warm paper red. */
+  background?: string;
+  /** The order the roles arrive in. Default structure, people, connector, result. */
+  order?: CollageRole[];
+  /** Composition frame the first piece starts to move. Default 0. */
+  at?: number;
+  /** Frames between one piece starting and the next. Default 10. */
+  stagger?: number;
+}
+
+const CARDSTOCK: Record<Exclude<CollageTone, "halftone">, string> = {
+  red: "#E5483A",
+  blue: "#2E6FD8",
+  yellow: "#F2C230",
+  green: "#2FA36B",
+  cream: "#F2E8D5",
+};
+const INK = "#15130F";
+const KEYLINE = "#F2E8D5";
+const DEFAULT_ORDER: CollageRole[] = ["structure", "people", "connector", "result"];
+
+/** Pieces in the order they arrive: by role, then as given. */
+export function assemblyOrder(pieces: CollagePiece[], order: CollageRole[] = DEFAULT_ORDER): number[] {
+  const rank = (p: CollagePiece) => {
+    const i = order.indexOf(p.role ?? "structure");
+    return i < 0 ? order.length : i;
+  };
+  return pieces.map((_, i) => i).sort((a, b) => rank(pieces[a]) - rank(pieces[b]) || a - b);
+}
+
+const Shape: React.FC<{ piece: CollagePiece; w: number; h: number; id: string }> = ({ piece, w, h, id }) => {
+  const tone = piece.tone ?? "halftone";
+  const flat = tone === "halftone" ? INK : CARDSTOCK[tone];
+  const kind = piece.shape ?? "card";
+  const dots = "ovs-dots-" + id;
+  const cell = Math.max(8, w * 0.035);
+  const fill = tone === "halftone" ? "url(#" + dots + ")" : flat;
+  const stroke = { stroke: KEYLINE, strokeWidth: Math.max(2, w * 0.012), strokeLinejoin: "round" as const };
+  const body =
+    kind === "circle" ? (
+      <circle cx={w / 2} cy={h / 2} r={Math.min(w, h) / 2 - 3} fill={fill} {...stroke} />
+    ) : kind === "person" ? (
+      <g fill={fill} {...stroke}>
+        <circle cx={w / 2} cy={h * 0.28} r={w * 0.2} />
+        <path d={"M " + w * 0.1 + " " + h * 0.96 + " Q " + w * 0.1 + " " + h * 0.52 + " " + w / 2 + " " + h * 0.52 + " Q " + w * 0.9 + " " + h * 0.52 + " " + w * 0.9 + " " + h * 0.96 + " Z"} />
+      </g>
+    ) : kind === "arrow" ? (
+      <g fill={fill} {...stroke}>
+        <path d={"M 3 " + h * 0.38 + " L " + w * 0.7 + " " + h * 0.38 + " L " + w * 0.7 + " " + h * 0.12 + " L " + (w - 3) + " " + h / 2 + " L " + w * 0.7 + " " + h * 0.88 + " L " + w * 0.7 + " " + h * 0.62 + " L 3 " + h * 0.62 + " Z"} />
+      </g>
+    ) : (
+      <rect x={3} y={3} width={w - 6} height={h - 6} rx={w * 0.02} fill={fill} {...stroke} />
+    );
+  return (
+    <svg width={w} height={h} viewBox={"0 0 " + w + " " + h} style={{ overflow: "visible", display: "block" }}>
+      <defs>
+        {/* The halftone screen: a grid of dots, big enough to read at a phone's size. */}
+        <pattern id={dots} width={cell} height={cell} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="100%" height="100%" fill={KEYLINE} />
+          <circle cx={cell / 2} cy={cell / 2} r={cell * 0.34} fill={INK} />
+        </pattern>
+      </defs>
+      {body}
+    </svg>
+  );
+};
+
+const Cutout: React.FC<{ piece: CollagePiece; w: number; h: number; id: string }> = ({ piece, w, h, id }) => {
+  const f = "ovs-halftone-" + id;
+  const dots = "ovs-screen-" + id;
+  const cell = Math.max(8, w * 0.035);
+  return (
+    <svg width={w} height={h} viewBox={"0 0 " + w + " " + h} style={{ overflow: "visible", display: "block" }}>
+      <defs>
+        {/* Grey, then posterised hard to a few levels of black and white: a cut-out photocopy. */}
+        <filter id={f} colorInterpolationFilters="sRGB">
+          <feColorMatrix type="matrix" values="0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0.33 0.33 0.33 0 0  0 0 0 1 0" />
+          <feComponentTransfer>
+            <feFuncR type="discrete" tableValues="0 0.25 0.75 1" />
+            <feFuncG type="discrete" tableValues="0 0.25 0.75 1" />
+            <feFuncB type="discrete" tableValues="0 0.25 0.75 1" />
+          </feComponentTransfer>
+        </filter>
+        <pattern id={dots} width={cell} height={cell} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="100%" height="100%" fill="#ffffff" />
+          <circle cx={cell / 2} cy={cell / 2} r={cell * 0.3} fill="#9a9a9a" />
+        </pattern>
+      </defs>
+      <image href={piece.src} width={w} height={h} preserveAspectRatio="xMidYMid slice" filter={"url(#" + f + ")"} />
+      <rect width={w} height={h} fill={"url(#" + dots + ")"} style={{ mixBlendMode: "multiply" }} />
+      <rect x={1.5} y={1.5} width={w - 3} height={h - 3} fill="none" stroke={KEYLINE} strokeWidth={Math.max(2, w * 0.012)} />
+    </svg>
+  );
+};
+
+/**
+ * A halftone paper-collage b-roll beat for an abstract idea, made in code, so it is free and nothing in
+ * it is invented footage. A flat colour field, black and white halftone cut-outs, a few cardstock accents,
+ * thin cream keylines, soft low-opacity shadows and fine paper grain. Pieces assemble structure first
+ * (structure, then people or key cards, then connectors, then the result): each one enters from empty space
+ * on a spring, in a set order, with no fade and no zoom. A pure function of the frame; sizes come from
+ * useVideoConfig(), and pieces are placed as fractions of the frame.
+ */
+export const CollageBroll: React.FC<CollageBrollProps> = ({ pieces, background = "#D9503F", order, at = 0, stagger = 10 }) => {
+  const frame = useCurrentFrame();
+  const { width, height, fps } = useVideoConfig();
+  const sequence = assemblyOrder(pieces, order);
+  return (
+    <div style={{ position: "absolute", left: 0, top: 0, width: width, height: height, background: background, overflow: "hidden" }} data-collage-broll="">
+      {pieces.map((piece, i) => {
+        const w = piece.width * width;
+        const h = w * (piece.aspect ?? 1);
+        const tx = piece.x * width;
+        const ty = piece.y * height;
+        const slot = sequence.indexOf(i);
+        const start = at + slot * stagger;
+        const s = spring({ frame: frame - start, fps, config: SPRING.soft });
+        // Enters from beyond the nearest of four edges, picked by a seeded hash of the piece's index.
+        const edge = Math.floor(jitter(i, 7) * 4);
+        const far = Math.max(w, h) * 1.2;
+        const sx = edge === 0 ? -far : edge === 1 ? width + far : tx;
+        const sy = edge === 2 ? -far : edge === 3 ? height + far : ty;
+        const cx = sx + (tx - sx) * s;
+        const cy = sy + (ty - sy) * s;
+        const id = "p" + i;
+        return (
+          <div
+            key={i}
+            data-collage-piece={i}
+            data-collage-role={piece.role ?? "structure"}
+            style={{
+              position: "absolute",
+              left: cx - w / 2,
+              top: cy - h / 2,
+              width: w,
+              height: h,
+              transform: "rotate(" + (piece.rotation ?? 0) + "deg)",
+              filter: "drop-shadow(0px " + Math.round(w * 0.025) + "px " + Math.round(w * 0.04) + "px rgba(20,12,8,0.22))",
+            }}
+          >
+            {piece.src ? <Cutout piece={piece} w={w} h={h} id={id} /> : <Shape piece={piece} w={w} h={h} id={id} />}
+          </div>
+        );
+      })}
+      {/* Paper grain: fixed-seed noise, so the same frame is the same pixels. */}
+      <svg width={width} height={height} style={{ position: "absolute", left: 0, top: 0, pointerEvents: "none", mixBlendMode: "multiply", opacity: 0.07 }}>
+        <filter id="ovs-grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" stitchTiles="stitch" />
+          <feColorMatrix type="saturate" values="0" />
+        </filter>
+        <rect width={width} height={height} filter="url(#ovs-grain)" />
+      </svg>
+    </div>
+  );
+};
+`;
+
 export const MOTION_PRIMITIVES: MotionPrimitive[] = [
   countUpStat,
   cardStack,
   logoOutro,
   typewriterLine,
   beatTimelineStrip,
+  collageBroll,
 ];
 
 function haystack(p: MotionPrimitive): string {

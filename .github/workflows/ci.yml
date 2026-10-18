@@ -51,7 +51,7 @@ jobs:
       - run: pnpm --filter @openvidstudio/capture build
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
-      - run: npx --yes playwright install --with-deps chromium
+      - run: pnpm --filter @openvidstudio/capture exec playwright install --with-deps chromium
       # A2: every scene imports the core index, so a @remotion/google-fonts loader
       # anywhere in it (TerminalReplay/RepoCta/ChecklistPanel used to have one each)
       # reached fonts.gstatic.com at module scope and crashed any render with no

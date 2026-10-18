@@ -193,7 +193,9 @@ function readIfExists(root: string, names: string[]): { name: string; content: s
 
 function listFiles(root: string, max = 4000): string[] {
   const out: string[] = [];
-  const skip = new Set(["node_modules", ".git", "dist", "build", ".next", "out", "coverage"]);
+  // evals and reference hold sample apps and lifted code that exist to be filmed or read, not the
+  // product itself. Their routes and pages would otherwise read as this repo's own.
+  const skip = new Set(["node_modules", ".git", "dist", "build", ".next", "out", "coverage", "evals", "reference"]);
   const walk = (dir: string): void => {
     if (out.length >= max) return;
     let entries: fs.Dirent[];

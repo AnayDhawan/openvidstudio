@@ -15,6 +15,7 @@
     "public"
   ],
   "peerDependencies": {
+    "@remotion/motion-blur": "4.0.534",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "remotion": "4.0.534"
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",
     "@fontsource/jetbrains-mono": "^5.3.0",
+    "@remotion/motion-blur": "4.0.534",
     "@types/react": "19.3.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",

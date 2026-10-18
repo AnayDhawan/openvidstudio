@@ -1,7 +1,8 @@
 // DirectedShot (C4): a nested camera rig that turns a flat capture into a directed move.
 // A screenshot or recording on its own is a rectangle. This pushes into the part that matters,
-// tilts the plane slightly so the move reads as depth, softens everything away from the focal
-// point, and lets the cursor act inside the capture, all in the capture's own pixel space.
+// tilts the plane slightly so the move reads as depth, optionally softens everything away from
+// the focal point (off by default: blur smears the text a product video is selling), and lets
+// the cursor act inside the capture, all in the capture's own pixel space.
 //
 //   <DirectedShot
 //     src={staticFile("images/dashboard.png")}
@@ -17,10 +18,19 @@
 
 import React from "react";
 import { Img, useCurrentFrame, useVideoConfig } from "remotion";
-import { CameraRig, resolveCamera } from "./camera";
+import { CameraRig, projectToScreen, resolveCamera } from "./camera";
 import type { CamKeyframe } from "./camera";
 import { CursorActor } from "./CursorActor";
 import type { CursorKeyframe } from "./CursorActor";
+import { E, tween } from "./motion";
+
+/** A rectangle in capture pixels. */
+export interface CaptureRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
 
 export interface DirectedShotProps {
   /** Image URL of the capture, usually staticFile("images/<beat>.png"). Use children for anything else. */
@@ -38,8 +48,16 @@ export interface DirectedShotProps {
   tilt?: { x?: number; y?: number; z?: number };
   /** The frames, local to the scene, the move runs over. Default 0 to 90. */
   move?: { from?: number; to?: number; easing?: (t: number) => number };
-  /** Blur in px applied away from the focal point. 0 turns it off. Default 6. */
+  /**
+   * Blur in px applied away from the focal point. Default 0 (off): blur smears product text, so it
+   * is something to ask for, not something every shot pays for. Never put it on a shot whose text
+   * has to be read, or list those regions in `protect`.
+   */
   depthOfField?: number;
+  /** Regions of the capture, in capture pixels, that stay sharp under `depthOfField`. Hard edged. */
+  protect?: CaptureRect[];
+  /** Rack focus: the sharp region slides from `focus` to this point, in capture pixels, across the move. */
+  rackTo?: { x: number; y: number };
   /** Cursor path and click frames, in capture pixels. */
   cursor?: { path: CursorKeyframe[]; clicks?: number[] };
   /** The box the shot fills. Defaults to the composition frame. */
@@ -66,7 +84,9 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   push = 1.4,
   tilt,
   move,
-  depthOfField = 6,
+  depthOfField = 0,
+  protect,
+  rackTo,
   cursor,
   width,
   height,
@@ -96,11 +116,27 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
     },
   ];
 
-  // Where the focal point is on screen right now, so the sharp region follows it through the move.
+  // The sharp region starts on `focus` and, with rackTo, slides to it across the move.
   const cam = resolveCamera(keyframes, frame);
-  const focusX = W / 2 + (focus.x - cam.x) * cam.scale;
-  const focusY = H / 2 + (focus.y - cam.y) * cam.scale;
-  const mask = `radial-gradient(ellipse ${Math.round(W * 0.34)}px ${Math.round(H * 0.4)}px at ${Math.round(focusX)}px ${Math.round(focusY)}px, transparent 0%, transparent 55%, #000 100%)`;
+  const rack = rackTo ? tween(frame, [from, to], [0, 1], move?.easing ?? E.cinematic) : 0;
+  const sharpAt = rackTo
+    ? { x: focus.x + (rackTo.x - focus.x) * rack, y: focus.y + (rackTo.y - focus.y) * rack }
+    : focus;
+  const sharp = projectToScreen(cam, W, H, sharpAt.x, sharpAt.y);
+  const mask = `radial-gradient(ellipse ${Math.round(W * 0.34)}px ${Math.round(H * 0.4)}px at ${Math.round(sharp.x)}px ${Math.round(sharp.y)}px, transparent 0%, transparent 55%, #000 100%)`;
+
+  // Protected regions are holes in the blur layer. Each rect is projected corner by corner so the
+  // hole follows the picture through the move and through a tilt.
+  const holes = (protect ?? []).map((r) => {
+    const corners = [
+      projectToScreen(cam, W, H, r.x, r.y),
+      projectToScreen(cam, W, H, r.x + r.width, r.y),
+      projectToScreen(cam, W, H, r.x + r.width, r.y + r.height),
+      projectToScreen(cam, W, H, r.x, r.y + r.height),
+    ];
+    return `M${corners.map((c) => `${c.x.toFixed(1)} ${c.y.toFixed(1)}`).join(" L")} Z`;
+  });
+  const clip = holes.length ? `path(evenodd, "M0 0 H${W} V${H} H0 Z ${holes.join(" ")}")` : undefined;
 
   return (
     <div data-ovs-directed-shot="" style={{ position: "relative", width: W, height: H, overflow: "hidden", ...style }}>
@@ -110,10 +146,10 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
         ) : (
           children
         )}
-        {cursor ? <CursorActor path={cursor.path} clicks={cursor.clicks} /> : null}
       </CameraRig>
       {depthOfField > 0 ? (
         <div
+          data-ovs-dof=""
           style={{
             position: "absolute",
             inset: 0,
@@ -122,8 +158,19 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
             WebkitBackdropFilter: `blur(${depthOfField}px)`,
             maskImage: mask,
             WebkitMaskImage: mask,
+            clipPath: clip,
           }}
         />
+      ) : null}
+      {/* The cursor rides a second rig with the same keyframes, above the blur layer. The camera is
+          a pure function of the frame, so it lands exactly where it would have inside the first rig,
+          and depth of field can never smear the one thing the viewer is following. */}
+      {cursor ? (
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+          <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
+            <CursorActor path={cursor.path} clicks={cursor.clicks} />
+          </CameraRig>
+        </div>
       ) : null}
     </div>
   );

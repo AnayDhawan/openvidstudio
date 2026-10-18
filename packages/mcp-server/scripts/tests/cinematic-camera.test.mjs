@@ -633,6 +633,158 @@ const HhInner: React.FC = () => {
   },
 );
 
+// ============================================================ 5. Layer: true Z parallax
+
+const MARKER = '<div style={{ position: "absolute", left: 400, top: 300, width: 24, height: 24, background: "#ff0000" }} />';
+/** A CameraRig on the full composition with one marker in a Layer at the given depth. */
+const parallaxScene = (name, depth, keyframes, rig = "") =>
+  sceneFile(
+    name,
+    ["CameraRig", "Layer"],
+    `<CameraRig keyframes={${keyframes}} ${rig}>
+      <Layer depth={${depth}} maxBlur={0}>${MARKER}</Layer>
+    </CameraRig>`,
+  );
+const REST = "[{ frame: 0, x: 960, y: 540, scale: 1 }, { frame: 30, x: 960, y: 540, scale: 1 }]";
+const PAN = "[{ frame: 0, x: 960, y: 540, scale: 1 }, { frame: 30, x: 1260, y: 540, scale: 1 }]";
+// A 1080x1920 stage seen through a 540x960 window at 0.5x, placed inside the 1920x1080 composition.
+const PORTRAIT_REST = "[{ frame: 0, x: 540, y: 960, scale: 0.5 }, { frame: 30, x: 540, y: 960, scale: 0.5 }]";
+const portraitScene = (name, depth, extra = "") =>
+  sceneFile(
+    name,
+    ["CameraRig", "Layer", "useCamera"],
+    `<div style={{ position: "absolute", left: 100, top: 60 }}>
+      <CameraRig keyframes={${PORTRAIT_REST}} stageWidth={1080} stageHeight={1920} viewportWidth={540} viewportHeight={960}>
+        <Layer depth={${depth}} maxBlur={0}><div style={{ position: "absolute", left: 200, top: 400, width: 40, height: 40, background: "#ff0000" }} /></Layer>
+        ${extra}
+      </CameraRig>
+    </div>`,
+    {
+      extra: String.raw`
+export const StageProbe: React.FC = () => {
+  const cam = useCamera();
+  return <div id="stage-probe" style={{ position: "absolute", left: 700, top: 20, color: "#fff", fontSize: 20 }}>{cam ? cam.stageWidth + "x" + cam.stageHeight : "no camera"}</div>;
+};
+`,
+    },
+  );
+
+section(
+  "5. Layer: depth is real Z, not a translate; it lines up at rest on any stage size",
+  [
+    { id: "par-rest-0", frames: 40, source: parallaxScene("ParRest0", 0, REST) },
+    { id: "par-rest-1", frames: 40, source: parallaxScene("ParRest1", 1, REST) },
+    { id: "par-rest-m1", frames: 40, source: parallaxScene("ParRestM1", -1, REST) },
+    { id: "par-pan-0", frames: 40, source: parallaxScene("ParPan0", 0, PAN) },
+    { id: "par-pan-1", frames: 40, source: parallaxScene("ParPan1", 1, PAN) },
+    { id: "par-pan-2", frames: 40, source: parallaxScene("ParPan2", 2, PAN) },
+    { id: "par-pan-m1", frames: 40, source: parallaxScene("ParPanM1", -1, PAN) },
+    { id: "par-portrait-0", frames: 40, source: portraitScene("ParPortrait0", 0, "<StageProbe />") },
+    { id: "par-portrait-1", frames: 40, source: portraitScene("ParPortrait1", 1) },
+    { id: "par-portrait-2", frames: 40, source: portraitScene("ParPortrait2", 2) },
+    {
+      // Source order is back-to-front only by accident here: the nearer layer is declared first.
+      id: "par-order",
+      frames: 30,
+      source: sceneFile(
+        "ParOrder",
+        ["CameraRig", "Layer"],
+        `<CameraRig keyframes={${REST}}>
+      <Layer depth={0}><div style={{ position: "absolute", left: 600, top: 300, width: 700, height: 400, background: "#ff0000" }} /></Layer>
+      <Layer depth={1}><div style={{ position: "absolute", left: 500, top: 200, width: 900, height: 600, background: "#0000ff" }} /></Layer>
+    </CameraRig>`,
+      ),
+    },
+    ...[
+      ["par-blur-0", "ParBlur0", "0", ""],
+      ["par-blur-1", "ParBlur1", "1", ""],
+      ["par-blur-1-off", "ParBlur1Off", "1", " maxBlur={0}"],
+    ].map(([id, name, depth, props]) => ({
+      id,
+      frames: 30,
+      source: sceneFile(
+        name,
+        ["CameraRig", "Layer"],
+        `<CameraRig keyframes={${REST}}>
+      <Layer depth={${depth}}${props}><div style={{ position: "absolute", left: 300, top: 200, width: 600, height: 400, background: "repeating-linear-gradient(90deg, #000 0px, #000 3px, #fff 3px, #fff 6px)" }} /></Layer>
+    </CameraRig>`,
+      ),
+    })),
+  ],
+  async (t) => {
+    const centroid = async (id, local, box = { x: 0, y: 0, w: 1920, h: 1080 }) => {
+      const img = await t.rgb(t.frameOf(id, local));
+      let sx = 0;
+      let sy = 0;
+      let n = 0;
+      for (let y = box.y; y < box.y + box.h; y++) {
+        for (let x = box.x; x < box.x + box.w; x++) {
+          const i = (y * img.w + x) * 3;
+          if (img.data[i] > 200 && img.data[i + 1] < 60 && img.data[i + 2] < 60) {
+            sx += x;
+            sy += y;
+            n++;
+          }
+        }
+      }
+      return n === 0 ? null : { x: sx / n, y: sy / n, n };
+    };
+
+    const r0 = await centroid("par-rest-0", 5);
+    const r1 = await centroid("par-rest-1", 5);
+    const rm1 = await centroid("par-rest-m1", 5);
+    console.log(`  at rest the marker sits at (${r0?.x.toFixed(2)}, ${r0?.y.toFixed(2)}) on depth 0, (${r1?.x.toFixed(2)}, ${r1?.y.toFixed(2)}) on depth 1, (${rm1?.x.toFixed(2)}, ${rm1?.y.toFixed(2)}) on depth -1`);
+    check("depth 0 puts the marker where the stage says (411.5, 311.5)", r0 !== null && Math.abs(r0.x - 411.5) < 1 && Math.abs(r0.y - 311.5) < 1);
+    check("at rest a depth 1 layer places the marker at the same pixel as depth 0 (within 1px)", r1 !== null && r0 !== null && Math.abs(r1.x - r0.x) <= 1 && Math.abs(r1.y - r0.y) <= 1);
+    check("...and so does a foreground layer (depth -1)", rm1 !== null && r0 !== null && Math.abs(rm1.x - r0.x) <= 1 && Math.abs(rm1.y - r0.y) <= 1);
+    check("...with the marker the same size (pixel count within 4%)", r1 !== null && r0 !== null && Math.abs(r1.n / r0.n - 1) < 0.04);
+
+    // Pan: the camera moves 300 stage px right. Depth 0 moves the full 300 on screen.
+    const move = async (id) => {
+      const a = await centroid(id, 0);
+      const b = await centroid(id, 35);
+      return a && b ? b.x - a.x : null;
+    };
+    const d0 = await move("par-pan-0");
+    const d1 = await move("par-pan-1");
+    const d2 = await move("par-pan-2");
+    const dm1 = await move("par-pan-m1");
+    console.log(`  after a 300px camera pan the marker moved ${d0?.toFixed(1)} (depth 0), ${d1?.toFixed(1)} (depth 1), ${d2?.toFixed(1)} (depth 2), ${dm1?.toFixed(1)} (depth -1)`);
+    check("depth 0 moves with the camera (about -300px)", d0 !== null && Math.abs(d0 + 300) < 2);
+    check("a layer behind (depth 1) moves LESS than depth 0, the same way", d1 !== null && d1 < 0 && Math.abs(d1) < Math.abs(d0) - 10);
+    check("...and the further back (depth 2) the less it moves", d2 !== null && d2 < 0 && Math.abs(d2) < Math.abs(d1) - 10);
+    check("a foreground layer (depth -1) moves MORE than depth 0, the same way", dm1 !== null && dm1 < 0 && Math.abs(dm1) > Math.abs(d0) + 10);
+    check("the parallax is the perspective ratio: depth 1 moves 1400/(1400+170) = 0.892 of depth 0 (+-0.02)", d1 !== null && Math.abs(d1 / d0 - 1400 / 1570) < 0.02);
+
+    // A 1080x1920 stage seen through a 540x960 window: the layer centre has to be the stage centre.
+    const box = { x: 100, y: 60, w: 540, h: 960 };
+    const p0 = await centroid("par-portrait-0", 5, box);
+    const p1 = await centroid("par-portrait-1", 5, box);
+    const p2 = await centroid("par-portrait-2", 5, box);
+    console.log(`  1080x1920 stage at rest: marker at (${p0?.x.toFixed(2)}, ${p0?.y.toFixed(2)}) depth 0, (${p1?.x.toFixed(2)}, ${p1?.y.toFixed(2)}) depth 1, (${p2?.x.toFixed(2)}, ${p2?.y.toFixed(2)}) depth 2`);
+    check("1080x1920 stage: depth 0 marker lands at (209.5, 269.5)", p0 !== null && Math.abs(p0.x - 209.5) < 1 && Math.abs(p0.y - 269.5) < 1);
+    check("1080x1920 stage: depth 1 lines up with depth 0 at rest (within 1px)", p1 !== null && p0 !== null && Math.abs(p1.x - p0.x) <= 1 && Math.abs(p1.y - p0.y) <= 1);
+    check("1080x1920 stage: depth 2 lines up with depth 0 at rest (within 1px)", p2 !== null && p0 !== null && Math.abs(p2.x - p0.x) <= 1 && Math.abs(p2.y - p0.y) <= 1);
+    check("the camera context carries the stage size", (await t.text(t.frameOf("par-portrait-0", 5), "#stage-probe")) === "1080x1920");
+
+    // Depth is a place in space now, not a paint order.
+    const order = await t.rgb(t.frameOf("par-order", 5));
+    const px = (x, y) => [...order.data.slice((y * order.w + x) * 3, (y * order.w + x) * 3 + 3)];
+    console.log(`  overlap of depth 0 (declared first) and depth 1 (declared second): centre pixel ${px(960, 500)}`);
+    check("a layer behind is behind even when it is declared later", px(960, 500)[0] > 200 && px(960, 500)[2] < 60);
+    check("...and still visible around the nearer one", px(540, 260)[2] > 200 && px(540, 260)[0] < 60);
+
+    // The blur behaviour is unchanged.
+    const e = async (id) => edgeEnergy(await t.grab(t.frameOf(id, 5)));
+    const eSharp = await e("par-blur-0");
+    const eBlur = await e("par-blur-1");
+    const eOff = await e("par-blur-1-off");
+    console.log(`  edge energy: depth 0 ${eSharp.toFixed(2)}, depth 1 ${eBlur.toFixed(2)}, depth 1 with maxBlur 0 ${eOff.toFixed(2)}`);
+    check("depth 0 stays sharp and depth 1 is blurred (< 0.5x)", eSharp > 5 && eBlur < 0.5 * eSharp);
+    check("maxBlur={0} switches the depth blur off (>= 0.9x of the sharp layer)", eOff >= 0.9 * eSharp);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");

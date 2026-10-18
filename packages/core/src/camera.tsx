@@ -22,7 +22,10 @@ export type CamKeyframe = {
 
 type CamState = Required<Omit<CamKeyframe, "easing" | "frame">>;
 
-const CameraContext = createContext<CamState | null>(null);
+/** What useCamera() returns: the camera plus the size of the stage it is looking at. */
+export type CameraInfo = CamState & { stageWidth: number; stageHeight: number };
+
+const CameraContext = createContext<CameraInfo | null>(null);
 
 const resolve = (kfs: CamKeyframe[], frame: number): CamState => {
   const sorted = [...kfs].sort((a, b) => a.frame - b.frame);
@@ -119,7 +122,7 @@ export const CameraRig: React.FC<{
   const cam = resolve(keyframes, frame);
 
   return (
-    <CameraContext.Provider value={cam}>
+    <CameraContext.Provider value={{ ...cam, stageWidth, stageHeight }}>
       <div
         style={{
           width,
@@ -155,9 +158,21 @@ export const CameraRig: React.FC<{
 
 export const useCamera = () => useContext(CameraContext);
 
+/** How far back (in px) one unit of Layer depth sits. Larger is a deeper scene and stronger parallax. */
+export const Z_STEP = 170;
+
 /**
- * Parallax + depth-of-field layer. depth 0 = focal plane (sharp, no parallax).
- * Positive depth = "behind" (moves less, blurred). Negative = foreground (moves more, blurred).
+ * A layer at a place in space: depth 0 is the focal plane, positive depth sits behind it, negative
+ * depth in front. Parallax comes from the rig's real CSS perspective, so a layer 1 unit back moves
+ * 1400 / (1400 + 170) = 0.89 as far as the focal plane when the camera pans, 2 units back 0.80, and
+ * a foreground layer moves more than 1.
+ *
+ * Each layer is scaled about the stage centre by the amount the perspective shrinks (or grows) it,
+ * so with the camera at rest on the stage centre every depth shows the same picture. Layers also
+ * blur with distance from the focal plane (`maxBlur` px per unit of depth; 0 turns it off).
+ *
+ * Layers have to be direct children of the rig's stage: a plain wrapper div in between flattens
+ * the depth. Depth orders layers in space, so a layer behind stays behind however the JSX is ordered.
  */
 export const Layer: React.FC<{
   depth?: number;
@@ -166,17 +181,16 @@ export const Layer: React.FC<{
   style?: React.CSSProperties;
   children: React.ReactNode;
 }> = ({ depth = 0, maxBlur = 10, style, children }) => {
-  const cam = useCamera();
-  const parallax = 0.06; // fraction of camera offset transferred per unit depth
-  const dx = cam ? (cam.x - 960) * depth * parallax : 0;
-  const dy = cam ? (cam.y - 540) * depth * parallax : 0;
   const blur = Math.abs(depth) * maxBlur;
+  const z = -depth * Z_STEP;
+  // Behind, the perspective divides by (P + |z|) / P; scaling by exactly that cancels it at rest.
+  const compensate = (CAMERA_PERSPECTIVE - z) / CAMERA_PERSPECTIVE;
   return (
     <div
       style={{
         position: "absolute",
         inset: 0,
-        transform: `translate(${dx}px, ${dy}px)`,
+        transform: depth === 0 ? undefined : `translateZ(${z}px) scale(${compensate})`,
         filter: blur > 0.2 ? `blur(${blur.toFixed(1)}px)` : undefined,
         ...style,
       }}

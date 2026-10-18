@@ -483,6 +483,27 @@ scene, because the pulse helpers read the scene's current frame.
 
 ---
 
+## Narration words
+
+When each word of a beat's narration is said, for a scene that points at the word being spoken.
+`generate_narration` (edge-tts engine) writes `public/audio/vo/<beatId>.words.json`, `stitch_composition`
+copies it next to the composition and mounts it with `NarrationWordsProvider`. See NARRATION.md.
+
+### `useNarrationWords(beatId)`
+
+Call it inside the scene of beat `beatId`.
+
+| Member | Type | Notes |
+|---|---|---|
+| `available` | `boolean` | False when the beat has no timings (another engine, or none generated) |
+| `words` | `{ word, startMs, endMs }[]` | In the clip as written |
+| `wordAt(frame?)` | `{ index, word, speaking } \| null` | The word being said at a scene-local frame (default: the current one), or in a pause the last one said (`speaking: false`). `null` before the first word |
+| `frameOfWord(index)` | `number \| null` | The scene-local frame word `index` starts on, rounded to the nearest frame |
+
+`createNarrationWords(words, fps, frame?)` is the same thing without Remotion, for tests.
+
+---
+
 ## Look pass
 
 `FilmGrain`, `Vignette`, `ColorGrade`, `LookPass`. `CinematicScene` applies these, so

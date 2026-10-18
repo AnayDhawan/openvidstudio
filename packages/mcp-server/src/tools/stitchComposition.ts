@@ -275,11 +275,13 @@ function renderDemoTsx(opts: {
   musicBedVolume: number;
   musicBedSource: StitchCompositionResult["musicBedSource"];
   hasMusicCues: boolean;
+  /** True when some beat has word timings: the composition then imports them and provides them to scenes. */
+  hasNarrationWords: boolean;
   hasOverrides: boolean;
   /** Frames either side of a cut a transition overlay covers, or null when no beat has a transition. */
   transitionHalf: number | null;
 }): string {
-  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, musicBedSource, hasMusicCues, hasOverrides, transitionHalf } = opts;
+  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, musicBedSource, hasMusicCues, hasNarrationWords, hasOverrides, transitionHalf } = opts;
   const sceneImports = beats
     .map((b) => `import { ${pascalCase(b.id)} } from "${sceneImportPath(b)}";`)
     .join("\n");
@@ -310,10 +312,11 @@ function renderDemoTsx(opts: {
 
   // Emitted only when a beat asks for a transition, so a composition without one is
   // byte-for-byte what it was before transitions existed.
+  const providerImports = hasNarrationWords ? "MusicClockProvider, NarrationWordsProvider" : "MusicClockProvider";
   const coreImport =
     transitionHalf === null
-      ? `import { MusicClockProvider } from "@openvidstudio/core";`
-      : `import { MusicClockProvider, TransitionOverlay, type TransitionType } from "@openvidstudio/core";`;
+      ? `import { ${providerImports} } from "@openvidstudio/core";`
+      : `import { ${providerImports}, TransitionOverlay, type TransitionType } from "@openvidstudio/core";`;
   const transitionConst =
     transitionHalf === null
       ? ""
@@ -361,6 +364,7 @@ import { AbsoluteFill, Audio, Sequence, Series, staticFile } from "remotion";
 ${coreImport}
 import beats from "./beats.json";
 ${hasMusicCues ? `import musicCues from "./music.cues.json";
+` : ""}${hasNarrationWords ? `import narrationWords from "./narration.words.json";
 ` : ""}${overridesImport}${sceneImports}
 
 const SCENES: Record<string, React.FC> = {
@@ -380,12 +384,17 @@ ${transitionConst}
 // bars into scene-local frames.
 const MUSIC_CUES = ${hasMusicCues ? "musicCues" : "null"};
 const BEAT_STARTS: Record<string, number> = Object.fromEntries(beats.beats.map((b) => [b.id, b.start]));
-
+${hasNarrationWords ? `
+// When each word of a beat's narration is said, per language, for useNarrationWords(beatId).
+type Words = { word: string; startMs: number; endMs: number }[];
+const NARRATION_WORDS = narrationWords as unknown as Record<string, Record<string, Words>>;
+` : ""}
 const Narrated: React.FC<{ language: string }> = ({ language }) => {
   const vo = VO_FILES[language] ?? {};
   return (
     <AbsoluteFill>
-      <MusicClockProvider cues={MUSIC_CUES} beatStarts={BEAT_STARTS}>
+${hasNarrationWords ? `      <NarrationWordsProvider words={NARRATION_WORDS[language] ?? {}}>
+` : ""}      <MusicClockProvider cues={MUSIC_CUES} beatStarts={BEAT_STARTS}>
         <Series>
           {beats.beats.map((b) => {
             const Scene = SCENES[b.id];
@@ -397,7 +406,8 @@ const Narrated: React.FC<{ language: string }> = ({ language }) => {
           })}
         </Series>
       </MusicClockProvider>
-${transitionBlock}      {beats.beats
+${hasNarrationWords ? `      </NarrationWordsProvider>
+` : ""}${transitionBlock}      {beats.beats
         .filter((b) => vo[b.id])
         .map((b) => (
           <Sequence key={\`vo-\${b.id}\`} from={b.start} durationInFrames={b.duration} layout="none">
@@ -482,6 +492,8 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
   const voByLanguage: Record<string, Record<string, string>> = {};
   const warnings: string[] = [];
   const languageReports: LanguageComposition[] = [];
+  /** language -> beatId -> [{ word, startMs, endMs }], for the beats that have word timings. */
+  const wordsByLanguage: Record<string, Record<string, unknown>> = {};
 
   const componentName = `${pascalCase(videoName)}Demo`;
 
@@ -491,12 +503,25 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     // narration has to move.
     const publicRel = isBase ? "audio/vo" : `audio/vo/${language}`;
     const map: Record<string, string> = {};
+    const words: Record<string, unknown> = {};
     for (const b of beats) {
       if (fs.existsSync(path.join(projectRoot, "public", ...publicRel.split("/"), `${b.id}.mp3`))) {
         map[b.id] = `${publicRel}/${b.id}.mp3`;
       }
+      // generate_narration's word timings, if this beat has them. Read here so they can be copied
+      // next to the composition: a scene bundle can import JSON from src/ but not from public/.
+      const wordsFile = path.join(projectRoot, "public", ...publicRel.split("/"), `${b.id}.words.json`);
+      if (fs.existsSync(wordsFile)) {
+        try {
+          const parsed = JSON.parse(fs.readFileSync(wordsFile, "utf8"));
+          if (Array.isArray(parsed) && parsed.length > 0) words[b.id] = parsed;
+        } catch {
+          warnings.push(`${path.relative(projectRoot, wordsFile)} is not valid JSON, so beat ${b.id} has no word timings. Re-run generate_narration with overwrite.`);
+        }
+      }
     }
     voByLanguage[language] = map;
+    if (Object.keys(words).length > 0) wordsByLanguage[language] = words;
 
     const missing = beats.map((b) => b.id).filter((id) => !(id in map));
     // A video declared narration: "none" is silent on purpose. Warning that every beat has no voice
@@ -579,6 +604,16 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     fs.rmSync(musicCuesAbs);
   }
 
+  // The narration's word timings, copied next to the composition for the same reason as the cue grid.
+  // Written only when some beat has them, so a composition without them is exactly what it was before.
+  const narrationWordsAbs = path.join(videoDir, "narration.words.json");
+  const hasNarrationWords = Object.keys(wordsByLanguage).length > 0;
+  if (hasNarrationWords) {
+    fs.writeFileSync(narrationWordsAbs, JSON.stringify(wordsByLanguage, null, 2) + "\n", "utf8");
+  } else if (fs.existsSync(narrationWordsAbs)) {
+    fs.rmSync(narrationWordsAbs);
+  }
+
   const demoTsx = renderDemoTsx({
     componentName,
     beats,
@@ -588,6 +623,7 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     musicBedVolume,
     musicBedSource,
     hasMusicCues: musicCues !== null,
+    hasNarrationWords,
     hasOverrides,
     transitionHalf: hasTransitions(beats) ? transitionHalfFrames(fps) : null,
   });

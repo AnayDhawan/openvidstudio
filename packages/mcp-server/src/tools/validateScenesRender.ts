@@ -268,7 +268,9 @@ function probePage(args: { safeX: number; safeY: number }): TextProbe[] {
     if (!hud) {
       for (const h of huds) hudOverlap = Math.max(hudOverlap, area(intersect(box, h)) / area(box));
     }
-    const nums = (cs.color.match(/[\d.]+/g) ?? []).map(Number);
+    // SVG text is painted with `fill`; its CSS `color` is just what it inherited and is not what is drawn.
+    const paint = el instanceof SVGElement ? cs.fill : cs.color;
+    const nums = (paint.match(/[\d.]+/g) ?? []).map(Number);
     const rgba: [number, number, number, number] | undefined =
       nums.length >= 3 ? [nums[0], nums[1], nums[2], nums.length >= 4 ? nums[3] : 1] : undefined;
     out.push({

@@ -9,6 +9,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Docs
 
+- **The API gallery now has a picture for every new cinematic primitive, and the `DirectedShot` still has sharp text (#121).** `build-api-gallery.mjs` renders `TransitionOverlay` (one still per type: fade, whip, push, wipe, light-leak), `LayeredShot`, `MotionBlur` (a fast move, mid-way) and the six named shots (pushIn, pullOut, pan, whip, orbit, dutch), and `API.md` embeds each with alt text that says what it shows. `directedshot-start.png` and `directedshot-end.png` were re-rendered with the new sharp default (the old end still was rendered with a depth of field of 6 and smeared its text). `api-gallery.test.mjs` checks every embedded still exists, the new ones are embedded and described, each image is under 160KB, and measures the text in the `DirectedShot` still: the steepest edges in its text boxes are 198 of 255, against 41 in the old one.
+
 - **README and CONTRIBUTING rewritten to be plainer and more welcoming.** The README now explains
   what the tool does in five steps, leads the install with the clone route, and says outright that
   `npx -y @openvidstudio/mcp-server` installs 0.1.0 from September (about 27 tools, no director

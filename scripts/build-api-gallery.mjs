@@ -64,6 +64,8 @@ const dashboard = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="
   <text x="740" y="262" font-family="Arial" font-size="28" fill="#e2e8f0">Review the design</text>
 </svg>`;
 await sharp(Buffer.from(dashboard)).png().toFile(path.join(project, "public", "images", "dashboard.png"));
+// LayeredShot: the same dashboard split into a flat background and one card that floats in front of it.
+await sharp(Buffer.from(dashboard)).extract({ left: 1350, top: 210, width: 500, height: 120 }).png().toFile(path.join(project, "public", "images", "dash-card.png"));
 
 // Silence plus a cue grid, so useMusicClock has a real bed to read (120 bpm: 15 frames a beat).
 spawnSync("ffmpeg", ["-nostdin", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "30", "-q:a", "9", path.join(project, "public", "audio", "music-bed.mp3")]);
@@ -193,6 +195,88 @@ scene(
   { cam: "camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 90, x: 960, y: 540, scale: 1.0 }]}" },
 );
 add("g-directedshot", "GDirected", { 0: "directedshot-start", 80: "directedshot-end" });
+
+// TransitionOverlay: one still per type, at the cut. Each scene is two flat colours with the cut between them
+// at frame 10 and the overlay peaking there, the way stitch_composition mounts it over a beat boundary.
+for (const type of ["fade", "whip", "push", "wipe", "light-leak"]) {
+  const name = "GTrans" + type.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+  fs.writeFileSync(
+    path.join(scenesDir, name + ".tsx"),
+    `import React from "react";
+import { AbsoluteFill, Sequence, useCurrentFrame } from "remotion";
+import { TransitionOverlay, color } from "@openvidstudio/core";
+
+export const ${name}: React.FC = () => {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ background: frame < 10 ? "#2B4C8C" : "#0B0E14" }}>
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 120, color: frame < 10 ? "#E6EAF2" : color.success }}>
+        {frame < 10 ? "BEFORE" : "AFTER"}
+      </AbsoluteFill>
+      <Sequence from={0} durationInFrames={20} layout="none">
+        <TransitionOverlay type="${type}" length={20} />
+      </Sequence>
+    </AbsoluteFill>
+  );
+};
+`,
+  );
+  // The overlay peaks on the cut (frame 10), where a fade, a wipe or a push covers the whole frame, so those are
+  // caught a few frames in; the light leak reads best at its peak.
+  add("g-transitionoverlay-" + type, name, { [type === "light-leak" ? 10 : 7]: "transitionoverlay-" + type });
+}
+
+// LayeredShot: a push and a tilt make the front card slide against the background.
+scene(
+  "GLayered",
+  'import { LayeredShot } from "@openvidstudio/core";\nimport { staticFile } from "remotion";',
+  '    <LayeredShot captureWidth={1920} captureHeight={1080} background={staticFile("images/dashboard.png")} layers={[{ src: staticFile("images/dash-card.png"), x: 1350, y: 210, width: 500, height: 120, depth: -1.2 }]} focus={{ x: 1560, y: 280 }} push={1.7} tilt={{ y: -9, x: 3 }} move={{ from: 0, to: 70 }} />',
+  { cam: "camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 90, x: 960, y: 540, scale: 1.0 }]}" },
+);
+add("g-layeredshot", "GLayered", { 80: "layeredshot" });
+
+// MotionBlur: a fast move, caught half way through its window.
+fs.writeFileSync(
+  path.join(scenesDir, "GMotionBlur.tsx"),
+  `import React from "react";
+import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { MotionBlur, color } from "@openvidstudio/core";
+
+// The moving thing reads the frame itself, inside MotionBlur: the wrapper blends renders of its children at
+// sub-frame times, so children that take their motion from a prop passed in would not blur.
+const Mover: React.FC = () => {
+  const x = -300 + useCurrentFrame() * 70;
+  return (
+    <>
+      <div style={{ position: "absolute", left: x, top: 380, width: 280, height: 280, borderRadius: 40, background: color.accent }} />
+      <div style={{ position: "absolute", left: x + 60, top: 450, width: 160, height: 12, background: color.bg0 }} />
+      <div style={{ position: "absolute", left: x + 60, top: 500, width: 100, height: 12, background: color.bg0 }} />
+    </>
+  );
+};
+
+export const GMotionBlur: React.FC = () => (
+  <AbsoluteFill style={{ background: color.bg0 }}>
+    <MotionBlur from={0} to={40} shutterAngle={270} samples={10}>
+      <Mover />
+    </MotionBlur>
+  </AbsoluteFill>
+);
+`,
+);
+add("g-motionblur", "GMotionBlur", { 14: "motionblur" });
+
+// The shot vocabulary: each named move, caught half way through.
+for (const [shot, frame] of [["pushIn", 45], ["pullOut", 45], ["pan", 38], ["whip", 9], ["orbit", 60], ["dutch", 45]]) {
+  const name = "GShot" + shot[0].toUpperCase() + shot.slice(1);
+  scene(
+    name,
+    'import { DirectedShot } from "@openvidstudio/core";\nimport { staticFile } from "remotion";',
+    `    <DirectedShot src={staticFile("images/dashboard.png")} shot="${shot}" focus={{ x: 1560, y: 300 }} />`,
+    { cam: "camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 90, x: 960, y: 540, scale: 1.0 }]}" },
+  );
+  add("g-shot-" + shot.toLowerCase(), name, { [frame]: "shot-" + shot.toLowerCase() });
+}
 
 // CollageBroll comes from the motion primitives catalog: installed into the project with add_motion_primitive,
 // exactly as an agent would, then used in a scene.

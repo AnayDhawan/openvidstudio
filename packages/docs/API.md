@@ -157,7 +157,7 @@ camera at any frame without mounting the component.
 
 | Start of the move | End of the move |
 |---|---|
-| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end: pushed in, tilted, cursor on the target (this still was rendered with depthOfField 6, which is no longer the default)](img/api/directedshot-end.png) |
+| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end of the move: pushed in on the Done column and tilted, with its text sharp and the cursor on the target](img/api/directedshot-end.png) |
 
 ### Shots: `resolveShot`, `SHOT_NAMES`
 
@@ -178,7 +178,16 @@ scene can read it too: `resolveShot(name, { focus?, push?, captureWidth?, captur
 | `hold` | The whole capture with a 2% creep so it is never dead. For action inside the frame: a cursor, typing | 1 to 1.02 | 60 |
 | `drift` | Ambient: a long, small move toward the focus with a sub-degree wander in the tilt | 1 to 1.06 | 150 |
 
+Each move, caught half way through (the dashboard capture, focus on the Done column):
+
+| | | |
+|---|---|---|
+| ![pushIn half way: the board partly zoomed toward the Done column](img/api/shot-pushin.png) `pushIn` | ![pullOut half way: backing away from the Done column to reveal the board](img/api/shot-pullout.png) `pullOut` | ![pan half way: the camera sliding sideways onto the Done column with a slight yaw](img/api/shot-pan.png) `pan` |
+| ![whip mid move: the board streaked sideways by motion blur](img/api/shot-whip.png) `whip` | ![orbit half way: the board seen from a slight angle, swinging around the Done column](img/api/shot-orbit.png) `orbit` | ![dutch half way: a push in with the horizon rolled off level](img/api/shot-dutch.png) `dutch` |
+
 ### `LayeredShot`
+
+![LayeredShot mid push and tilt: the Done column's first card floats in front of the board and has slid against it](img/api/layeredshot.png)
 
 A `DirectedShot` whose picture is a stack of layers instead of one flat image: a background plus
 the elements that float above it, each at its own depth, so a push and a tilt make them slide
@@ -198,6 +207,8 @@ type ShotLayer = { src: string; x: number; y: number; width: number; height: num
 ```
 
 ### `MotionBlur`
+
+![A rounded blue card with two text lines, moving fast to the right, smeared into a streak at its leading and trailing edges](img/api/motionblur.png)
 
 Wraps children in Remotion's `CameraMotionBlur`, but only for the frames of a window. Outside it the
 children render directly, as if the wrapper were not there.
@@ -698,6 +709,14 @@ as one continuous move across the cut.
 | ![Atmosphere: drifting colour fields](img/api/atmosphere.png) `Atmosphere` | ![DotGrid: a faint dot texture behind a Glass panel](img/api/dotgrid.png) `DotGrid` |
 | ![Flash: the frame during an exposure flash](img/api/flash.png) `Flash` | ![Letterbox: cinematic bars](img/api/letterbox.png) `Letterbox` |
 | ![Black: a solid black frame, with the scene held under it](img/api/black.png) `Black` | |
+
+`TransitionOverlay`, one still per type, a few frames into the cut (a blue "before" scene turning into a dark "after" one;
+the light leak is at its peak on the cut itself):
+
+| | | |
+|---|---|---|
+| ![fade: the blue scene dimming toward the dark one](img/api/transitionoverlay-fade.png) `fade` | ![whip: a streaked, blurred sweep across the frame as one scene is thrown aside](img/api/transitionoverlay-whip.png) `whip` | ![push: a thin blue strip of the old scene left on the left as the dark scene pushes in](img/api/transitionoverlay-push.png) `push` |
+| ![wipe: an angled edge with a bright line sweeping across, dark scene on the left and blue scene on the right](img/api/transitionoverlay-wipe.png) `wipe` | ![light-leak: a warm wash of light bleeding across the cut](img/api/transitionoverlay-light-leak.png) `light-leak` | |
 
 ---
 

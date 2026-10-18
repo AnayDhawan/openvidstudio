@@ -62,6 +62,32 @@ in every tone. Tone changes energy and pacing, never honesty.
 State the tone once at the top of a video's brief if it isn't `default`, so every beat's
 VO is written in the same register rather than drifting line to line.
 
+## Music-only videos (no narration)
+
+`beats.json` can carry a top-level `narration`:
+
+```json
+{ "narration": "none", "beats": [ ... ] }
+```
+
+Omit it and `"voice"` is assumed, matching every `beats.json` written before this existed:
+every beat needs `vo`, held to the pace budget above.
+
+Under `"none"`, `vo` is optional on every beat and, if present at all, is not held to that
+budget: nothing is going to speak it. A beat can instead carry `onScreenText`, checked
+against a reading-time budget instead of a spoken one:
+
+```
+duration_seconds >= (onScreenText word count / 3.5) + 0.8
+```
+
+3.5 words/sec is a faster ceiling than the spoken 2.3-2.9 range on purpose: a viewer reads
+faster than a narrator speaks, and the fixed 0.8s covers a card's own entrance. `onScreenText`
+is optional too: a beat can be pure visual-plus-music with nothing to read at all.
+
+`stitch_composition`'s `musicBed` defaults its volume to 1.0 (full level) when narration is
+`"none"`, instead of the 0.18 tuned for sitting quietly under a voice.
+
 ## No em dashes
 
 No em dashes in any VO line, ever, same writing rule as every other doc in

@@ -11,6 +11,7 @@ import {
   type TerminalStep,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 /**
  * Records a real command run, as timed text rather than as pixels.
@@ -67,7 +68,30 @@ const stepSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("wait"), ms: z.number().int().positive() }),
 ]);
 
-export async function runCaptureTerminal(input: CaptureTerminalInput): Promise<CaptureTerminalResult> {
+export async function runCaptureTerminal(
+  input: CaptureTerminalInput
+): Promise<CaptureTerminalResult> {
+  const result = await captureTerminal(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_terminal",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      command: [input.command, ...(input.args ?? [])].join(" "),
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      eventCount: result.eventCount,
+      mode: result.mode,
+      truncated: result.truncated,
+    },
+  });
+  return result;
+}
+
+async function captureTerminal(input: CaptureTerminalInput): Promise<CaptureTerminalResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
 
@@ -76,7 +100,7 @@ export async function runCaptureTerminal(input: CaptureTerminalInput): Promise<C
   const outPathAbs = path.join(projectRoot, outPathRel);
   fs.mkdirSync(path.dirname(outPathAbs), { recursive: true });
 
-  const { cast, truncated, mode } = await recordTerminal({
+  const { cast, truncated, mode, warnings } = await recordTerminal({
     command: input.command,
     args: input.args,
     cwd: input.cwd ? path.resolve(projectRoot, input.cwd) : projectRoot,
@@ -99,15 +123,20 @@ export async function runCaptureTerminal(input: CaptureTerminalInput): Promise<C
     rows: cast.rows,
     truncated,
     mode,
-    ...(mode === "pipe" && input.mode !== "pipe"
-      ? {
-          note:
-            "Recorded through pipes, not a pty, because node-pty is not installed here. Most CLIs suppress " +
-            "colour when no terminal is attached, so this cast is likely duller than the real run. Install " +
-            "node-pty in this project for a faithful recording, or use capture_desktop against the terminal " +
-            "window for a full-screen TUI.",
-        }
-      : {}),
+    ...(() => {
+      const notes = [
+        ...(mode === "pipe" && input.mode !== "pipe"
+          ? [
+              "Recorded through pipes, not a pty, because node-pty is not installed here. Most CLIs suppress " +
+                "colour when no terminal is attached, so this cast is likely duller than the real run. Install " +
+                "node-pty in this project for a faithful recording, or use capture_desktop against the terminal " +
+                "window for a full-screen TUI.",
+            ]
+          : []),
+        ...warnings,
+      ];
+      return notes.length > 0 ? { note: notes.join(" ") } : {};
+    })(),
   };
 }
 

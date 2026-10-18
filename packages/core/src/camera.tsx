@@ -62,15 +62,26 @@ const resolve = (kfs: CamKeyframe[], frame: number): CamState => {
   };
 };
 
+/** Where the camera is at `frame`, by the same interpolation CameraRig renders with. */
+export const resolveCamera = resolve;
+
 export const CameraRig: React.FC<{
   keyframes: CamKeyframe[];
   /** stage size in px; content is laid out at this size, camera crops into it */
   stageWidth?: number;
   stageHeight?: number;
+  /**
+   * The size of the window the camera looks through. Defaults to the composition's own size;
+   * a rig nested inside a smaller box (DirectedShot) passes that box's size instead.
+   */
+  viewportWidth?: number;
+  viewportHeight?: number;
   children: React.ReactNode;
-}> = ({ keyframes, stageWidth = 1920, stageHeight = 1080, children }) => {
+}> = ({ keyframes, stageWidth = 1920, stageHeight = 1080, viewportWidth, viewportHeight, children }) => {
   const frame = useCurrentFrame();
-  const { width, height } = useVideoConfig();
+  const video = useVideoConfig();
+  const width = viewportWidth ?? video.width;
+  const height = viewportHeight ?? video.height;
   const cam = resolve(keyframes, frame);
 
   return (
@@ -85,6 +96,7 @@ export const CameraRig: React.FC<{
         }}
       >
         <div
+          data-ovs-camera-stage=""
           style={{
             width: stageWidth,
             height: stageHeight,

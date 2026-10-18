@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Mirrors this repo's own skills (openvidstudio, bgmusic) from .claude/skills, their one
+ * Mirrors this repo's own skills (openvidstudio, openvidstudio-director, bgmusic) from .claude/skills, their one
  * source of truth, into the five other tool directories that already carry the vendored
  * remotion-* skills by hand: .agents/skills, .cursor/skills, .github/skills,
  * .opencode/skills, .windsurf/skills.
@@ -31,7 +31,7 @@ const SOURCE_DIR = path.join(root, ".claude", "skills");
  * directories are the upstream source, not .claude/skills), so mirroring them from here
  * would make .claude/skills a second, competing source of truth for content it doesn't own.
  */
-const OWNED_SKILLS = ["openvidstudio", "bgmusic"];
+const OWNED_SKILLS = ["openvidstudio", "openvidstudio-director", "bgmusic"];
 
 const TARGET_DIRS = [
   path.join(root, ".agents", "skills"),

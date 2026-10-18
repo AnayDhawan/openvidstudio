@@ -3,15 +3,18 @@ import type { OpenvidstudioConfig } from "../config";
 import { registerInitProject } from "./initProject";
 import { registerValidateBeats } from "./validateBeats";
 import { registerWriteBeatsFile } from "./writeBeatsFile";
+import { registerWriteBrief } from "./writeBrief";
 import { registerScaffoldScene } from "./scaffoldScene";
 import { registerStitchComposition } from "./stitchComposition";
 import { registerRenderVideo } from "./renderVideo";
+import { registerJobStatus } from "./jobStatus";
 import { registerQcExtractFrames } from "./qcExtractFrames";
 import { registerCaptureScreenshot } from "./captureScreenshot";
 import { registerCaptureScreenRecording } from "./captureScreenRecording";
 import { registerImportHiggsfieldClip } from "./importHiggsfieldClip";
 import { registerGenerateNarration } from "./generateNarration";
 import { registerPreflight } from "./preflight";
+import { registerPlanProduction } from "./planProduction";
 import { registerPlanBeats } from "./planBeats";
 import { registerValidateScenes } from "./validateScenes";
 import { registerQcCapture } from "./qcCapture";
@@ -30,7 +33,12 @@ import { registerPlanShots } from "./planShots";
 import { registerReleaseDiff } from "./releaseDiff";
 import { registerMusicCues } from "./musicCues";
 import { registerMusicLibrary } from "./musicLibrary";
+import { registerComposeScore } from "./composeScore";
 import { registerCatalogMotionPrimitives, registerAddMotionPrimitive } from "./motionPrimitives";
+import { registerWriteDescription } from "./writeDescription";
+import { registerRenderStills } from "./renderStills";
+import { registerCollectFacts } from "./collectFacts";
+import { registerFinalizeVideo } from "./finalizeVideo";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -46,14 +54,17 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerInitProject(server);
   registerValidateBeats(server);
   registerWriteBeatsFile(server);
+  registerWriteBrief(server);
   registerScaffoldScene(server);
   registerStitchComposition(server);
   registerRenderVideo(server);
+  registerJobStatus(server);
   registerQcExtractFrames(server);
   registerCaptureScreenshot(server);
   registerCaptureScreenRecording(server);
   registerGenerateNarration(server);
   registerPreflight(server);
+  registerPlanProduction(server);
   registerPlanBeats(server);
   registerValidateScenes(server);
   registerQcCapture(server);
@@ -72,8 +83,13 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerReleaseDiff(server);
   registerMusicCues(server);
   registerMusicLibrary(server);
+  registerComposeScore(server);
   registerCatalogMotionPrimitives(server);
   registerAddMotionPrimitive(server);
+  registerWriteDescription(server);
+  registerRenderStills(server);
+  registerCollectFacts(server);
+  registerFinalizeVideo(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

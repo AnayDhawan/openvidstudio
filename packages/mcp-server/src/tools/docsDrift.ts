@@ -5,9 +5,12 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment } from "../util";
 import {
+  DEFAULT_DEVICE_SCALE,
   DEFAULT_VIEWPORT,
+  captureSidecarPath,
   detectAndCompensateZoom,
   launchChromium,
+  readCaptureSidecar,
   replayInteractions,
   viewportSchema,
   interactionSchema,
@@ -37,7 +40,16 @@ export interface DriftBinding {
   url: string;
   /** Replayed before capture, same as the original. A page behind a click needs the click. */
   interactions?: Interaction[];
+  /**
+   * The CSS viewport to re-capture at. Defaults to the reference's own capture sidecar
+   * (`<referencePath>.capture.json`, written by capture_screenshot/capture_screen_recording);
+   * pass this explicitly for a reference that has no sidecar and isn't caught by the
+   * legacy-heuristic fallback (see resolveCaptureSettings), or for a beat captured with
+   * cropSelector, whose reference is a crop of a page rather than a view of one.
+   */
   viewport?: Viewport;
+  /** Pixels per CSS pixel to re-capture at. Defaults to the sidecar's own value, else 2. */
+  deviceScaleFactor?: number;
   /** Defaults to the beat's own capture at public/images/<beatId>.png. */
   referencePath?: string;
 }
@@ -102,6 +114,84 @@ export function inferBindings(beats: BeatLike[]): DriftBinding[] {
     }));
 }
 
+interface ResolvedCaptureSettings {
+  viewport: Viewport;
+  deviceScaleFactor: number;
+  interactions?: Interaction[];
+  /** Where the viewport/scale came from -- surfaced on findings-less debugging only. */
+  source: "explicit" | "sidecar" | "legacy-heuristic";
+}
+
+/**
+ * A common desktop CSS viewport a legacy (pre-sidecar) reference might have been captured
+ * at. Only ever checked against HALF the reference PNG's own pixel size, and only when that
+ * halving is exact -- this is deliberately the one narrow, checkable guess this tool is
+ * allowed to make. Guessing a viewport from the reference's full pixel size (treating a
+ * 2880x1800 PNG as a 2880x1800 viewport) is the exact bug this whole binding exists to kill.
+ */
+const COMMON_VIEWPORTS: Viewport[] = [
+  DEFAULT_VIEWPORT, // 1600x1000
+  { width: 1920, height: 1080 },
+  { width: 1440, height: 900 },
+  { width: 1366, height: 768 },
+  { width: 1280, height: 800 },
+  { width: 1280, height: 720 },
+  { width: 1536, height: 864 },
+  { width: 1600, height: 900 },
+];
+
+/**
+ * Works out what CSS viewport and scale to re-capture a reference frame at, in the same
+ * order of trust every time: an explicit binding, then the sidecar the original capture
+ * wrote, then (only for a legacy asset with neither) the one narrow heuristic above. Never
+ * the reference image's own pixel size read directly as a viewport -- that was the bug.
+ */
+async function resolveCaptureSettings(
+  binding: DriftBinding,
+  referenceAbs: string,
+): Promise<ResolvedCaptureSettings> {
+  if (binding.viewport) {
+    return {
+      viewport: binding.viewport,
+      deviceScaleFactor: binding.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE,
+      interactions: binding.interactions,
+      source: "explicit",
+    };
+  }
+
+  const sidecar = readCaptureSidecar(referenceAbs);
+  if (sidecar) {
+    return {
+      viewport: sidecar.viewport,
+      deviceScaleFactor: sidecar.deviceScaleFactor,
+      interactions: binding.interactions ?? sidecar.interactions,
+      source: "sidecar",
+    };
+  }
+
+  const meta = await sharp(referenceAbs).metadata();
+  if (meta.width && meta.height && meta.width % 2 === 0 && meta.height % 2 === 0) {
+    const halved: Viewport = { width: meta.width / 2, height: meta.height / 2 };
+    const isCommon = COMMON_VIEWPORTS.some((v) => v.width === halved.width && v.height === halved.height);
+    if (isCommon) {
+      return {
+        viewport: halved,
+        deviceScaleFactor: 2,
+        interactions: binding.interactions,
+        source: "legacy-heuristic",
+      };
+    }
+  }
+
+  throw new Error(
+    `Beat "${binding.beatId}" has no capture sidecar at ${captureSidecarPath(referenceAbs)}, and its ` +
+      `reference image's pixel size (${meta.width ?? "?"}x${meta.height ?? "?"}) is not exactly double a ` +
+      `common CSS viewport, so there is no safe way to guess the viewport it was captured at -- treating the ` +
+      `pixel size itself as the viewport is exactly the bug this binding exists to avoid. Pass an explicit ` +
+      `viewport (and deviceScaleFactor, if not 2) in this binding.`,
+  );
+}
+
 export async function runDocsDrift(input: DocsDriftInput): Promise<DocsDriftResult> {
   const videoName = sanitizeSegment(input.videoName, "videoName");
   const projectRoot = resolveProjectRoot(input.projectRoot);
@@ -137,56 +227,65 @@ export async function runDocsDrift(input: DocsDriftInput): Promise<DocsDriftResu
         );
       }
 
-      // The reference frame's own dimensions are the viewport to re-capture at.
-      //
-      // beats.json does not record the viewport a capture used, and adding a field for it
-      // would only be recording something the file on disk already proves. Matching it
-      // exactly also removes the commonest false positive: a re-capture at a different
-      // size is a size difference, which judgeDrift correctly calls drift, and which would
-      // then be the only thing this tool ever reported.
-      //
-      // The exception is a beat captured with a cropSelector, where the reference is a
-      // crop of a page rather than a view of one. Such a beat needs an explicit binding.
-      const referenceSize = await sharp(referenceAbs).metadata();
-      const target: Viewport =
-        binding.viewport ??
-        (referenceSize.width && referenceSize.height
-          ? { width: referenceSize.width, height: referenceSize.height }
-          : DEFAULT_VIEWPORT);
-      const page = await browser.newPage();
+      // The CSS viewport and scale to re-capture at come from the reference's own capture
+      // sidecar (or an explicit binding, or the legacy heuristic) -- never from the
+      // reference PNG's pixel size read directly as a viewport. See resolveCaptureSettings.
+      const { viewport: target, deviceScaleFactor, interactions } = await resolveCaptureSettings(
+        binding,
+        referenceAbs,
+      );
+      // deviceScaleFactor has to be set at context creation, matching capture_screenshot's
+      // own newContext({ deviceScaleFactor }) -- a plain browser.newPage() context defaults
+      // to 1x, which would make every re-capture a different pixel size than a reference
+      // taken at the pipeline's default of 2x even once the CSS viewport itself is right.
+      const context = await browser.newContext({ deviceScaleFactor });
       try {
-        await page.setViewportSize(target);
-        await page.goto(binding.url, { waitUntil: "networkidle" });
-        // Same zoom compensation the original capture used. Skipping it here would make
-        // every comparison a comparison of two different viewports.
-        await detectAndCompensateZoom(page, target);
-        await replayInteractions(page, binding.interactions);
+        const page = await context.newPage();
+        try {
+          await page.setViewportSize(target);
+          await page.goto(binding.url, { waitUntil: "networkidle" });
+          // Same zoom compensation the original capture used, measured fresh on whatever
+          // machine is running this check rather than replayed from a stored ratio --
+          // CAPTURE.md is explicit that the ratio differs per machine/profile. Skipping
+          // this would make every comparison a comparison of two different viewports.
+          await detectAndCompensateZoom(page, target);
+          await replayInteractions(page, interactions);
 
-        const currentRel = path.join(outRel, `${binding.beatId}.png`);
-        await page.screenshot({ path: path.join(projectRoot, currentRel), fullPage: false });
+          const currentRel = path.join(outRel, `${binding.beatId}.png`);
+          // "device", not the default, so the re-capture lands on the reference's own pixel
+          // size (viewport * deviceScaleFactor) rather than being resampled to CSS size --
+          // matching scale is what "compare at the reference's own pixel size" means here.
+          await page.screenshot({
+            path: path.join(projectRoot, currentRel),
+            fullPage: false,
+            scale: "device",
+          });
 
-        const diffRel = path.join(outRel, `${binding.beatId}.diff.png`);
-        const comparison = await compareFrames(referenceAbs, path.join(projectRoot, currentRel), {
-          diffPath: path.join(projectRoot, diffRel),
-        });
-        const verdict = judgeDrift(comparison, {
-          changedRatio: input.changedRatioThreshold,
-          meanDelta: input.meanDeltaThreshold,
-        });
+          const diffRel = path.join(outRel, `${binding.beatId}.diff.png`);
+          const comparison = await compareFrames(referenceAbs, path.join(projectRoot, currentRel), {
+            diffPath: path.join(projectRoot, diffRel),
+          });
+          const verdict = judgeDrift(comparison, {
+            changedRatio: input.changedRatioThreshold,
+            meanDelta: input.meanDeltaThreshold,
+          });
 
-        findings.push({
-          beatId: binding.beatId,
-          url: binding.url,
-          drifted: verdict.drifted,
-          reason: verdict.reason,
-          changedRatio: comparison.changedRatio,
-          meanDelta: comparison.meanDelta,
-          referencePath: referenceRel,
-          currentPath: currentRel,
-          diffPath: diffRel,
-        });
+          findings.push({
+            beatId: binding.beatId,
+            url: binding.url,
+            drifted: verdict.drifted,
+            reason: verdict.reason,
+            changedRatio: comparison.changedRatio,
+            meanDelta: comparison.meanDelta,
+            referencePath: referenceRel,
+            currentPath: currentRel,
+            diffPath: diffRel,
+          });
+        } finally {
+          await page.close();
+        }
       } finally {
-        await page.close();
+        await context.close();
       }
     }
   } finally {
@@ -221,11 +320,17 @@ export function registerDocsDrift(server: McpServer): void {
         "knowing which thirty seconds of a ten minute video are stale is most of the value. Bindings are " +
         "inferred from the manifest by default: every browser screenshot beat already records its url and " +
         "the interactions that got there, which is exactly a binding, so keeping a second copy of that in " +
-        "another file would just be two things to keep in sync. The re-capture replays the same " +
-        "interactions and the same zoom compensation, at the reference frame's own dimensions, otherwise " +
-        "the comparison would be between two different viewports and every beat would report drift forever. " +
-        "A beat captured with a cropSelector needs an explicit binding, since its reference is a crop of a " +
-        "page rather than a view of one. Output is a per-beat verdict, a diff image showing where the page moved, and " +
+        "another file would just be two things to keep in sync. The CSS viewport and deviceScaleFactor to " +
+        "re-capture at come from the reference's own `<referencePath>.capture.json` sidecar (written by " +
+        "capture_screenshot/capture_screen_recording), never from the reference PNG's pixel size read " +
+        "directly as a viewport -- that produces a different, usually much wider layout than the one that " +
+        "was actually captured, and reports drift on pages that never changed. A legacy reference with no " +
+        "sidecar falls back to one narrow, checkable guess (its pixel size is exactly double a common CSS " +
+        "viewport) and otherwise requires viewport (and deviceScaleFactor, if not 2) in an explicit binding, " +
+        "same as a beat captured with cropSelector, whose reference is a crop of a page rather than a view " +
+        "of one. The re-capture replays the same interactions and the same zoom compensation, measured fresh " +
+        "rather than reused, since CAPTURE.md is explicit that the ratio differs per machine/profile. Output " +
+        "is a per-beat verdict, a diff image showing where the page moved, and " +
         "the exact next commands: re-capture the drifted beats, then render with incremental so only those " +
         "beats are re-rendered. Run it on a schedule.",
       inputSchema: {
@@ -237,7 +342,13 @@ export function registerDocsDrift(server: McpServer): void {
               beatId: z.string().min(1),
               url: z.string().url(),
               interactions: z.array(interactionSchema).optional(),
-              viewport: viewportSchema.optional(),
+              viewport: viewportSchema
+                .optional()
+                .describe(
+                  "Overrides the reference's capture sidecar / legacy heuristic. Required for a reference " +
+                    "with neither (e.g. captured with cropSelector).",
+                ),
+              deviceScaleFactor: z.number().positive().optional().describe("Defaults to the sidecar's value, else 2."),
               referencePath: z.string().optional(),
             }),
           )

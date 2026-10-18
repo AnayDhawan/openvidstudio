@@ -23,11 +23,29 @@ If the tools are not registered, the server is not installed. Point the user at 
 ## The order
 
 ```
-preflight -> extract_brand -> plan_beats -> [write VO] -> validate_beats -> APPROVAL GATE
-  -> write_beats_file -> capture_screenshot -> scaffold_scene -> validate_scenes
-  -> [plan_sound_effects] -> generate_narration -> stitch_composition -> contact_sheet
-  -> render_video -> qc_extract_frames
+preflight -> plan_production -> extract_brand -> write_brief -> plan_beats -> [write VO]
+  -> validate_beats -> APPROVAL GATE -> write_beats_file -> captures -> [compose_score]
+  -> scenes -> render_stills -> validate_scenes -> [plan_sound_effects] -> generate_narration
+  -> stitch_composition -> render_video -> finalize_video -> qc_extract_frames
 ```
+
+For peak and mid, the process in full (brief, design system, score, bespoke scenes, review
+rounds) is the `openvidstudio-director` skill. This skill is the shorter path and the tool
+reference; load that one when the level is not literal.
+
+## 0. Creative level and time budget
+
+Before intake: ask **creative level** (peak: full creative liberty, bespoke everything.
+mid: strong defaults, templates plus the occasional custom scene. literal: exactly what's
+specified, nothing added) and **time budget** (how long the dev will wait for the
+finished video). Use MCP elicitation if the client supports it, otherwise just ask.
+
+Then `plan_production` with the level, budget, and target duration. It returns the arc,
+the custom-vs-template scene mix, the score strategy, QC rounds, and a time estimate per
+phase, based on a real measured render speed on this machine. Show the plan and its
+estimate at the approval gate alongside the drafted beats. If it reports `fitsBudget:
+false`, show `cutFirst` and let the dev choose what to cut rather than downgrading
+silently. `docs/PLANNING.md` §0 has the full detail.
 
 ## 1. Intake
 
@@ -104,13 +122,30 @@ them mid-flight and looks broken rather than obviously wrong.
 
 ## 5. Scenes
 
-`scaffold_scene` per beat. It emits a scene that **renders as-is**, using that beat's
-own copy and duration. Edit the content; do not rebuild the structure.
+Read the brief first: `src/videos/<name>/brief.json` names the creative level, and the
+level decides how a scene gets written.
 
-Then `validate_scenes`. It catches the failure that renders successfully and is
-simply wrong: content laid out at full stage width gets cropped once the camera
-pushes in, because the visible area is the stage divided by the camera scale. It also
-flags static cameras, missing assets and beats with no narration.
+- **peak and mid: author scenes.** Compose them from `@openvidstudio/core`'s primitives
+  (`Words`, `DotText`, `PixelLogo`, `DirectedShot`, `Window`, `ChapterHud` and the rest, in
+  `docs/API.md`) against the video's own `design.ts`. `scaffold_scene` with `mode: "starter"`
+  writes a minimal file wired to that design system with no layout imposed; `mode: "blank"`
+  registers the beat and writes nothing. The structure, pacing and composition are your
+  decisions. If the brief's motif needs something the library lacks, write the component.
+- **literal, or a tight time budget: use templates.** `scaffold_scene` in its default
+  `"template"` mode emits a scene that renders as-is, using that beat's own copy and duration.
+  Edit the content, not the structure. It is a shortcut for exactly-what-was-asked briefs, not
+  the way every scene gets built.
+
+Either way, every scene passes `docs/STYLE.md`'s rules, and numbers shown on screen come from
+`facts.json` (`collect_facts`) or a capture, never from memory.
+
+Review before any full render. `render_stills` with `perBeat: "review"` writes five frames per
+beat and one labelled contact grid, and returns the numeric findings with it. Look at the grid,
+read the findings, fix, and run it again with the next `round`. Then `validate_scenes` with
+`render: true` for the full measurement: cropping, text size, reading time, contrast, em
+dashes, safe area, HUD overlap, dead frames and the brand palette. Plain `validate_scenes`
+reads the source for the failures that render successfully and are simply wrong, such as
+content wider than the camera's visible area.
 
 Read `docs/API.md` for props. Do not read the library source.
 
@@ -155,7 +190,10 @@ because a five minute video is 9000 frames.
 `render_video` with `draft: true` first. Full quality only once the draft looks
 right.
 
-Then `qc_extract_frames` and work `docs/PIPELINE.md`'s checklist.
+Then `finalize_video`: it measures the mix and moves it to -14 LUFS with a -1.5 dBTP ceiling,
+writes a poster frame and a size-capped share copy, and writes
+`output/<name>-DESCRIPTION.md` (chapters, credits, and the disclosure of any constructed
+sample content). Then `qc_extract_frames` and work `docs/PIPELINE.md`'s checklist.
 
 ## Rules that fail QC
 

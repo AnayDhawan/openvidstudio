@@ -30,3 +30,32 @@ jobs:
       - run: pnpm --filter @openvidstudio/capture typecheck
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck
+      # README's tool counts and packages/docs/TOOLS.md are generated from the tools the
+      # server registers; this fails when either has drifted (fix: node scripts/generate-tool-docs.mjs).
+      - run: node scripts/generate-tool-docs.mjs --check
+      # The per-tool test files that need nothing but node and the built packages. The rest
+      # (renders, browsers, ffmpeg, Python) run locally through `pnpm --filter @openvidstudio/mcp-server test`.
+      - run: node packages/mcp-server/scripts/manual-test.mjs capture-argv-spaces plan-beats stitch-music tool-count
+  offline-render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @openvidstudio/capture build
+      - run: pnpm --filter @openvidstudio/mcp-server build
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: pnpm --filter @openvidstudio/capture exec playwright install --with-deps chromium
+      # A2: every scene imports the core index, so a @remotion/google-fonts loader
+      # anywhere in it (TerminalReplay/RepoCta/ChecklistPanel used to have one each)
+      # reached fonts.gstatic.com at module scope and crashed any render with no
+      # network. This scaffolds a project and renders through all three with real
+      # network blocked, so that regressing back to a network font loader fails CI
+      # instead of surfacing as a support issue from someone's offline machine.
+      - run: node scripts/offline-render-check.mjs

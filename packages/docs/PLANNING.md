@@ -1,10 +1,60 @@
 # PLANNING.md: guided intake to beats.json
 
 This is step 0 of building any video with openvidstudio. Read this before
-touching `beats.json`. It defines: the intake question set, how to handle
-free-form pasted material instead, the per-feature capture-method decision
-tree, the full `captureMethod` field spec, and the mandatory approval gate
-before anything gets written to disk.
+touching `beats.json`. It defines: the production-mode intake (creative level,
+time budget), the fixed intake question set, how to handle free-form pasted
+material instead, the per-feature capture-method decision tree, the full
+`captureMethod` field spec, and the mandatory approval gate before anything
+gets written to disk.
+
+## 0. Creative level and time budget (added 2026-10, ask this first)
+
+Before §1's fixed questions, before drafting anything: ask two questions.
+
+1. **Creative level**, one of:
+   - **peak**: full creative liberty. A cold-open hook, tension, a problem,
+     a reveal, chapters, a payoff, an optional twist. A bespoke design
+     system and motion language derived from the brand. An original,
+     arc-matched score (`compose_score`, see `NARRATION.md`). Custom scenes, not
+     templates. Three or more rounds of stills review.
+   - **mid**: strong defaults. The arc from §3 below (hook, problem, demo
+     x2-3, differentiator, cta). The built-in `pulse-bed.mp3` or a CC0
+     track. A mix of templates and the occasional custom scene where a
+     template genuinely falls short. One or two review rounds.
+   - **literal**: do exactly what's specified. No added beats, no
+     embellished copy, no effects beyond this doc's own hard rules. When
+     the spec is ambiguous, ask rather than invent.
+2. **Time budget**: 15 minutes, 1 hour, 3 hours, no limit, or a number of
+   minutes. This is the wall-clock time the dev is willing to wait for the
+   finished video, not a deadline for the conversation.
+
+**How to ask.** Check whether the connected MCP client supports elicitation
+(a server-initiated structured prompt back to the user). If it does, use it
+for these two questions. If it doesn't, ask them directly in conversation,
+the same as every other intake question in this file; there is no
+behavioral difference downstream, only in how the question reaches the dev.
+
+**Then call `plan_production`** with the level, the budget, and a target
+duration (from §1.3 below, or a sensible default if that hasn't been asked
+yet). It returns a concrete plan (arc, how many beats get a bespoke scene
+versus a template, the score strategy, how many stills-QC rounds, the
+render passes) and a time estimate per phase, based on this machine's real
+measured render speed. Persisted as `production: { creativeLevel,
+timeBudgetMinutes }` in `openvidstudio.config.json`, and mirrored into that
+video's `beats.json` so a tool reading the manifest alone still knows the
+level.
+
+**Show the plan and its estimate at the approval gate** (§5), alongside the
+drafted `beats.json`. If `plan_production` reports `fitsBudget: false`,
+show `cutFirst` (what gets dropped, cheapest first) and let the dev choose,
+rather than silently downgrading the level or the duration. If it reports
+an `infeasibleWarning` (even one final render doesn't fit), say so plainly
+and offer the concrete alternatives it names (a shorter target duration,
+draft-only quality, a longer budget) instead of proceeding anyway.
+
+In `literal` mode, this step still happens (the time budget still matters
+for render passes), but the arc and scene mix are fixed by the dev's own
+spec, not by the level's defaults.
 
 ## 1. Fixed intake question set
 
@@ -256,19 +306,69 @@ Set it when the content sits to one side for a reason the manifest cannot see.
 Both forms are validated, because a typo here would be silent: the reformat
 would fall back to the inferred crop and look almost right.
 
+## 4.9. The creative brief (added 2026-10, write_brief)
+
+Once the capture-method decisions above are made, before drafting
+`beats.json` itself: write the creative brief. It is the one place the
+*why* behind the video lives, so a later tool, or a later session, reads
+the reasoning instead of re-deriving it from the beats.
+
+Call `write_brief` with two things, written together:
+
+- `briefMarkdown`: free-form prose, the actual creative reasoning, written
+  verbatim and never validated. Explain the call: why this story device,
+  why this arc shape, why this design motif, anything a future reader
+  would otherwise have to guess at.
+- `briefJson`: structured and validated, mirroring the prose. Required:
+  `creativeLevel` (mirrors §0); `logline`, `audience`, `feeling`;
+  `storyDevice` (`{ device, reason }`, a deliberately chosen device such
+  as a ticking clock, a before/after, a character's day, a mystery
+  reveal, a build-up montage, a "made with itself" twist, or something
+  else entirely, never defaulted); `arc` (`{ hook, tension, turn, proof,
+  payoff, cta }`, the hook must land within 2 seconds per `STYLE.md` and
+  the payoff must resolve the hook); `designSystem` (the WHY behind this
+  video's `src/videos/<name>/design.ts`: palette rationale, motif,
+  motif/motion rationale, never a duplicate of design.ts's actual values,
+  which live only there); `music` (bpm, key, a labeled section arc,
+  impact points); `shotList` (one entry per beat: whether it is a real
+  capture or constructed, and why, the one focal point, and optionally
+  `deliberateHold: true` for a beat that is meant to hold still, so
+  `validate_scenes` does not report its unchanging frames as dead).
+
+The brief is also where the music is decided: `compose_score` reads its
+`music` field and composes an original score to the section map and impact
+points, and `plan_beats` with `snapToBars` plans the beat boundaries onto the
+score's downbeats. Decide the music before the beats, not after.
+
+Optional: `styleOverrides` (any `STYLE.md` default this video deliberately
+breaks, and why) and `sampleContent` (any beat whose "real" capture is
+actually of constructed sample content, a fictional app/dataset/repo built
+specifically to film, rather than the real product, and why). A non-empty
+`sampleContent` is not just internal bookkeeping: `write_description` (C9)
+refuses to let it go unmentioned in the shipped description file.
+
+In `literal` mode the brief is still shaped the same way, but should be
+honest about having nothing to add: it restates the dev's own spec rather
+than inventing a story device or arc beyond what was asked for.
+
+Like `write_beats_file`, `write_brief` only enforces schema validity, not
+dev approval. Show the dev both files in full and get explicit approval
+before calling it, merged into the same approval pass as `beats.json`
+itself (§5): one sign-off covering the brief and the beats, not two.
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is
-drafted: show the dev the full file, not a summary, and get explicit
-approval before persisting it. This applies even to a small, obviously
-fine-looking draft.
+drafted (and, per §4.9, the brief alongside it): show the dev the full
+file or files, not a summary, and get explicit approval before persisting
+any of it. This applies even to a small, obviously fine-looking draft.
 
-The `write_beats_file` MCP tool will refuse to write anything
-`validate_beats` hasn't passed, but that's schema/structural
-validation, not dev approval. The human-approval step itself is a protocol
-rule for the calling agent, not something any tool enforces. Skipping it
-because the tool would technically allow the write is a protocol
-violation.
+The `write_beats_file` and `write_brief` MCP tools will refuse to write
+anything `validate_beats`/`validate_brief` hasn't passed, but that's
+schema/structural validation, not dev approval. The human-approval step
+itself is a protocol rule for the calling agent, not something any tool
+enforces. Skipping it because the tool would technically allow the write
+is a protocol violation.
 
 ## 6. Worked example (fictional product, anonymized)
 

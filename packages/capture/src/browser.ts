@@ -340,3 +340,26 @@ export async function launchChromium(): Promise<Browser> {
     throw err;
   }
 }
+
+/**
+ * Re-exports the exact `chromium` BrowserType this file already imports from "playwright"
+ * above (the one launchChromium calls .launch() on), so preflight.ts's environment check can
+ * call chromium.executablePath() on the literal same resolution real capture uses, instead of
+ * a second "import playwright" of its own that could resolve a different installed copy
+ * (a different node_modules nesting, or a different PLAYWRIGHT_BROWSERS_PATH-relative build)
+ * and pass preflight while real capture still fails, or the reverse.
+ */
+export { chromium };
+
+/**
+ * The version of the `chromium` BrowserType re-exported above, read from that same resolved
+ * package rather than a fresh "playwright" lookup, so a report naming this version can never
+ * name a different install than the one executablePath() below actually resolved against.
+ */
+export function resolvedPlaywrightVersion(): string {
+  // A plain require for one field off a package.json, not a code import -- this package's
+  // commonjs target has no resolveJsonModule story that would make `import ... from
+  // "playwright/package.json"` resolve the same way `import { chromium } from "playwright"`
+  // above already does.
+  return (require("playwright/package.json") as { version: string }).version;
+}

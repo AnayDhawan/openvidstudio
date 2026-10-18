@@ -226,11 +226,14 @@ export function buildSegmentRenderArgs(
   outPath: string,
   firstFrame: number,
   lastFrame: number,
-  opts: { draft?: boolean; concurrency?: number } = {},
+  opts: { draft?: boolean; concurrency?: number; browserExecutable?: string } = {},
 ): { command: string; args: string[] } {
   const args = ["remotion", "render", compositionId, outPath, `--frames=${firstFrame}-${lastFrame}`, "--enforce-audio-track"];
   if (opts.draft) args.push("--scale=0.5", "--crf=32", "--x264-preset=veryfast");
   if (opts.concurrency && opts.concurrency > 0) args.push(`--concurrency=${Math.floor(opts.concurrency)}`);
+  // See buildRenderCommand's matching option (renderVideo.ts): reuses the project's
+  // configured browser instead of Remotion downloading its own.
+  if (opts.browserExecutable) args.push(`--browser-executable=${opts.browserExecutable}`);
   args.push("--log=verbose");
   return { command: process.platform === "win32" ? "npx.cmd" : "npx", args };
 }
@@ -259,5 +262,124 @@ export function buildConcatArgs(listPath: string, outPath: string): string[] {
     "+faststart",
     outPath,
     "-y",
+  ];
+}
+
+/**
+ * Sample-exact audio join for the incremental render's concat step.
+ *
+ * Each per-beat segment is rendered separately and its AAC track ends up a little longer
+ * than its video: the encoder pads to a full AAC frame (1024 samples), typically tens of ms
+ * per segment. Stream-copying every segment's audio track under the same concat demuxer that
+ * joins the video stacks that padding beat over beat, so a 16-beat video can end with its
+ * audio visibly behind its video even though every individual segment looks fine in
+ * isolation. The fix joins video and audio through two different paths: video stays a
+ * gapless stream copy (no per-segment padding on the video side), audio is decoded to raw
+ * PCM per segment, trimmed or padded to exactly `duration/fps` seconds, concatenated as raw
+ * samples, and encoded to AAC once at the end -- so the only rounding that can happen is
+ * inside a single final encode, not once per beat.
+ */
+export const AUDIO_SAMPLE_RATE = 48000;
+export const AUDIO_CHANNELS = 2;
+const BYTES_PER_SAMPLE = 2; // s16le
+
+export function pcmFileName(beatId: string): string {
+  return `${beatId}.pcm`;
+}
+
+/** ffmpeg args to decode one segment's audio to raw interleaved s16le PCM. */
+export function buildExtractPcmArgs(segmentFile: string, pcmOutPath: string): string[] {
+  return [
+    "-nostdin",
+    "-i",
+    segmentFile,
+    "-vn",
+    "-ar",
+    String(AUDIO_SAMPLE_RATE),
+    "-ac",
+    String(AUDIO_CHANNELS),
+    "-f",
+    "s16le",
+    "-y",
+    pcmOutPath,
+  ];
+}
+
+/** Exact PCM byte length for a beat of `durationFrames` at `fps`, at the canonical rate above. */
+export function expectedPcmBytes(durationFrames: number, fps: number): number {
+  const samples = Math.round((durationFrames / fps) * AUDIO_SAMPLE_RATE);
+  return samples * AUDIO_CHANNELS * BYTES_PER_SAMPLE;
+}
+
+/**
+ * Trims or zero-pads (silence) a PCM buffer to exactly `expectedBytes`. Pure and
+ * frame-count-based, so this is what makes the join sample-exact rather than
+ * "close, rounded to whatever the codec happened to produce."
+ */
+export function fitPcmLength(buf: Buffer, expectedBytes: number): Buffer {
+  if (buf.length === expectedBytes) return buf;
+  if (buf.length > expectedBytes) return buf.subarray(0, expectedBytes);
+  const out = Buffer.alloc(expectedBytes);
+  buf.copy(out);
+  return out;
+}
+
+/**
+ * Strips a segment's audio into its own fresh container.
+ *
+ * This has to happen before concatenation, not as an `-an` flag on the concat step itself:
+ * each beat's segment is muxed with audio deliberately longer than its video (the padding
+ * this whole join exists to defeat), so the segment's own container-level duration reflects
+ * that longer audio track, not the true video length. The concat demuxer trusts each input's
+ * container duration to place the next file's start, so concatenating the original segments
+ * with `-an` still leaves a gap at every join equal to that segment's audio overrun -- the
+ * video track ends up gapful, just silent instead of desynced. Re-muxing video-only into its
+ * own container first drops that stale duration along with the audio, so the isolated file's
+ * own duration is the true one and concatenation is actually gapless.
+ */
+export function buildIsolateVideoArgs(segmentFile: string, videoOnlyOutPath: string): string[] {
+  return ["-nostdin", "-i", segmentFile, "-an", "-c:v", "copy", "-y", videoOnlyOutPath];
+}
+
+export function videoOnlyFileName(beatId: string): string {
+  return `_vo-${beatId}.mp4`;
+}
+
+/** Video-only stream copy over already-isolated per-segment files: gapless picture track. */
+export function buildVideoOnlyConcatArgs(listPath: string, outPath: string): string[] {
+  return ["-nostdin", "-f", "concat", "-safe", "0", "-i", listPath, "-an", "-c", "copy", "-y", outPath];
+}
+
+/**
+ * Final mux: the gapless video-only file plus one raw-PCM audio input (already the exact
+ * concatenation of every beat's trimmed/padded PCM), encoded to AAC exactly once.
+ */
+export function buildFinalMuxArgs(videoOnlyPath: string, concatPcmPath: string, outPath: string): string[] {
+  return [
+    "-nostdin",
+    "-i",
+    videoOnlyPath,
+    "-f",
+    "s16le",
+    "-ar",
+    String(AUDIO_SAMPLE_RATE),
+    "-ac",
+    String(AUDIO_CHANNELS),
+    "-i",
+    concatPcmPath,
+    "-map",
+    "0:v:0",
+    "-map",
+    "1:a:0",
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    "-b:a",
+    "192k",
+    "-movflags",
+    "+faststart",
+    "-y",
+    outPath,
   ];
 }

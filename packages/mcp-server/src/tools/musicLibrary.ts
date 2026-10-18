@@ -84,6 +84,9 @@ interface MusicIndex {
   zipUrl: string;
   lofiCategories: Record<string, string>;
   tracks: IndexedTrack[];
+  /** Which catalogs' tracks are actually present in `tracks`, as of `builtAt`. A source
+   * absent here was either never requested or failed to fetch -- not "confirmed empty". */
+  sourcesFetched: SourceKey[];
 }
 
 export interface FindMusicBedInput {
@@ -115,6 +118,9 @@ export interface FindMusicBedResult {
   /** False when nothing matched the query and the candidates are a plain sample instead. */
   matchedQuery: boolean;
   nextStep: string;
+  /** Present only when source: "any" degraded: one catalog couldn't be fetched and the
+   * other's results are being returned alone (or a stale cache of the failed one). */
+  warnings?: string[];
 }
 
 export interface ImportMusicBedInput {
@@ -237,7 +243,9 @@ interface GhTree {
   tree: { path: string; type: string; sha: string; size?: number }[];
 }
 
-async function buildIndex(): Promise<MusicIndex> {
+/** Fetches only the open-lofi catalog. Thrown errors are the caller's to catch: this
+ * function makes no judgment about whether a failure here is fatal. */
+async function buildLofiTracks(): Promise<{ tracks: IndexedTrack[]; lofiCategories: Record<string, string>; zipUrl: string }> {
   const catalog = await getJson<LofiCatalog>(LOFI_CATALOG_URL);
   const release = await getJson<{ assets: { name: string; browser_download_url: string }[] }>(
     `https://api.github.com/repos/${LOFI_REPO}/releases/latest`,
@@ -265,10 +273,15 @@ async function buildIndex(): Promise<MusicIndex> {
       zip: member,
     });
   }
+  return { tracks, lofiCategories, zipUrl };
+}
 
+/** Fetches only the CC0-1.0-Music catalog. Thrown errors are the caller's to catch. */
+async function buildCc0Tracks(): Promise<IndexedTrack[]> {
   // The contents API caps a directory listing at 1000 entries and two of these folders
   // hold several thousand, so each folder's git tree is read instead.
   const root = await getJson<GhTree>(`https://api.github.com/repos/${CC0_REPO}/git/trees/main`);
+  const tracks: IndexedTrack[] = [];
   for (const folder of root.tree.filter((n) => n.type === "tree")) {
     const tree = await getJson<GhTree>(`https://api.github.com/repos/${CC0_REPO}/git/trees/${folder.sha}`);
     for (const node of tree.tree) {
@@ -285,28 +298,94 @@ async function buildIndex(): Promise<MusicIndex> {
       });
     }
   }
-
-  return { builtAt: new Date().toISOString(), zipUrl, lofiCategories, tracks };
+  return tracks;
 }
 
 function indexPath(projectRoot: string): string {
   return path.join(projectRoot, "output", "music-index.json");
 }
 
-async function loadIndex(projectRoot: string, refresh: boolean): Promise<MusicIndex> {
+/**
+ * Builds or completes the index for whatever scope was asked for (one source, or "any" for
+ * both), starting from whatever is already cached rather than always from nothing. A single
+ * catalog's fetch failing is not this function's failure: with source "any", the other
+ * catalog's tracks (fresh, or the last successful fetch, if this one is stale) are still
+ * returned, with a warning naming what degraded. It only throws when nothing usable is
+ * available for a source that was actually asked for.
+ */
+async function loadIndex(
+  projectRoot: string,
+  refresh: boolean,
+  wantedSource: SourceKey | undefined,
+): Promise<{ index: MusicIndex; warnings: string[] }> {
   const cache = indexPath(projectRoot);
+  let prior: MusicIndex | null = null;
   if (!refresh && fs.existsSync(cache)) {
     try {
       const parsed = JSON.parse(fs.readFileSync(cache, "utf8")) as MusicIndex;
-      if (parsed.tracks?.length) return parsed;
+      if (parsed.tracks?.length && Array.isArray(parsed.sourcesFetched)) prior = parsed;
     } catch {
       // unreadable cache is not worth reporting: rebuild it
     }
   }
-  const index = await buildIndex();
+
+  const need: SourceKey[] = wantedSource ? [wantedSource] : ["lofi", "cc0"];
+  const needsFetch = need.filter((s) => refresh || !prior?.sourcesFetched.includes(s));
+
+  if (needsFetch.length === 0 && prior) {
+    // Every requested source is already in the cache; nothing to fetch.
+    return { index: prior, warnings: [] };
+  }
+
+  const warnings: string[] = [];
+  const bySource: Record<SourceKey, IndexedTrack[]> = {
+    lofi: prior?.tracks.filter((t) => t.source === "lofi") ?? [],
+    cc0: prior?.tracks.filter((t) => t.source === "cc0") ?? [],
+  };
+  const sourcesFetched = new Set<SourceKey>(prior?.sourcesFetched ?? []);
+  let lofiCategories = prior?.lofiCategories ?? {};
+  let zipUrl = prior?.zipUrl ?? "";
+
+  for (const source of needsFetch) {
+    try {
+      if (source === "lofi") {
+        const built = await buildLofiTracks();
+        bySource.lofi = built.tracks;
+        lofiCategories = built.lofiCategories;
+        zipUrl = built.zipUrl;
+      } else {
+        bySource.cc0 = await buildCc0Tracks();
+      }
+      sourcesFetched.add(source);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const repo = SOURCE_META[source].repo;
+      if (bySource[source].length > 0) {
+        warnings.push(`${repo} (${source}) could not be refreshed (${message}); using the last successful fetch instead.`);
+      } else {
+        warnings.push(`${repo} (${source}) could not be reached (${message}); its tracks are unavailable this search.`);
+        sourcesFetched.delete(source);
+      }
+    }
+  }
+
+  const tracks = [...bySource.lofi, ...bySource.cc0];
+  if (tracks.length === 0) {
+    throw new Error(
+      `Could not build a music index: ${warnings.join(" ") || "no catalog returned any tracks."}`,
+    );
+  }
+
+  const index: MusicIndex = {
+    builtAt: new Date().toISOString(),
+    zipUrl,
+    lofiCategories,
+    tracks,
+    sourcesFetched: [...sourcesFetched],
+  };
   fs.mkdirSync(path.dirname(cache), { recursive: true });
   fs.writeFileSync(cache, JSON.stringify(index), "utf8");
-  return index;
+  return { index, warnings };
 }
 
 // ── search ────────────────────────────────────────────────────────────────────
@@ -325,9 +404,8 @@ function scoreTrack(track: IndexedTrack, needles: string[]): number {
 
 export async function runFindMusicBed(input: FindMusicBedInput): Promise<FindMusicBedResult> {
   const projectRoot = resolveProjectRoot(input.projectRoot);
-  const index = await loadIndex(projectRoot, Boolean(input.refresh));
-
   const wantedSource = input.source && input.source !== "any" ? input.source : undefined;
+  const { index, warnings } = await loadIndex(projectRoot, Boolean(input.refresh), wantedSource);
   const needles = (input.query ?? "")
     .toLowerCase()
     .split(/[\s,]+/)
@@ -385,6 +463,7 @@ export async function runFindMusicBed(input: FindMusicBedInput): Promise<FindMus
             "Corpus tracks carry no genre tags, only filenames, so try a word a composer would put in " +
             "a title, or audition a few of these and import_music_bed the one that fits."
           : `Play a couple before committing, then import_music_bed with the id you want (e.g. "${candidates[0]!.id}").`,
+    ...(warnings.length > 0 ? { warnings } : {}),
   };
 }
 
@@ -460,7 +539,10 @@ function writeLedger(dir: string, entry: { file: string; track: IndexedTrack }):
 
 export async function runImportMusicBed(input: ImportMusicBedInput): Promise<ImportMusicBedResult> {
   const projectRoot = resolveProjectRoot(input.projectRoot);
-  const index = await loadIndex(projectRoot, false);
+  // The id carries its own source prefix (lofi:/cc0:), but by the time it's looked up here
+  // the relevant catalog is almost always already cached from the find_music_bed call that
+  // produced this id, so ask for "any" rather than re-deriving a single source to fetch.
+  const { index } = await loadIndex(projectRoot, false, undefined);
 
   const exact = index.tracks.find((t) => t.id === input.id);
   const loose = exact
@@ -599,7 +681,12 @@ export function registerMusicLibrary(server: McpServer): void {
         "Query with plain mood or scene words (\"calm coding\", \"cinematic build\", \"late night\"); " +
         "titles and categories are what get matched, so a genre word works better than a BPM. The first " +
         "call builds an index (about seven GitHub API calls) and caches it at output/music-index.json, " +
-        "so later searches are a local read; pass refresh true after a catalog release. Nothing is " +
+        "so later searches are a local read; pass refresh true after a catalog release. Passing source " +
+        "as \"lofi\" or \"cc0\" fetches only that one catalog, never the other. With source \"any\" " +
+        "(the default), each catalog is fetched independently: if one fails, the result still comes back " +
+        "with the other catalog's candidates plus a warnings entry naming what degraded (falling back to " +
+        "a stale cached fetch of the failed one if there is one), rather than the whole call failing over " +
+        "one catalog being unreachable. Nothing is " +
         "downloaded by this tool: it returns candidates, and import_music_bed fetches the one you pick. " +
         "The corpus is community-aggregated and runs on takedown requests, so for a track whose licence " +
         "has to be certain, check the originating site, or stay on the open-lofi side.",

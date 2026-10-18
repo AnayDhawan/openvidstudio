@@ -42,7 +42,9 @@ export const CinematicScene: React.FC<{
         {children}
       </CameraRig>
       {overlay ? (
-        <div style={{ position: "absolute", inset: 0 }}>{overlay}</div>
+        <div data-ovs-overlay="" style={{ position: "absolute", inset: 0 }}>
+          {overlay}
+        </div>
       ) : null}
       <LookPass
         grain={grain}

@@ -28,12 +28,43 @@ export interface NarrationConfig {
   voice: string;
 }
 
+export interface RenderConfig {
+  /**
+   * Absolute path to a Chromium/Chrome executable, passed to the Remotion CLI as
+   * --browser-executable so it reuses that browser instead of downloading its own
+   * chrome-headless-shell. Point this at the same build capture already launches
+   * (chromium.executablePath() from @openvidstudio/capture, which is what preflight's
+   * "chromium" check reports) so a render works on a machine that has Playwright's
+   * browser installed but no route to download Remotion's separate one. No default: an
+   * unset value means "let Remotion manage its own browser," today's existing behavior.
+   */
+  browserExecutable?: string;
+}
+
+export type CreativeLevel = "peak" | "mid" | "literal";
+
+export interface ProductionConfig {
+  /**
+   * peak: full creative liberty (bespoke story, design system, motion language, score).
+   * mid: strong defaults, template-leaning, lighter review. literal: do exactly what was
+   * specified, nothing added. Set once per video by plan_production's intake, mirrored
+   * into that video's beats.json so a tool reading beats.json alone (not this config)
+   * still knows the level. No default: unlike every other section here, there's no sane
+   * guess for this one, it has to come from asking.
+   */
+  creativeLevel?: CreativeLevel;
+  /** Wall-clock minutes the user is willing to wait for the finished video. Also no default. */
+  timeBudgetMinutes?: number;
+}
+
 export interface OpenvidstudioConfig {
   hasHiggsfield: boolean;
   targetDurationSeconds: number;
   videoConfig: VideoConfig;
   capture: CaptureConfig;
   narration: NarrationConfig;
+  render: RenderConfig;
+  production: ProductionConfig;
 }
 
 export interface ConfigPatch {
@@ -42,6 +73,8 @@ export interface ConfigPatch {
   videoConfig?: Partial<VideoConfig>;
   capture?: Partial<CaptureConfig>;
   narration?: Partial<NarrationConfig>;
+  render?: Partial<RenderConfig>;
+  production?: Partial<ProductionConfig>;
 }
 
 /**
@@ -58,6 +91,8 @@ export const DEFAULT_CONFIG: OpenvidstudioConfig = {
   videoConfig: { fps: 30, width: 1920, height: 1080 },
   capture: { appUrl: "http://localhost:3000", width: 1440, height: 900, settleMs: 1200 },
   narration: { engine: "edge-tts", voice: "en-US-AndrewNeural" },
+  render: {},
+  production: {},
 };
 
 export const CONFIG_FILE_NAME = "openvidstudio.config.json";
@@ -76,6 +111,8 @@ export function loadConfig(projectRoot: string): OpenvidstudioConfig {
       videoConfig: { ...DEFAULT_CONFIG.videoConfig },
       capture: { ...DEFAULT_CONFIG.capture },
       narration: { ...DEFAULT_CONFIG.narration },
+      render: { ...DEFAULT_CONFIG.render },
+      production: { ...DEFAULT_CONFIG.production },
     };
   }
 
@@ -103,6 +140,13 @@ export function loadConfig(projectRoot: string): OpenvidstudioConfig {
     narration: {
       engine: raw.narration?.engine ?? DEFAULT_CONFIG.narration.engine,
       voice: raw.narration?.voice ?? DEFAULT_CONFIG.narration.voice,
+    },
+    render: {
+      browserExecutable: raw.render?.browserExecutable ?? DEFAULT_CONFIG.render.browserExecutable,
+    },
+    production: {
+      creativeLevel: raw.production?.creativeLevel ?? DEFAULT_CONFIG.production.creativeLevel,
+      timeBudgetMinutes: raw.production?.timeBudgetMinutes ?? DEFAULT_CONFIG.production.timeBudgetMinutes,
     },
   };
 }
@@ -132,6 +176,13 @@ export function writeConfig(projectRoot: string, patch: ConfigPatch): Openvidstu
     narration: {
       engine: patch.narration?.engine ?? existing.narration.engine,
       voice: patch.narration?.voice ?? existing.narration.voice,
+    },
+    render: {
+      browserExecutable: patch.render?.browserExecutable ?? existing.render.browserExecutable,
+    },
+    production: {
+      creativeLevel: patch.production?.creativeLevel ?? existing.production.creativeLevel,
+      timeBudgetMinutes: patch.production?.timeBudgetMinutes ?? existing.production.timeBudgetMinutes,
     },
   };
   fs.mkdirSync(projectRoot, { recursive: true });

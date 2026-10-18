@@ -3,7 +3,7 @@
 
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
-import { loadFont as loadInter } from "@remotion/google-fonts/Inter";
+import "./localFonts";
 import { CinematicScene } from "./CinematicScene";
 import { TitleSlam, Caption } from "./KineticText";
 import { Layer } from "./camera";
@@ -11,10 +11,7 @@ import { E, pop, tween } from "./motion";
 import { Whoosh } from "./sfx";
 import { color } from "./tokens";
 
-const { fontFamily: uiFamily } = loadInter("normal", {
-  weights: ["500", "700", "900"],
-  subsets: ["latin"],
-});
+const uiFamily = "Inter, system-ui, sans-serif";
 
 const DIP_AT = 150;
 

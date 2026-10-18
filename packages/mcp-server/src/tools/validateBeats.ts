@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { interactionSchema } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { resolveProjectRoot, sanitizeSegment } from "../util";
+import { writeFactRecord } from "../facts";
 
 export interface ValidateBeatsResult {
   valid: boolean;
@@ -11,6 +13,11 @@ export interface ValidateBeatsResult {
 const EM_DASH = "—";
 const MIN_PACE = 2.3;
 const MAX_PACE = 2.9;
+/** SCRIPT.md's reading-time budget for onScreenText on a narration:"none" beat. */
+export const MAX_READING_WORDS_PER_SEC = 3.5;
+export const READING_OVERHEAD_SEC = 0.8;
+const NARRATION_MODES = ["voice", "none"] as const;
+const CREATIVE_LEVELS = ["peak", "mid", "literal"] as const;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;
 const TRANSITIONS = ["cut", "whip", "fade"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
@@ -42,6 +49,36 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   const root = beatsJson as Record<string, unknown>;
 
   const fps = typeof root.fps === "number" && root.fps > 0 ? root.fps : 30;
+
+  const narrationRaw = root.narration;
+  if (narrationRaw !== undefined && !(NARRATION_MODES as readonly string[]).includes(narrationRaw as string)) {
+    errors.push(`narration must be one of ${NARRATION_MODES.map((n) => `"${n}"`).join(", ")} (omit for "voice")`);
+  }
+  const narration = narrationRaw === "none" ? "none" : "voice";
+
+  // Mirrored from openvidstudio.config.json's production field (PLANNING.md §0) so a tool
+  // reading beats.json alone still knows the level a video was planned at. Shape-checked
+  // only: this file doesn't enforce what a level implies about content, that's the agent's
+  // job at authoring time (plan_production, scaffold_scene's template-vs-custom choice).
+  if (root.production !== undefined) {
+    if (typeof root.production !== "object" || root.production === null || Array.isArray(root.production)) {
+      errors.push(`production must be an object: { creativeLevel?, timeBudgetMinutes? }`);
+    } else {
+      const production = root.production as Record<string, unknown>;
+      if (
+        production.creativeLevel !== undefined &&
+        !(CREATIVE_LEVELS as readonly string[]).includes(production.creativeLevel as string)
+      ) {
+        errors.push(`production.creativeLevel must be one of ${CREATIVE_LEVELS.map((l) => `"${l}"`).join(", ")}`);
+      }
+      if (
+        production.timeBudgetMinutes !== undefined &&
+        (typeof production.timeBudgetMinutes !== "number" || production.timeBudgetMinutes <= 0)
+      ) {
+        errors.push(`production.timeBudgetMinutes must be a positive number`);
+      }
+    }
+  }
 
   if (!Array.isArray(root.beats)) {
     return { valid: false, errors: ["beatsJson.beats must be an array"] };
@@ -92,23 +129,64 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       expectedStart += duration as number;
     }
 
+    // C5: an explicit scene file path, for a hand-authored bespoke scene that doesn't live
+    // at stitch_composition's `./scenes/<PascalId>` convention. Shape-checked only -- whether
+    // the file actually exists is stitch_composition's own concern at stitch time, not
+    // validate_beats's (this runs on drafted beats.json, often before a scene is written).
+    const scene = beat.scene;
+    if (scene !== undefined && (typeof scene !== "string" || scene.length === 0)) {
+      errors.push(`${label}: "scene" must be a non-empty string if present (a path relative to the video directory)`);
+    }
+
     const vo = beat.vo;
-    if (typeof vo !== "string" || vo.length === 0) {
-      errors.push(`${label}: missing or invalid "vo"`);
+    const hasVo = typeof vo === "string" && vo.length > 0;
+    if (narration === "voice") {
+      if (!hasVo) {
+        errors.push(`${label}: missing or invalid "vo"`);
+      } else {
+        if ((vo as string).includes(EM_DASH)) {
+          errors.push(`${label}: "vo" contains an em dash, rewrite with commas/periods`);
+        }
+        if (hasDuration) {
+          const seconds = (duration as number) / fps;
+          if (seconds > 0) {
+            const words = wordCount(vo as string);
+            const pace = words / seconds;
+            if (pace < MIN_PACE || pace > MAX_PACE) {
+              errors.push(
+                `${label}: VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
+                  `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`,
+              );
+            }
+          }
+        }
+      }
     } else {
-      if (vo.includes(EM_DASH)) {
+      // narration: "none". vo is optional and, if present at all, not held to the spoken
+      // words/sec budget -- nothing is going to speak it. onScreenText is the thing that
+      // actually needs a duration check here, against reading time rather than speech pace.
+      if (hasVo && (vo as string).includes(EM_DASH)) {
         errors.push(`${label}: "vo" contains an em dash, rewrite with commas/periods`);
       }
-      if (hasDuration) {
-        const seconds = (duration as number) / fps;
-        if (seconds > 0) {
-          const words = wordCount(vo);
-          const pace = words / seconds;
-          if (pace < MIN_PACE || pace > MAX_PACE) {
-            errors.push(
-              `${label}: VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
-                `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`,
-            );
+      const onScreenText = beat.onScreenText;
+      if (onScreenText !== undefined) {
+        if (typeof onScreenText !== "string" || onScreenText.length === 0) {
+          errors.push(`${label}: "onScreenText" must be a non-empty string if present`);
+        } else {
+          if (onScreenText.includes(EM_DASH)) {
+            errors.push(`${label}: "onScreenText" contains an em dash, rewrite with commas/periods`);
+          }
+          if (hasDuration) {
+            const seconds = (duration as number) / fps;
+            const words = wordCount(onScreenText);
+            const minSeconds = words / MAX_READING_WORDS_PER_SEC + READING_OVERHEAD_SEC;
+            if (seconds < minSeconds) {
+              errors.push(
+                `${label}: onScreenText needs at least ${minSeconds.toFixed(2)}s to read (${words} words at ` +
+                  `${MAX_READING_WORDS_PER_SEC} words/sec plus ${READING_OVERHEAD_SEC}s overhead), beat is only ` +
+                  `${seconds.toFixed(2)}s`,
+              );
+            }
           }
         }
       }
@@ -337,6 +415,33 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   return { valid: errors.length === 0, errors };
 }
 
+export interface ValidateBeatsInput {
+  beatsJson: unknown;
+  /** When set, the outcome is also kept as a run record for this video (see collect_facts). */
+  videoName?: string;
+  projectRoot?: string;
+}
+
+export function runValidateBeats(input: ValidateBeatsInput): ValidateBeatsResult {
+  const result = validateBeatsLogic(input.beatsJson);
+  if (input.videoName !== undefined) {
+    writeFactRecord(resolveProjectRoot(input.projectRoot), {
+      tool: "validate_beats",
+      videoName: sanitizeSegment(input.videoName, "videoName"),
+      facts: {
+        ok: result.valid,
+        errors: result.errors.length,
+        // Errors are labelled `beat "<id>": ...` when they belong to one beat.
+        findings: result.errors.map((message) => {
+          const m = message.match(/^beat "([^"]+)": ([\s\S]*)$/);
+          return m ? { beatId: m[1], severity: "error", message: m[2] } : { severity: "error", message };
+        }),
+      },
+    });
+  }
+  return result;
+}
+
 export function registerValidateBeats(server: McpServer): void {
   server.registerTool(
     "validate_beats",
@@ -350,7 +455,13 @@ export function registerValidateBeats(server: McpServer): void {
         "word-count vs the 2.3-2.9 words/sec budget checked in both directions (too many words for the " +
         "duration and suspiciously few), every beat has a captureMethod, and method-specific required " +
         "fields (url + interactions for screenshot/recording, higgsfieldPrompt for higgsfield, nothing extra " +
-        "for dom-demo). waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), " +
+        "for dom-demo). Top-level narration (\"voice\" or \"none\", \"voice\" assumed if omitted) controls " +
+        "whether vo is required and pace-checked at all: under \"none\", vo is optional and unpaced, and an " +
+        "optional per-beat onScreenText is checked instead against a reading-time budget (about 3.5 words/sec " +
+        "plus 0.8s overhead) rather than a spoken-pace budget. Top-level production (optional: { creativeLevel " +
+        "(\"peak\"/\"mid\"/\"literal\"), timeBudgetMinutes }), mirrored from openvidstudio.config.json by " +
+        "plan_production (PLANNING.md §0), is shape-checked only -- what a level implies about content is the " +
+        "agent's job, not this tool's. waitUntil (\"load\" or \"networkidle\"), colorScheme (\"light\" or \"dark\"), " +
         "reducedMotion (boolean), and deterministic (boolean) are type-checked if present on a screenshot/" +
         "recording beat. For screenshot/" +
         "recording beats, every interactions[] entry is also validated against " +
@@ -367,8 +478,17 @@ export function registerValidateBeats(server: McpServer): void {
         beatsJson: z
           .unknown()
           .describe("The drafted beats.json content (an object), not a file path."),
+        videoName: z
+          .string()
+          .min(1)
+          .optional()
+          .describe(
+            "Optional. When given, the outcome is also kept as a run record for this video (see collect_facts). " +
+              "Validation itself never touches the disk without it.",
+          ),
+        projectRoot: z.string().optional().describe("Only used with videoName."),
       },
     },
-    async ({ beatsJson }) => runTool("validate_beats", () => validateBeatsLogic(beatsJson)),
+    async (input) => runTool("validate_beats", () => runValidateBeats(input)),
   );
 }

@@ -2,9 +2,23 @@
 // scenes in the openvidstudio house style: camera rig, motion helpers, SFX,
 // look pass, design tokens, and the shared scene/UI components.
 
+// Local, offline Inter/JetBrains Mono loading (A2): every scene imports from this
+// index, so importing it here means every render gets bundled fonts with zero
+// network access, instead of the @remotion/google-fonts loaders that used to be
+// scattered across TerminalReplay/RepoCta/ChecklistPanel.
+import "./localFonts";
+
 // Camera + layers
-export { CameraRig, Layer, useCamera } from "./camera";
+export { CameraRig, Layer, useCamera, resolveCamera } from "./camera";
 export type { CamKeyframe } from "./camera";
+
+// Directed shot: a flat capture turned into a push-in with tilt, depth of field and a cursor (C4)
+export { DirectedShot } from "./DirectedShot";
+export type { DirectedShotProps } from "./DirectedShot";
+
+// Music-first timing: the score's grid as scene-local frames (C3)
+export { MusicClockProvider, useMusicClock, createMusicClock } from "./musicClock";
+export type { MusicCues, MusicClock } from "./musicClock";
 
 // Motion helpers
 export { E, SPRING, tween, pop, jitter, staggerDelay } from "./motion";
@@ -17,6 +31,9 @@ export {
   Blip,
   SuccessChime,
   Bell,
+  SoftClick,
+  Bong,
+  Drop,
   MusicBed,
 } from "./sfx";
 
@@ -29,6 +46,13 @@ export {
   applyBrand, brandAssets, monoStack, uiStack,
 } from "./tokens";
 export type { Brand } from "./tokens";
+
+// Design system as code (C2)
+export {
+  defineDesignSystem, contrastRatio,
+  DEFAULT_TYPE_SCALE, DEFAULT_GRID, DEFAULT_MOTION, DEFAULT_TEXTURE, DEFAULT_TRANSITIONS,
+} from "./designSystem";
+export type { DesignSystem, TypeScale, LayoutGrid, MotionPersonality, CameraEnergy, Motif, Texture } from "./designSystem";
 
 // Scene wrapper
 export { CinematicScene } from "./CinematicScene";
@@ -60,3 +84,17 @@ export type { CursorKeyframe } from "./CursorActor";
 
 // Repo CTA scene
 export { RepoCta } from "./RepoCta";
+
+// Kinetic text primitives (C4)
+export { Words, useTyped, Caret } from "./kinetic";
+
+// Pixel-grid family: dot-matrix text, logo assembler, wipe transition (C4)
+export { DotText, PixelLogo, PixelWipe } from "./pixel";
+export type { PixelShape } from "./pixel";
+
+// Backgrounds and transition primitives (C4)
+export { Atmosphere, DotGrid, Flash, Black, Letterbox } from "./atmosphere";
+
+// UI chrome: windows, JSON viewer, tool chips, badges, glass panel, chapter HUD (C4)
+export { Window, JsonView, Check, Cross, ToolChip, Pill, Glass, ChapterHud } from "./panels";
+export type { Chapter } from "./panels";

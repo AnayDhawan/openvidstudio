@@ -9,6 +9,7 @@ import {
   DEFAULT_VIEWPORT,
   screenEncodeArgs,
   settlePage,
+  writeCaptureSidecar,
   writeCursorSidecar,
   writeSettleSidecar,
   detectAndCompensateZoom,
@@ -23,6 +24,7 @@ import {
   type Viewport,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 export interface CaptureScreenRecordingInput {
   projectRoot?: string;
@@ -264,6 +266,30 @@ async function probeDurationMs(filePath: string, cwd: string): Promise<number | 
 }
 
 export async function runCaptureScreenRecording(
+  input: CaptureScreenRecordingInput
+): Promise<CaptureScreenRecordingResult> {
+  const result = await captureScreenRecording(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_screen_recording",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      url: input.url,
+      viewport: { width: result.width, height: result.height },
+      durationMs: result.durationMs ?? null,
+      speed: input.speed ?? 1,
+      interactions: input.interactions?.length ?? 0,
+      settled: result.settle?.settled ?? null,
+      settleWaitedMs: result.settle?.waitedMs ?? null,
+    },
+  });
+  return result;
+}
+
+async function captureScreenRecording(
   input: CaptureScreenRecordingInput,
 ): Promise<CaptureScreenRecordingResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
@@ -402,6 +428,17 @@ export async function runCaptureScreenRecording(
       // Same reasoning: without this, scaffold_scene (a separate later tool call) has no
       // real coordinates or timing to build a cursor overlay from.
       writeCursorSidecar(outPathAbs, compensatedViewport, cursorPoints);
+      // Same reasoning as capture_screenshot's own capture sidecar: docs_drift/release_diff
+      // need the CSS viewport actually requested, not the compensated size or a guess made
+      // from a reference frame's pixel dimensions.
+      writeCaptureSidecar(outPathAbs, {
+        url: input.url,
+        viewport: target,
+        deviceScaleFactor,
+        zoom,
+        ...(input.interactions?.length ? { interactions: input.interactions } : {}),
+        capturedAt: new Date().toISOString(),
+      });
 
       return {
         outPath: outPathAbs,

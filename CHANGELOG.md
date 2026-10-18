@@ -7,7 +7,137 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Docs
+
+- **README and llms.txt now disclose Remotion's own license, not just openvidstudio's.**
+  openvidstudio's code is Apache-2.0 and free for anyone, but it renders through Remotion,
+  which is free only for individuals, non-profits, evaluation use, and for-profit companies
+  with up to 3 employees; a larger company needs a paid Remotion Company License
+  (remotion.pro) to render with it. The README's badge and llms.txt's tagline said
+  openvidstudio was free without that caveat, which reads as "free to use" to a company
+  evaluator when the Remotion dependency underneath it isn't, for them. Tech stack and
+  License sections now state the split plainly.
+
 ### Fixed
+
+- **The brand palette now reaches the render (#61).** The template's `sideEffects: ["*.css"]`
+  let the bundler drop `src/brand.ts`, so `applyBrand` never ran and every scene rendered in the
+  default navy. It now lists `./src/brand.ts`, and `validate_scenes` warns when none of
+  `brand.ts`'s colours appears in a rendered frame.
+- **`stitch_composition` keeps a hand-picked music track on re-stitch (#64).** A chosen track and
+  its level are preserved; an auto-detected bed still upgrades when a better one is added.
+- **`capture_terminal` on Windows (#66).** Python output is unbuffered and UTF-8 (`PYTHONUNBUFFERED`,
+  `PYTHONUTF8`, `PYTHONIOENCODING` in the child's environment), and a bare `bash`, which resolves
+  to the WSL launcher, is flagged.
+- **`spawnCapture` quotes a `.cmd` shim path that contains a space (#77).**
+- **The tool counts in the README were wrong in three places (#69, #70, #81)** and are now
+  generated and checked.
+
+- **`contact_sheet` no longer always fails.** Its filtergraph fed `tile` one input label
+  per frame (`[t0][t1]...tile=...`), but `tile` takes exactly one input stream, so every
+  call errored with "More input link labels specified for filter 'tile' than it has
+  inputs." Every scaled input is now concatenated into one stream first
+  (`concat=n=N:v=1:a=0`), and only that single stream feeds `tile`. Verified with a real
+  ffmpeg run producing correctly-dimensioned 4-beat and 16-beat sheets.
+
+- **`qc_extract_frames`'s end-frame seek no longer lands on the next beat**, and no longer
+  reports a path for a frame it never wrote. Timestamp-based seeking rounds a target frame
+  to a time that accurate-seek can land just past, returning the following frame instead
+  (and, for the last beat, writing nothing at all). Extraction is now by frame index
+  (`select=eq(n,N)`); every output is verified to exist and be non-empty before being
+  reported, with a `midError`/`endError` instead of a phantom path otherwise. Verified with
+  a synthetic 3-beat render: every beat's mid and end stills show their own color, not a
+  neighbor's, including the final beat.
+
+- **`CursorActor`'s click rings no longer follow the cursor past the click.** A ring was
+  drawn at the cursor's live position on every frame it's visible, so a path that kept
+  moving after a click dragged the ring with it (~100px off target in a real repro). Rings
+  now anchor at the cursor's position at its own click frame. Scaffolded recording scenes
+  also now make the cursor arrive ~4 frames before a click and dwell ~7 frames after.
+
+- **`scaffold_scene`'s cta template no longer ships `your-org`/`your-repo` placeholders**
+  when real info is available: owner/name now come from the git remote or package.json's
+  `repository` field, chips from `license` and a simple language guess.
+  `validate_scenes` also no longer false-positives "fewer than two camera keyframes" on
+  `RepoCta` and other components with their own internal camera.
+
+- **`preflight`'s Chromium check no longer guesses fixed OS cache directories.** It ignored
+  `PLAYWRIGHT_BROWSERS_PATH` (a false "no chromium" when browsers lived there instead) and
+  could report OK on a different build than real capture would actually launch (a version
+  mismatch between this server's playwright and an older build the project already had).
+  It now resolves `chromium.executablePath()` from the exact same `@openvidstudio/capture`
+  import real capture uses, checks that path exists, and on failure names the exact
+  resolved (missing) path and the fix command. Verified: passes with browsers only under a
+  custom `PLAYWRIGHT_BROWSERS_PATH`; fails with the right path and fix named when that
+  directory is empty; passes again once the same build is copied there.
+
+- **Four small ones:**
+  - `Drop`, `Bong`, and `SoftClick` are now exported from `@openvidstudio/core`'s index;
+    they existed in `sfx.tsx` but weren't exported, so importing them threw a React error.
+  - README's tool count corrected to the real registered count (33, 34 with Higgsfield);
+    a new check in `manual-test.mjs` fails if the two ever disagree again.
+  - `find_music_bed` fetches only the requested catalog when `source` is `"lofi"` or
+    `"cc0"`; with `"any"` (the default), each catalog is fetched independently, and one
+    failing no longer fails the whole call; the result carries a `warnings` entry naming
+    what degraded, falling back to a stale cached fetch of the failed catalog when one
+    exists. (The earlier report of open-lofi's catalog.json 404ing was a sandbox proxy
+    artifact; it's reachable on a normal network.)
+  - New `render.browserExecutable` config: `render_video` passes it to Remotion as
+    `--browser-executable` so a render reuses an already-installed browser (typically the
+    same Playwright Chromium capture uses) instead of Remotion downloading its own, which
+    fails with no network. `preflight` checks the configured path too, separately from its
+    Playwright Chromium check.
+
+- **`docs_drift` no longer treats a reference screenshot's pixel size as the CSS viewport
+  to re-capture at.** A 1440x900 capture at the default 2x scale is a 2880x1800 PNG on
+  disk; re-navigating to a 2880-wide viewport is a different, much wider layout, not the
+  page that was actually captured, so every default-scale capture reported 26-40% drift on
+  pages that never changed. `capture_screenshot`, `capture_screen_recording`, and
+  `release_diff` now write a `<asset>.capture.json` sidecar (url, viewport,
+  deviceScaleFactor, zoom, interactions, capturedAt) next to every capture; `docs_drift`
+  resolves the viewport to re-capture at from an explicit binding, then that sidecar, and
+  only falls back to a narrow heuristic (the reference's pixel size is exactly double a
+  common CSS viewport) for a legacy asset with neither, otherwise asking for an explicit
+  binding instead of guessing. Verified: v1.1 captures compared against v1.1 itself report
+  0 drift; compared against v1.0, only the route an actual code change touched reports
+  drift (9.70% changed), everything else 0.
+
+- **`extract_brand` now finds a palette on a repo with no CSS design tokens, if the logo
+  carries one.** It previously resolved nothing on such a repo even when the logo SVG
+  visibly carried the brand's real colors. When no CSS token or Tailwind config yields a
+  palette, it now parses the chosen logo SVG's fill colors, ranks them by pixel area, and
+  maps the top ones to accent/accentAlt/success/danger (plus a background token for an
+  exact full-bleed rect), naming the logo as the source. Fonts also now fall back to
+  `@fontsource/*` package.json dependencies when no CSS variable or `next/font` import
+  named one. Verified against this repo's own `brand/logo-lockup.svg`: resolves
+  `#8b5cf6`, `#f87171`, `#3b82f6`, `#2dd4bf` on `#0a0a0a`, each attributed to the logo.
+
+- **Renders no longer require network access.** `TerminalReplay`, `RepoCta`, and
+  `ChecklistPanel` each called a `@remotion/google-fonts` loader at module scope, and
+  every scaffolded scene imports the core index, so any render with no route to
+  fonts.gstatic.com (an offline machine, a corporate proxy) crashed before producing a
+  single frame. Inter (400-900) and JetBrains Mono (400, 700) now ship as bundled woff2
+  files (`templates/default/public/fonts/`, sourced from `@fontsource/inter` and
+  `@fontsource/jetbrains-mono`, regenerate with `packages/core/scripts/gen-fonts.sh`),
+  loaded by a new `packages/core/src/localFonts.ts` via `FontFace` plus
+  `delayRender`/`continueRender`. Every network font loader is gone from core. Verified
+  with a real render, network blocked, of all three components: the delayRender handle
+  clears in under 100ms per frame and the output shows real Inter/JetBrains Mono, not
+  fallback glyphs. CI gained an `offline-render` job
+  (`scripts/offline-render-check.mjs`) that fails if this regresses.
+
+- **`render_video`'s incremental path no longer drifts audio out of sync with video.**
+  Each per-beat segment's AAC track ran slightly longer than its video (encoder padding),
+  and stream-copying every segment's audio under one concat pass stacked that drift beat
+  over beat: a 16-beat, 5400-frame video came out ~0.85s audio-behind by the end. Video now
+  concatenates from per-segment files with their audio isolated into a fresh container first
+  (a segment's own container duration otherwise still reflects its longer audio track even
+  after dropping the audio stream, so the old approach left a silent gap at every join
+  instead of drift); audio is decoded to raw PCM per segment, trimmed/padded to exactly
+  duration/fps samples, concatenated as samples, and encoded to AAC once at the end.
+  Verified on a synthetic 16-beat composition: joined video and audio both land within 1ms
+  of frames/fps, and a transient placed at a known offset lands within 1 frame of its
+  expected time.
 
 - **`capture_screen_recording` at the default `deviceScaleFactor` (2) no longer leaves
   3/4 of the frame grey.** Playwright's `recordVideo.size` is in the same CSS-pixel units
@@ -23,6 +153,68 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   four carry their real colours.
 
 ### Added
+
+- **Director mode.** At the peak and mid creative levels the agent works as a director, not a
+  template filler: a creative brief first (`write_brief`), a design system as code
+  (`defineDesignSystem`), an original score (`compose_score`), scenes written from core's
+  primitives, a mandatory review loop (`render_stills`), render-mode quality gates
+  (`validate_scenes` with `render: true`), a facts pipeline (`collect_facts`), and a final
+  assembly (`finalize_video`, `write_description`). Production modes: peak, mid, literal.
+  - `compose_score` composes an original, arc-matched score from the brief's music plan, with a
+    cues file exact by construction, mastered to -15 LUFS under narration or -14 for music-only
+    (`mode` is required, no default), and numeric checks an agent can read: band balance, clicks,
+    per-section loudness, a spectrogram. Needs Python with numpy, scipy, soundfile, pyloudnorm
+    and matplotlib.
+  - `useMusicClock(beatId)` in core gives a scene `at(bar, beat)`, `beatPulse()`, `onBeat()`,
+    `onDownbeat()`, `impact(label)` and `sectionAt(frame)` as scene-local frames.
+    `stitch_composition` copies the bed's cue grid next to the composition and mounts the
+    provider. `plan_beats` gains `snapToBars` to land every beat boundary on a downbeat.
+  - `DirectedShot` in core turns a flat capture into a push-in with tilt, depth of field and a
+    cursor. `Words`, `DotText`, `PixelLogo`, `PixelWipe`, `Atmosphere`, `DotGrid`, `Flash`,
+    `Black`, `Letterbox`, `ChapterHud`, `Window`, `JsonView`, `ToolChip`, `Pill`, `Check`,
+    `Cross`, `Glass`, `useTyped` and `Caret` are documented in API.md with a real still each.
+  - `scaffold_scene` gains `mode: "template" | "starter" | "blank"`, and a beat's `scene` field
+    points `stitch_composition` at any scene file.
+  - `render_stills` takes `perBeat` (a number, or `"review"` for five frames per beat that
+    straddle every cut), exact `frames`, and `round`; it writes a labelled contact grid and
+    returns the numeric findings, so an agent without image input can review.
+  - `validate_scenes` with `render: true` measures cropping, text size, reading time (3.5
+    words/s plus 0.8 s, shared with `validate_beats`), dead frames, em dashes, contrast against
+    the rendered pixels, the title-safe area, HUD overlap and whether the brand palette reaches a
+    frame. A brief may mark a beat `deliberateHold`. Without `render`, a static check warns
+    about numbers typed into a scene's copy instead of read from `facts.json`.
+  - `write_description` writes YouTube chapters from the beats and a credits section read from
+    disk, and `finalize_video` always writes it. `finalize_video` also normalises loudness to
+    -14 LUFS / -1.5 dBTP and writes a poster and a size-capped share copy.
+  - `CREATIVE.md` (principles), `TOOLS.md` (generated), and the `openvidstudio-director` skill,
+    mirrored to the six agent skill directories.
+- **A per-tool test suite.** `scripts/manual-test.mjs` is now a runner over one file per tool in
+  `scripts/tests/`, each runnable alone. CI runs the ones that need only node.
+- **The tool list and every tool-count claim are generated from the server's registry**
+  (`scripts/generate-tool-docs.mjs`), and CI fails when they drift.
+
+- **`render_video` accepts `async: true`, and a new `job_status` tool.** A real render can
+  run 40+ minutes, well past an MCP client's own request timeout (Claude Code's
+  `MCP_TOOL_TIMEOUT`, or the SDK client default), which killed it before it finished. Input
+  is still validated synchronously (a bad call still fails immediately), then the render
+  starts detached and the call returns `{ jobId, estimate }` right away. `job_status` polls
+  for progress (frames rendered, current beat, a log tail) and the eventual result, the
+  same shape a synchronous call would have returned. The synchronous path also now emits
+  real MCP progress notifications for a client that attached a `progressToken`. Verified
+  with a real render through a client enforcing a 3000ms timeout on the initial call: it
+  returned in under 3s with a jobId, and polling reached `status: "done"` with a correct
+  result.
+
+- **Music-only videos: `narration: "none"`, `stitch_composition`'s `musicBed`, and
+  `overrides.tsx`.** `validate_beats` required every beat's `vo` and held it to the spoken
+  words/sec budget, so a text-and-music video with no narration at all could never pass
+  `write_beats_file`. `beats.json` gains an optional top-level `narration: "voice" | "none"`
+  ("voice" assumed when omitted, so every existing file stays valid); under `"none"`, `vo`
+  is optional and unpaced, and a new optional per-beat `onScreenText` is checked against a
+  reading-time budget instead (see `SCRIPT.md`). `stitch_composition` gains
+  `musicBed: { file, volume }` (volume defaults to 0.18 with narration, 1.0 without), and
+  imports `src/videos/<name>/overrides.tsx` when present as a dev-authored extension point
+  it only ever references, never writes, so a hand-added layer survives a re-stitch.
 
 - **`deterministic` on `capture_screenshot`/`capture_screen_recording`, for a capture
   that is the same twice.** Opt-in (default off): freezes `Date.now()`/`new Date()`

@@ -53,3 +53,5 @@ pnpm-debug.log*
 
 # Scratch state written by local tooling, not part of the project.
 .freebuff/
+reference/
+ovs-launch-reference.zip

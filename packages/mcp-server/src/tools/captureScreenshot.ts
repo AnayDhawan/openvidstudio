@@ -14,6 +14,7 @@ import {
   replayInteractions,
   settlePage,
   viewportSchema,
+  writeCaptureSidecar,
   writeCursorSidecar,
   writeSettleSidecar,
   type CursorPoint,
@@ -22,6 +23,7 @@ import {
   type Viewport,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
+import { fileBytes, relToProject, writeFactRecord } from "../facts";
 
 export interface CaptureScreenshotInput {
   projectRoot?: string;
@@ -145,7 +147,32 @@ export async function cropAndUpscale(
     .toBuffer();
 }
 
-export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promise<CaptureScreenshotResult> {
+export async function runCaptureScreenshot(
+  input: CaptureScreenshotInput
+): Promise<CaptureScreenshotResult> {
+  const result = await captureScreenshot(input);
+  const projectRoot = resolveProjectRoot(input.projectRoot);
+  writeFactRecord(projectRoot, {
+    tool: "capture_screenshot",
+    beatId: sanitizeSegment(input.beatId, "beatId"),
+    facts: {
+      kind: "real-capture",
+      outPath: relToProject(projectRoot, result.outPath),
+      bytes: fileBytes(result.outPath),
+      url: input.url,
+      viewport: { width: result.width, height: result.height },
+      pixelWidth: result.pixelWidth,
+      pixelHeight: result.pixelHeight,
+      deviceScaleFactor: result.deviceScaleFactor,
+      interactions: input.interactions?.length ?? 0,
+      settled: result.settle?.settled ?? null,
+      settleWaitedMs: result.settle?.waitedMs ?? null,
+    },
+  });
+  return result;
+}
+
+async function captureScreenshot(input: CaptureScreenshotInput): Promise<CaptureScreenshotResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const target = input.viewport ?? DEFAULT_VIEWPORT;
@@ -225,6 +252,19 @@ export async function runCaptureScreenshot(input: CaptureScreenshotInput): Promi
       // afterwards, in a separate tool call) would have no real coordinates to build a
       // cursor overlay from.
       writeCursorSidecar(outPathAbs, compensatedViewport, cursorPoints);
+      // docs_drift/release_diff's binding to re-capture this exact page: the CSS viewport
+      // actually requested (not the reference PNG's pixel size, which a different, wider
+      // layout can also produce), the scale it was captured at, and the interactions that
+      // got it into this state. Without this, a re-capture has nothing but the pixel
+      // dimensions of the PNG on disk to guess a viewport from -- see captureSidecar.ts.
+      writeCaptureSidecar(outPathAbs, {
+        url: input.url,
+        viewport: target,
+        deviceScaleFactor,
+        zoom,
+        ...(input.interactions?.length ? { interactions: input.interactions } : {}),
+        capturedAt: new Date().toISOString(),
+      });
 
       return {
         outPath: outPathAbs,

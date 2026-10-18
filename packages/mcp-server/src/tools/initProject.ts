@@ -5,6 +5,13 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { TEMPLATE_DIR, DOCS_DIR } from "../paths";
 import { writeConfig, type OpenvidstudioConfig, type VideoConfig } from "../config";
 import { resolveProjectRoot, sanitizeSegment, copyTemplateTree } from "../util";
+import {
+  PREFLIGHT_BENCHMARK_COMPOSITION_ID,
+  PREFLIGHT_BENCHMARK_VIDEO_NAME,
+  readRegistry,
+  renderRootTsx,
+  writeRegistry,
+} from "./stitchComposition";
 import { runTool } from "./mcp";
 
 export interface InitProjectInput {
@@ -58,6 +65,31 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
 
   const videoDir = path.join(projectRoot, "src", "videos", name);
   fs.mkdirSync(path.join(videoDir, "scenes"), { recursive: true });
+
+  // Seeds preflight's render-benchmark composition into the registry (idempotent: a
+  // second init_project call, or one against an already-scaffolded project, just finds
+  // the entry already there and does nothing). This is what lets preflight time a real
+  // render before any real video has been planned or stitched -- Root.tsx otherwise stays
+  // `return null;` (the bare template) until the first stitch_composition call.
+  const registry = readRegistry(projectRoot);
+  if (!registry.some((e) => e.videoName === PREFLIGHT_BENCHMARK_VIDEO_NAME)) {
+    registry.push({
+      id: PREFLIGHT_BENCHMARK_COMPOSITION_ID,
+      videoName: PREFLIGHT_BENCHMARK_VIDEO_NAME,
+      componentName: "PreflightBenchmark",
+      importPath: "./PreflightBenchmark",
+      durationInFrames: 150,
+      fps: 30,
+      width: 1920,
+      height: 1080,
+    });
+    writeRegistry(projectRoot, registry);
+    fs.writeFileSync(
+      path.join(projectRoot, "src", "Root.tsx"),
+      renderRootTsx(registry, fs.existsSync(path.join(projectRoot, "src", "brand.ts"))),
+      "utf8",
+    );
+  }
 
   const config = writeConfig(projectRoot, {
     hasHiggsfield: input.hasHiggsfield,

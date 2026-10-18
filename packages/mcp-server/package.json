@@ -15,11 +15,14 @@
   "files": [
     "dist",
     "templates",
-    "docs"
+    "docs",
+    "py"
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@openvidstudio/capture": "workspace:*",
+    "@remotion/bundler": "4.0.534",
+    "@remotion/renderer": "4.0.534",
     "playwright": "^1.64.0",
     "sharp": "^0.35.5",
     "zod": "^4.6.6"

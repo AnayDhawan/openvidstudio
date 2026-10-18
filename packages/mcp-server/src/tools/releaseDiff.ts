@@ -4,12 +4,14 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, spawnCapture } from "../util";
 import {
+  DEFAULT_DEVICE_SCALE,
   DEFAULT_VIEWPORT,
   detectAndCompensateZoom,
   launchChromium,
   replayInteractions,
   viewportSchema,
   interactionSchema,
+  writeCaptureSidecar,
   type Interaction,
   type Viewport,
 } from "@openvidstudio/capture";
@@ -53,6 +55,8 @@ export interface ReleaseDiffInput {
   routes?: string[];
   interactions?: Interaction[];
   viewport?: Viewport;
+  /** Pixels captured per CSS pixel. Defaults to 2, matching capture_screenshot's own default. */
+  deviceScaleFactor?: number;
   changedRatioThreshold?: number;
   meanDeltaThreshold?: number;
 }
@@ -228,6 +232,7 @@ export async function runReleaseDiff(input: ReleaseDiffInput): Promise<ReleaseDi
   fs.mkdirSync(path.join(outAbs, "after"), { recursive: true });
 
   const target = input.viewport ?? DEFAULT_VIEWPORT;
+  const deviceScaleFactor = input.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE;
   const changes: RouteChange[] = [];
   const browser = await launchChromium();
 
@@ -241,18 +246,37 @@ export async function runReleaseDiff(input: ReleaseDiffInput): Promise<ReleaseDi
         ["after", input.afterUrl],
       ] as const) {
         const rel = path.join(outRel, side, `${slug}.png`);
-        const page = await browser.newPage();
+        const url = new URL(route, baseUrl).toString();
+        // deviceScaleFactor set at context creation, matching capture_screenshot's own
+        // convention, so these captures are on equal footing with every other asset this
+        // pipeline produces (and so a future docs_drift binding against one of them has a
+        // real sidecar to read instead of guessing from the PNG's pixel size).
+        const context = await browser.newContext({ deviceScaleFactor });
         try {
-          await page.setViewportSize(target);
-          await page.goto(new URL(route, baseUrl).toString(), { waitUntil: "networkidle" });
-          // Same compensation the normal capture path uses. Without it the two sides can be
-          // captured at different effective viewports and every route reads as changed.
-          await detectAndCompensateZoom(page, target);
-          await replayInteractions(page, input.interactions);
-          await page.screenshot({ path: path.join(projectRoot, rel) });
-          shots[side] = rel;
+          const page = await context.newPage();
+          try {
+            await page.setViewportSize(target);
+            await page.goto(url, { waitUntil: "networkidle" });
+            // Same compensation the normal capture path uses. Without it the two sides can
+            // be captured at different effective viewports and every route reads as changed.
+            const { zoom } = await detectAndCompensateZoom(page, target);
+            await replayInteractions(page, input.interactions);
+            const outPathAbs = path.join(projectRoot, rel);
+            await page.screenshot({ path: outPathAbs, scale: "device" });
+            writeCaptureSidecar(outPathAbs, {
+              url,
+              viewport: target,
+              deviceScaleFactor,
+              zoom,
+              ...(input.interactions?.length ? { interactions: input.interactions } : {}),
+              capturedAt: new Date().toISOString(),
+            });
+            shots[side] = rel;
+          } finally {
+            await page.close();
+          }
         } finally {
-          await page.close();
+          await context.close();
         }
       }
 
@@ -342,7 +366,10 @@ export function registerReleaseDiff(server: McpServer): void {
         "claim. The draft is written to output/release/<videoName>/beats.draft.json and is deliberately not " +
         "installed as the video's beats.json, with every `vo` left empty: writing narration is drafting " +
         "content, and the approval gate exists so a human sees the words before they are spoken over their " +
-        "product.",
+        "product. Each captured image gets the same `<path>.capture.json` sidecar capture_screenshot writes " +
+        "(url, viewport, deviceScaleFactor, zoom, interactions, capturedAt), so a docs_drift binding against " +
+        "one of these later has a real capture record to re-derive the viewport from instead of guessing one " +
+        "from the PNG's pixel size.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -354,6 +381,11 @@ export function registerReleaseDiff(server: McpServer): void {
         routes: z.array(z.string()).optional().describe("Skip detection and check exactly these."),
         interactions: z.array(interactionSchema).optional(),
         viewport: viewportSchema.optional(),
+        deviceScaleFactor: z
+          .number()
+          .positive()
+          .optional()
+          .describe("Pixels captured per CSS pixel. Defaults to 2, matching capture_screenshot's own default."),
         changedRatioThreshold: z.number().positive().optional(),
         meanDeltaThreshold: z.number().positive().optional(),
       },

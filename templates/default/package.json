@@ -29,6 +29,7 @@
     "upgrade": "remotion upgrade"
   },
   "sideEffects": [
-    "*.css"
+    "*.css",
+    "./src/brand.ts"
   ]
 }

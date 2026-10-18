@@ -375,6 +375,144 @@ section(
   },
 );
 
+// ============================================================ 3. Shot vocabulary
+
+/** Share of pixels near a colour, over the whole frame. */
+const colourShare = (img, [r, g, b], tol = 60) => {
+  let hit = 0;
+  for (let i = 0; i < img.data.length; i += 3) {
+    if (Math.abs(img.data[i] - r) < tol && Math.abs(img.data[i + 1] - g) < tol && Math.abs(img.data[i + 2] - b) < tol) hit++;
+  }
+  return hit / (img.data.length / 3);
+};
+const RED = [220, 30, 30];
+const BLUE = [30, 60, 230];
+
+const shotScene = (name, props) =>
+  directedScene(name, "", {
+    body: `<DirectedShot src={staticFile("images/halves.png")} focus={{ x: 1500, y: 540 }} ${props} />`,
+  });
+
+section(
+  "3. shot vocabulary: pushIn, pullOut, pan, whip, orbit, dutch, hold, drift",
+  [
+    {
+      id: "shot-readout",
+      frames: 30,
+      source: sceneFile(
+        "ShotReadout",
+        ["resolveShot", "directedKeyframes", "resolveCamera", "SHOT_NAMES", "E"],
+        `<div id="shot-readout" style={{ color: "#fff", fontSize: 18, whiteSpace: "pre" }}>{JSON.stringify((() => {
+      const frames = [0, 9, 18, 40, 60, 90, 120, 150];
+      const base = { W: 1920, H: 1080, captureWidth: 1920, captureHeight: 1080, focus: { x: 1500, y: 540 } };
+      const out = { names: SHOT_NAMES, plans: {}, cams: {}, easeMid: E.whip(0.5) };
+      for (const name of SHOT_NAMES) {
+        const p = resolveShot(name, { focus: base.focus });
+        out.plans[name] = { ...p, easing: p.easing(0.5) };
+        const kfs = directedKeyframes({ ...base, shot: name });
+        out.cams[name] = frames.map((f) => ({ f, ...resolveCamera(kfs, f) }));
+      }
+      out.pushOverride = resolveShot("pushIn", { push: 2 }).endScale;
+      out.pullOverride = resolveShot("pullOut", { push: 2 }).startScale;
+      const won = directedKeyframes({ ...base, shot: "whip", move: { from: 0, to: 60 }, push: 1.2, tilt: { z: 2 } });
+      out.explicit = { lastFrame: won[won.length - 1].frame, scale: won[won.length - 1].scale, rotZ: won[won.length - 1].rotZ };
+      return out;
+    })())}</div>`,
+      ),
+    },
+    { id: "shot-push-in", frames: 160, source: shotScene("ShotPushIn", 'shot="pushIn"') },
+    { id: "shot-pull-out", frames: 160, source: shotScene("ShotPullOut", 'shot="pullOut"') },
+    { id: "shot-hold", frames: 160, source: shotScene("ShotHold", 'shot="hold"') },
+    { id: "shot-dutch", frames: 160, source: shotScene("ShotDutch", 'shot="dutch"').replace("x: 1500", "x: 960") },
+    { id: "shot-orbit", frames: 160, source: shotScene("ShotOrbit", 'shot="orbit"').replace("x: 1500", "x: 960").replace("halves.png", "bars.png") },
+    { id: "shot-whip", frames: 90, source: shotScene("ShotWhip", 'shot="whip"') },
+  ],
+  async (t) => {
+    const r = JSON.parse(await t.text(t.frameOf("shot-readout", 0), "#shot-readout"));
+    const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
+    check("all eight shots exist", ["pushIn", "pullOut", "pan", "whip", "orbit", "dutch", "hold", "drift"].every((n) => r.names.includes(n)));
+    const finite = (p) => [p.startScale, p.endScale, p.startFocus.x, p.startFocus.y, p.endFocus.x, p.endFocus.y, p.moveFrames, p.easing].every(Number.isFinite);
+    check("every shot resolves to finite numbers", r.names.every((n) => finite(r.plans[n])));
+    const P = r.plans;
+    check("pushIn ends zoomed on the focus: endScale >= 1.3 > startScale = 1", P.pushIn.startScale === 1 && P.pushIn.endScale >= 1.3 && near(P.pushIn.endFocus.x, 1500));
+    check("pullOut starts close on the focus and ends on the whole capture", P.pullOut.startScale > 1.3 && P.pullOut.endScale === 1 && near(P.pullOut.endFocus.x, 960) && near(P.pullOut.startFocus.x, 1500));
+    check("whip is a short move (<= 18 frames) with E.whip and blur on", P.whip.moveFrames <= 18 && P.whip.blur === true && near(P.whip.easing, r.easeMid));
+    check("no other shot blurs by default", r.names.filter((n) => n !== "whip").every((n) => P[n].blur === false));
+    check("hold stays on the whole capture (scale <= 1.03, centre to centre)", P.hold.endScale <= 1.03 && near(P.hold.startFocus.x, 960) && near(P.hold.endFocus.x, 960) && near(P.hold.endFocus.y, 540));
+    check("dutch tilts the horizon: nonzero rotZ at the end", Math.abs(P.dutch.tilt.z) >= 2);
+    check("orbit swings rotY from one sign to the other", P.orbit.startTilt.y < 0 && P.orbit.tilt.y > 0);
+    check("pan keeps its zoom and moves the camera sideways to the focus", near(P.pan.startScale, P.pan.endScale) && P.pan.startFocus.x < P.pan.endFocus.x && near(P.pan.startFocus.y, P.pan.endFocus.y));
+    check("drift is a slow, small move (> 120 frames, end scale <= 1.1)", P.drift.moveFrames > 120 && P.drift.endScale <= 1.1);
+    check("an explicit push overrides the preset (pushIn end, pullOut start)", r.pushOverride === 2 && r.pullOverride === 2);
+    check("explicit move, push and tilt win over a shot's preset", r.explicit.lastFrame === 60 && near(r.explicit.scale, 1.2) && near(r.explicit.rotZ, 2));
+
+    const cam = (name, f) => r.cams[name].find((c) => c.f === f);
+    check("camera: pushIn ends at 1.4x after its 90 frame move and starts at 1x", near(cam("pushIn", 90).scale, 1.4) && near(cam("pushIn", 0).scale, 1));
+    check("camera: whip is settled by frame 18 and still moving at frame 9", near(cam("whip", 18).x, cam("whip", 150).x) && Math.abs(cam("whip", 9).x - cam("whip", 18).x) > 20);
+    check("camera: hold never leaves the middle of the capture", r.cams.hold.every((c) => near(c.x, 960) && near(c.y, 540) && c.scale <= 1.03));
+    check("camera: dutch starts level and ends tilted", near(cam("dutch", 0).rotZ, 0) && Math.abs(cam("dutch", 150).rotZ) >= 2);
+    check("camera: orbit's rotY changes sign across the move", cam("orbit", 0).rotY < 0 && cam("orbit", 150).rotY > 0);
+
+    // Pixels: red left half, blue right half; focus on the blue side except where noted.
+    const rgbAt = (id, local) => t.rgb(t.frameOf(id, local));
+    const pushStart = await rgbAt("shot-push-in", 0);
+    const pushEnd = await rgbAt("shot-push-in", 120);
+    console.log(`  pushIn blue share ${colourShare(pushStart, BLUE).toFixed(2)} -> ${colourShare(pushEnd, BLUE).toFixed(2)}`);
+    // At 1.4x the view is 1371 px of the 1920 px capture and the camera centre clamps at the capture edge, so the seam stays in view.
+    check("pixels: pushIn starts on both halves and ends zoomed in on the blue side", colourShare(pushStart, RED) > 0.4 && colourShare(pushEnd, BLUE) > 0.65 && colourShare(pushEnd, RED) < 0.35 && colourShare(pushEnd, BLUE) > colourShare(pushStart, BLUE) + 0.15);
+    const pullStart = await rgbAt("shot-pull-out", 0);
+    const pullEnd = await rgbAt("shot-pull-out", 120);
+    check("pixels: pullOut starts close on the blue side and ends on the whole capture", colourShare(pullStart, BLUE) > 0.65 && colourShare(pullStart, RED) < 0.35 && colourShare(pullEnd, RED) > 0.4 && colourShare(pullEnd, BLUE) > 0.4);
+    const holdEnd = await rgbAt("shot-hold", 150);
+    console.log(`  hold at the end: red ${colourShare(holdEnd, RED).toFixed(2)} blue ${colourShare(holdEnd, BLUE).toFixed(2)}`);
+    check("pixels: hold stays on the whole capture", colourShare(holdEnd, RED) > 0.4 && colourShare(holdEnd, BLUE) > 0.4);
+
+    // Where the red/blue seam crosses the top and bottom rows: a tilted plane makes it lean.
+    const seam = (img, row) => {
+      for (let x = 0; x < img.w; x++) {
+        const i = (row * img.w + x) * 3;
+        if (img.data[i + 2] > 150 && img.data[i] < 120) return x;
+      }
+      return -1;
+    };
+    const dutchStart = await rgbAt("shot-dutch", 0);
+    const dutchEnd = await rgbAt("shot-dutch", 150);
+    const lean = (img) => seam(img, 100) - seam(img, 980);
+    console.log(`  dutch seam lean: start ${lean(dutchStart)}px, end ${lean(dutchEnd)}px`);
+    check("pixels: dutch leans the seam by tens of pixels by the end, and starts level", Math.abs(lean(dutchEnd)) > 30 && Math.abs(lean(dutchStart)) < 3);
+
+    // 120 px bars, red and blue alternating: the bars on the side of the plane that swings toward the
+    // camera come out wider than the ones on the far side, and the near side flips with the sign of rotY.
+    const barWidths = (img) => {
+      const row = 540;
+      const edges = [];
+      let prev = 0;
+      for (let x = 0; x < img.w; x++) {
+        const i = (row * img.w + x) * 3;
+        const c = img.data[i] > 150 && img.data[i + 2] < 120 ? 1 : img.data[i + 2] > 150 && img.data[i] < 120 ? 2 : 0;
+        if (c !== 0 && prev !== 0 && c !== prev) edges.push(x);
+        if (c !== 0) prev = c;
+      }
+      const widths = (lo, hi) => {
+        const w = [];
+        for (let k = 1; k < edges.length; k++) if (edges[k - 1] >= lo && edges[k] <= hi) w.push(edges[k] - edges[k - 1]);
+        return w.length ? w.reduce((a, b) => a + b, 0) / w.length : 0;
+      };
+      return { left: widths(0, 940), right: widths(980, img.w) };
+    };
+    const orbitStart = barWidths(await rgbAt("shot-orbit", 0));
+    const orbitEnd = barWidths(await rgbAt("shot-orbit", 150));
+    console.log(`  orbit mean bar width left/right: start ${orbitStart.left.toFixed(1)}/${orbitStart.right.toFixed(1)}, end ${orbitEnd.left.toFixed(1)}/${orbitEnd.right.toFixed(1)}`);
+    check("pixels: orbit swings the near side from the right to the left", orbitStart.right > 1.03 * orbitStart.left && orbitEnd.left > 1.03 * orbitEnd.right);
+
+    const whipStart = await rgbAt("shot-whip", 0);
+    const whipEnd = await rgbAt("shot-whip", 30);
+    const whipLater = await rgbAt("shot-whip", 80);
+    console.log(`  whip blue share ${colourShare(whipStart, BLUE).toFixed(2)} -> ${colourShare(whipEnd, BLUE).toFixed(2)}`);
+    check("pixels: whip lands on the focus within 30 frames", colourShare(whipStart, BLUE) < 0.4 && colourShare(whipEnd, BLUE) > 0.6 && Math.abs(colourShare(whipEnd, BLUE) - colourShare(whipLater, BLUE)) < 0.01);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");
@@ -418,6 +556,32 @@ if (!fs.existsSync(templateNodeModules)) {
       await sharpLib(buf, { raw: { width: w, height: h, channels: 1 } }).png().toBuffer(),
     );
   }
+
+  // 120 px bars, red and blue alternating, for measuring perspective.
+  {
+    const w = 1920;
+    const h = 1080;
+    const buf = Buffer.alloc(w * h * 3);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const red = Math.floor(x / 120) % 2 === 0;
+        const i = (y * w + x) * 3;
+        buf[i] = red ? 220 : 30;
+        buf[i + 1] = red ? 30 : 60;
+        buf[i + 2] = red ? 30 : 230;
+      }
+    }
+    fs.writeFileSync(path.join(root, "public", "images", "bars.png"), await sharpLib(buf, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer());
+  }
+
+  // Left half red, right half blue: where the camera ends up is readable from pixels alone.
+  fs.writeFileSync(
+    path.join(root, "public", "images", "halves.png"),
+    await sharpLib({ create: { width: 1920, height: 1080, channels: 3, background: { r: 220, g: 30, b: 30 } } })
+      .composite([{ input: await sharpLib({ create: { width: 960, height: 1080, channels: 3, background: { r: 30, g: 60, b: 230 } } }).png().toBuffer(), left: 960, top: 0 }])
+      .png()
+      .toBuffer(),
+  );
 
   // Lay the sections' scenes out back to back and write the files.
   const beats = [];

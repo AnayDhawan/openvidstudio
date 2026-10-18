@@ -23,6 +23,8 @@ import type { CamKeyframe } from "./camera";
 import { CursorActor } from "./CursorActor";
 import type { CursorKeyframe } from "./CursorActor";
 import { E, tween } from "./motion";
+import { resolveShot } from "./shots";
+import type { ShotName } from "./shots";
 
 /** A rectangle in capture pixels. */
 export interface CaptureRect {
@@ -40,10 +42,16 @@ export interface DirectedShotProps {
   /** Natural size of the capture in pixels. Defaults to 1920x1080. */
   captureWidth?: number;
   captureHeight?: number;
-  /** The point in the capture, in capture pixels, that the move pushes into. */
-  focus: { x: number; y: number };
+  /** The point in the capture, in capture pixels, that the move pushes into. Defaults to the middle. */
+  focus?: { x: number; y: number };
   /** End zoom relative to fitting the whole capture in the box. 1 holds the full frame. Default 1.4. */
   push?: number;
+  /**
+   * A named camera move (see shots.ts): pushIn, pullOut, pan, whip, orbit, dutch, hold, drift. It
+   * supplies the zoom, start and end position, tilt, easing and length. `push`, `tilt` and `move`
+   * given explicitly override the preset.
+   */
+  shot?: ShotName;
   /** Rotation at the end of the move, in degrees. Small values (2 to 6) read as depth, larger ones as a gimmick. */
   tilt?: { x?: number; y?: number; z?: number };
   /** The frames, local to the scene, the move runs over. Default 0 to 90. */
@@ -75,15 +83,71 @@ const clampCenter = (value: number, viewport: number, scale: number, size: numbe
   return Math.min(Math.max(value, half), size - half);
 };
 
+export interface DirectedKeyframeOptions {
+  /** The box the shot fills, in px. */
+  W: number;
+  H: number;
+  captureWidth: number;
+  captureHeight: number;
+  focus?: { x: number; y: number };
+  push?: number;
+  tilt?: { x?: number; y?: number; z?: number };
+  move?: { from?: number; to?: number; easing?: (t: number) => number };
+  shot?: ShotName;
+}
+
+/**
+ * The two camera keyframes a DirectedShot renders with. Pure, so a readout or a test can ask where
+ * the camera is at any frame (with resolveCamera) without mounting the component. A shot name
+ * supplies the defaults; every explicit option wins over it.
+ */
+export const directedKeyframes = (o: DirectedKeyframeOptions): CamKeyframe[] => {
+  const { W, H, captureWidth, captureHeight } = o;
+  const centre = { x: captureWidth / 2, y: captureHeight / 2 };
+  const focus = o.focus ?? centre;
+  const plan = o.shot ? resolveShot(o.shot, { focus, push: o.push, captureWidth, captureHeight }) : null;
+
+  const fit = Math.min(W / captureWidth, H / captureHeight);
+  const startScale = fit * (plan ? plan.startScale : 1);
+  const endScale = fit * (plan ? plan.endScale : (o.push ?? 1.4));
+  const from = o.move?.from ?? 0;
+  const to = Math.max(from + 1, o.move?.to ?? (plan ? from + plan.moveFrames : 90));
+  const startAt = plan ? plan.startFocus : centre;
+  const endAt = plan ? plan.endFocus : focus;
+
+  return [
+    {
+      frame: from,
+      x: clampCenter(startAt.x, W, startScale, captureWidth),
+      y: clampCenter(startAt.y, H, startScale, captureHeight),
+      scale: startScale,
+      rotX: plan?.startTilt.x ?? 0,
+      rotY: plan?.startTilt.y ?? 0,
+      rotZ: plan?.startTilt.z ?? 0,
+    },
+    {
+      frame: to,
+      x: clampCenter(endAt.x, W, endScale, captureWidth),
+      y: clampCenter(endAt.y, H, endScale, captureHeight),
+      scale: endScale,
+      rotX: o.tilt?.x ?? plan?.tilt.x ?? 0,
+      rotY: o.tilt?.y ?? plan?.tilt.y ?? 0,
+      rotZ: o.tilt?.z ?? plan?.tilt.z ?? 0,
+      easing: o.move?.easing ?? plan?.easing,
+    },
+  ];
+};
+
 export const DirectedShot: React.FC<DirectedShotProps> = ({
   src,
   children,
   captureWidth = 1920,
   captureHeight = 1080,
-  focus,
-  push = 1.4,
+  focus: focusProp,
+  push,
   tilt,
   move,
+  shot,
   depthOfField = 0,
   protect,
   rackTo,
@@ -96,29 +160,15 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   const video = useVideoConfig();
   const W = width ?? video.width;
   const H = height ?? video.height;
+  const focus = focusProp ?? { x: captureWidth / 2, y: captureHeight / 2 };
 
-  const fit = Math.min(W / captureWidth, H / captureHeight);
-  const endScale = fit * push;
-  const from = move?.from ?? 0;
-  const to = Math.max(from + 1, move?.to ?? 90);
-
-  const keyframes: CamKeyframe[] = [
-    { frame: from, x: captureWidth / 2, y: captureHeight / 2, scale: fit },
-    {
-      frame: to,
-      x: clampCenter(focus.x, W, endScale, captureWidth),
-      y: clampCenter(focus.y, H, endScale, captureHeight),
-      scale: endScale,
-      rotX: tilt?.x ?? 0,
-      rotY: tilt?.y ?? 0,
-      rotZ: tilt?.z ?? 0,
-      easing: move?.easing,
-    },
-  ];
+  const keyframes = directedKeyframes({ W, H, captureWidth, captureHeight, focus, push, tilt, move, shot });
+  const from = keyframes[0].frame;
+  const to = keyframes[1].frame;
 
   // The sharp region starts on `focus` and, with rackTo, slides to it across the move.
   const cam = resolveCamera(keyframes, frame);
-  const rack = rackTo ? tween(frame, [from, to], [0, 1], move?.easing ?? E.cinematic) : 0;
+  const rack = rackTo ? tween(frame, [from, to], [0, 1], keyframes[1].easing ?? E.cinematic) : 0;
   const sharpAt = rackTo
     ? { x: focus.x + (rackTo.x - focus.x) * rack, y: focus.y + (rackTo.y - focus.y) * rack }
     : focus;

@@ -9,12 +9,16 @@
 import "./localFonts";
 
 // Camera + layers
-export { CameraRig, Layer, useCamera, resolveCamera } from "./camera";
+export { CameraRig, Layer, useCamera, resolveCamera, projectToScreen } from "./camera";
 export type { CamKeyframe } from "./camera";
 
 // Directed shot: a flat capture turned into a push-in with tilt, depth of field and a cursor (C4)
-export { DirectedShot } from "./DirectedShot";
-export type { DirectedShotProps } from "./DirectedShot";
+export { DirectedShot, directedKeyframes } from "./DirectedShot";
+export type { DirectedShotProps, DirectedKeyframeOptions, CaptureRect } from "./DirectedShot";
+
+// Cinematic shots (camera half): the shot vocabulary
+export { resolveShot, SHOT_NAMES } from "./shots";
+export type { ShotName, ShotOptions, ResolvedShot } from "./shots";
 
 // Music-first timing: the score's grid as scene-local frames (C3)
 export { MusicClockProvider, useMusicClock, createMusicClock } from "./musicClock";

@@ -31,6 +31,8 @@ import {
   useImpactShake,
 } from "./handheld";
 import { resolveShot } from "./shots";
+import { MotionBlur } from "./motionBlur";
+import type { MotionBlurOptions } from "./motionBlur";
 import type { ShotName } from "./shots";
 
 /** A rectangle in capture pixels. */
@@ -73,6 +75,12 @@ export interface DirectedShotProps {
   protect?: CaptureRect[];
   /** Rack focus: the sharp region slides from `focus` to this point, in capture pixels, across the move. */
   rackTo?: { x: number; y: number };
+  /**
+   * Motion blur while the camera moves (and only then). `true` is a 180 degree shutter with 8
+   * samples; pass { shutterAngle, samples } to tune it. Default: on for the whip shot, off otherwise.
+   * Costs `samples` times the render work for the frames of the move.
+   */
+  blur?: boolean | MotionBlurOptions;
   /** Handheld sway: the largest drift in px at 1080p. Default 0 (a locked-off camera). 3 to 8 reads as a person holding it. */
   handheld?: number;
   /** Local frames of impacts (a click, a slam, a beat): the shot jolts on each and settles within about 24 frames. */
@@ -162,6 +170,7 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   depthOfField = 0,
   protect,
   rackTo,
+  blur,
   handheld = 0,
   shake,
   cursor,
@@ -214,15 +223,27 @@ export const DirectedShot: React.FC<DirectedShotProps> = ({
   });
   const clip = holes.length ? `path(evenodd, "M0 0 H${W} V${H} H0 Z ${holes.join(" ")}")` : undefined;
 
+  const rig = (
+    <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
+      {src ? (
+        <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: captureWidth, height: captureHeight }} />
+      ) : (
+        children
+      )}
+    </CameraRig>
+  );
+  // Motion blur wraps the picture only; the cursor rig below stays out of it so the pointer
+  // keeps a crisp edge through a whip.
+  const blurOptions = blur ?? (shot ? resolveShot(shot).blur : false);
   const picture = (
     <>
-      <CameraRig keyframes={keyframes} stageWidth={captureWidth} stageHeight={captureHeight} viewportWidth={W} viewportHeight={H}>
-        {src ? (
-          <Img src={src} style={{ position: "absolute", left: 0, top: 0, width: captureWidth, height: captureHeight }} />
-        ) : (
-          children
-        )}
-      </CameraRig>
+      {blurOptions ? (
+        <MotionBlur from={from} to={to} {...(typeof blurOptions === "object" ? blurOptions : {})}>
+          {rig}
+        </MotionBlur>
+      ) : (
+        rig
+      )}
       {depthOfField > 0 ? (
         <div
           data-ovs-dof=""

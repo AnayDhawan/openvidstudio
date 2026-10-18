@@ -20,6 +20,12 @@ export type { DirectedShotProps, DirectedKeyframeOptions, CaptureRect } from "./
 export { resolveShot, SHOT_NAMES } from "./shots";
 export type { ShotName, ShotOptions, ResolvedShot } from "./shots";
 
+// Cinematic shots (camera half): layered shots and motion blur
+export { LayeredShot } from "./LayeredShot";
+export type { LayeredShotProps, LayerManifest, ShotLayer } from "./LayeredShot";
+export { MotionBlur } from "./motionBlur";
+export type { MotionBlurOptions } from "./motionBlur";
+
 // Cinematic shots (camera half): handheld sway and impact shake
 export { handheldOffset, holdWeight, useHandheld, impactShake, useImpactShake } from "./handheld";
 export type { ShakeOffset } from "./handheld";

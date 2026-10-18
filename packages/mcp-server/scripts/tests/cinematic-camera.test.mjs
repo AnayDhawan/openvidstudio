@@ -62,9 +62,9 @@ export const ${name}: React.FC = () => (
 }
 
 /** A scene file from a component name, the core names it imports and the JSX to render. */
-function sceneFile(name, coreImports, jsx, { extra = "" } = {}) {
+function sceneFile(name, coreImports, jsx, { extra = "", remotion = "" } = {}) {
   return String.raw`import React from "react";
-import { AbsoluteFill, staticFile } from "remotion";
+import { AbsoluteFill, staticFile${remotion} } from "remotion";
 import { ${coreImports.join(", ")} } from "@openvidstudio/core";
 ${extra}
 export const ${name}: React.FC = () => (
@@ -785,6 +785,171 @@ section(
   },
 );
 
+// ============================================================ 6. LayeredShot and MotionBlur
+
+const LAY_LAYERS = [
+  { file: "lay-a.png", x: 200, y: 150, width: 300, height: 200, depth: 0.5, rgb: [224, 48, 48] },
+  { file: "lay-b.png", x: 900, y: 300, width: 400, height: 250, depth: 0, rgb: [48, 192, 96] },
+  { file: "lay-c.png", x: 1300, y: 700, width: 300, height: 120, depth: -0.5, rgb: [240, 192, 32] },
+];
+const manifestJs = (layers, extra = "") =>
+  `{ width: 1920, height: 1080, background: staticFile("images/lay-bg.png"), layers: [${layers
+    .map((l) => `{ src: staticFile("images/${l.file}"), x: ${l.x}, y: ${l.y}, width: ${l.width}, height: ${l.height}, depth: ${l.depth} }`)
+    .join(", ")}]${extra} }`;
+const layeredScene = (name, layers, props) =>
+  directedScene(name, "", {
+    imports: ", LayeredShot",
+    body: `<LayeredShot manifest={${manifestJs(layers)}} ${props} />`,
+  });
+const MARKER_LAYER = { file: "lay-marker.png", x: 1300, y: 400, width: 40, height: 40, depth: -1, rgb: [255, 0, 0] };
+const PAN_PROPS = "focus={{ x: 1500, y: 540 }} push={1.3} move={{ from: 0, to: 30 }}";
+
+section(
+  "6. LayeredShot composites to the flat picture at rest and separates in depth; MotionBlur only inside its window",
+  [
+    { id: "lay-stack", frames: 60, source: layeredScene("LayStack", LAY_LAYERS, "focus={{ x: 960, y: 540 }} push={1} move={{ from: 0, to: 30 }}") },
+    {
+      id: "lay-flat",
+      frames: 60,
+      source: directedScene("LayFlat", "", {
+        body: `<DirectedShot src={staticFile("images/lay-flat.png")} focus={{ x: 960, y: 540 }} push={1} move={{ from: 0, to: 30 }} />`,
+      }),
+    },
+    {
+      // Control: the same stack with one layer 30px out of place must NOT match the flat picture.
+      id: "lay-shifted",
+      frames: 60,
+      source: layeredScene("LayShifted", LAY_LAYERS.map((l, i) => (i === 1 ? { ...l, x: l.x + 30 } : l)), "focus={{ x: 960, y: 540 }} push={1} move={{ from: 0, to: 30 }}"),
+    },
+    { id: "lay-pan-stack", frames: 60, source: layeredScene("LayPanStack", [MARKER_LAYER], PAN_PROPS) },
+    {
+      id: "lay-pan-flat",
+      frames: 60,
+      source: directedScene("LayPanFlat", "", {
+        body: `<DirectedShot src={staticFile("images/lay-flat-marker.png")} ${PAN_PROPS} />`,
+      }),
+    },
+    {
+      id: "blur-whip",
+      frames: 60,
+      source: directedScene("BlurWhip", "", {
+        body: `<DirectedShot src={staticFile("images/stripes.png")} focus={{ x: 1500, y: 540 }} shot="whip" move={{ from: 10 }} />`,
+      }),
+    },
+    {
+      id: "blur-whip-off",
+      frames: 60,
+      source: directedScene("BlurWhipOff", "", {
+        body: `<DirectedShot src={staticFile("images/stripes.png")} focus={{ x: 1500, y: 540 }} shot="whip" blur={false} move={{ from: 10 }} />`,
+      }),
+    },
+    {
+      id: "blur-whip-wide",
+      frames: 60,
+      source: directedScene("BlurWhipWide", "", {
+        body: `<DirectedShot src={staticFile("images/stripes.png")} focus={{ x: 1500, y: 540 }} shot="whip" blur={{ shutterAngle: 360, samples: 12 }} move={{ from: 10 }} />`,
+      }),
+    },
+    {
+      // The component on its own: a bar sliding across, blurred only for frames 10..20.
+      id: "blur-component",
+      frames: 40,
+      source: sceneFile(
+        "BlurComponent",
+        ["MotionBlur"],
+        `<MotionBlur from={10} to={20}><Slider /></MotionBlur>`,
+        {
+          extra: String.raw`
+const Slider: React.FC = () => {
+  const frame = useCurrentFrame();
+  return <div style={{ position: "absolute", left: 100 + frame * 40, top: 300, width: 60, height: 300, background: "repeating-linear-gradient(90deg, #fff 0px, #fff 2px, #000 2px, #000 4px)" }} />;
+};
+`,
+          remotion: ", useCurrentFrame",
+        },
+      ),
+    },
+  ],
+  async (t) => {
+    // ---- stack vs flat at rest
+    const stack = await t.rgb(t.frameOf("lay-stack", 0));
+    const flat = await t.rgb(t.frameOf("lay-flat", 0));
+    const shifted = await t.rgb(t.frameOf("lay-shifted", 0));
+    const diff = (a, b) => {
+      let sum = 0;
+      let big = 0;
+      const n = a.w * a.h;
+      for (let p = 0; p < n; p++) {
+        let d = 0;
+        for (let c = 0; c < 3; c++) d = Math.max(d, Math.abs(a.data[p * 3 + c] - b.data[p * 3 + c]));
+        sum += d;
+        if (d > 40) big++;
+      }
+      return { mean: sum / n, big: big / n };
+    };
+    const live = (img) => img.data.reduce((a, v) => a + v, 0) / img.data.length > 20;
+    check("the layered, flat and shifted scenes all render a picture (not a blank crash frame)", live(stack) && live(flat) && live(shifted));
+    const dStack = diff(stack, flat);
+    const dShifted = diff(shifted, flat);
+    console.log(`  stack vs flat: mean channel diff ${dStack.mean.toFixed(3)}, pixels off by >40: ${(dStack.big * 100).toFixed(3)}%; with one layer moved 30px: ${dShifted.mean.toFixed(3)} / ${(dShifted.big * 100).toFixed(3)}%`);
+    check("LayeredShot at rest composites to the same picture as the flat background plus layers (mean diff < 1.5, < 0.3% of pixels off by more than 40)", dStack.mean < 1.5 && dStack.big < 0.003);
+    check("control: one layer 30px out of place is detected (> 5x the mean diff, > 0.5% of pixels)", dShifted.mean > 5 * Math.max(dStack.mean, 0.1) && dShifted.big > 0.005);
+
+    // ---- the layers separate when the camera moves
+    const redCentroid = (img) => {
+      let sx = 0;
+      let n = 0;
+      for (let y = 0; y < img.h; y++) {
+        for (let x = 0; x < img.w; x++) {
+          const i = (y * img.w + x) * 3;
+          if (img.data[i] > 200 && img.data[i + 1] < 60 && img.data[i + 2] < 60) {
+            sx += x;
+            n++;
+          }
+        }
+      }
+      return n ? sx / n : null;
+    };
+    const panStart = [redCentroid(await t.rgb(t.frameOf("lay-pan-stack", 0))), redCentroid(await t.rgb(t.frameOf("lay-pan-flat", 0)))];
+    const panEnd = [redCentroid(await t.rgb(t.frameOf("lay-pan-stack", 40))), redCentroid(await t.rgb(t.frameOf("lay-pan-flat", 40)))];
+    console.log(`  marker x at rest: layered ${panStart[0]?.toFixed(1)} flat ${panStart[1]?.toFixed(1)}; after the push: layered ${panEnd[0]?.toFixed(1)} flat ${panEnd[1]?.toFixed(1)}`);
+    check("a foreground layer starts exactly where the flat capture puts it", panStart[0] !== null && panStart[1] !== null && Math.abs(panStart[0] - panStart[1]) <= 1);
+    check("...and moves further than the flat capture once the camera moves (parallax, > 10px)", panEnd[0] !== null && panEnd[1] !== null && panEnd[1] - panEnd[0] > 10);
+
+    // ---- motion blur only inside its window
+    const sameBytes = (a, b) => Buffer.compare(Buffer.from(a.data), Buffer.from(b.data)) === 0;
+    for (const f of [5, 40]) {
+      const on = await t.rgb(t.frameOf("blur-whip", f));
+      const off = await t.rgb(t.frameOf("blur-whip-off", f));
+      check(`outside the blur window (frame ${f}) the render is pixel-identical to a no-blur render`, sameBytes(on, off) && edgeEnergy(await t.grab(t.frameOf("blur-whip", f))) > 20);
+    }
+    // The whip eases in and out, so the camera is fastest a little past the middle of the move (10..28).
+    let fastest = { frame: 0, on: Infinity, off: 1, wide: 0 };
+    for (const f of [16, 18, 20, 22, 24, 26]) {
+      const on = edgeEnergy(await t.grab(t.frameOf("blur-whip", f)));
+      const off = edgeEnergy(await t.grab(t.frameOf("blur-whip-off", f)));
+      if (on / off < fastest.on / fastest.off) fastest = { frame: f, on, off, wide: edgeEnergy(await t.grab(t.frameOf("blur-whip-wide", f))) };
+    }
+    const { on: midOn, off: midOff, wide: midWide } = fastest;
+    console.log(`  whip at its fastest (frame ${fastest.frame}): edge energy no blur ${midOff.toFixed(2)}, blur ${midOn.toFixed(2)} (${(midOn / midOff).toFixed(2)}x), wide shutter ${midWide.toFixed(2)}`);
+    check("mid-whip the blur softens the high-frequency pattern (< 0.5x of the no-blur render)", midOff > 20 && midOn < 0.5 * midOff);
+    // Compared where the camera is moving at a moderate speed: at full speed both shutters smear the
+    // stripes past anything measurable and the numbers stop ordering.
+    const modOn = edgeEnergy(await t.grab(t.frameOf("blur-whip", 19)));
+    const modWide = edgeEnergy(await t.grab(t.frameOf("blur-whip-wide", 19)));
+    console.log(`  frame 19: 180 degree shutter ${modOn.toFixed(2)}, 360 degree shutter with 12 samples ${modWide.toFixed(2)} (full speed: ${midWide.toFixed(2)})`);
+    check("a wider shutter blurs more (blur={{ shutterAngle: 360, samples: 12 }})", modWide < 0.5 * modOn);
+
+    // The component by itself: sharp outside 10..20, smeared inside.
+    const bar = async (f) => edgeEnergy(await t.grab(t.frameOf("blur-component", f)), { x: 0, y: 200, w: 1920, h: 500 });
+    const before = await bar(5);
+    const inside = await bar(15);
+    const after = await bar(30);
+    console.log(`  MotionBlur component, bar edge energy: frame 5 ${before.toFixed(2)}, 15 ${inside.toFixed(2)}, 30 ${after.toFixed(2)}`);
+    check("MotionBlur: sharp before and after its window, smeared inside", before > 1 && after > 1 && inside < 0.6 * before && inside < 0.6 * after);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");
@@ -844,6 +1009,35 @@ if (!fs.existsSync(templateNodeModules)) {
       }
     }
     fs.writeFileSync(path.join(root, "public", "images", "bars.png"), await sharpLib(buf, { raw: { width: w, height: h, channels: 3 } }).png().toBuffer());
+  }
+
+  // Layered capture fixtures: a flat background with hard-edged panels, three solid layers on top of
+  // it, and the pre-composited flat picture to compare the stack against.
+  {
+    const solid = (w, h, [r, g, b]) => sharpLib({ create: { width: w, height: h, channels: 3, background: { r, g, b } } }).png().toBuffer();
+    const images = path.join(root, "public", "images");
+    const bgBase = await sharpLib({ create: { width: 1920, height: 1080, channels: 3, background: { r: 42, g: 53, b: 80 } } })
+      .composite([
+        { input: await solid(1400, 800, [61, 74, 107]), left: 260, top: 140 },
+        { input: await solid(1200, 60, [90, 104, 140]), left: 360, top: 900 },
+      ])
+      .png()
+      .toBuffer();
+    fs.writeFileSync(path.join(images, "lay-bg.png"), bgBase);
+    const placed = [];
+    for (const l of [...LAY_LAYERS, MARKER_LAYER]) {
+      const buf = await solid(l.width, l.height, l.rgb);
+      fs.writeFileSync(path.join(images, l.file), buf);
+      placed.push({ input: buf, left: l.x, top: l.y, main: l !== MARKER_LAYER });
+    }
+    fs.writeFileSync(
+      path.join(images, "lay-flat.png"),
+      await sharpLib(bgBase).composite(placed.filter((p) => p.main).map(({ input, left, top }) => ({ input, left, top }))).png().toBuffer(),
+    );
+    fs.writeFileSync(
+      path.join(images, "lay-flat-marker.png"),
+      await sharpLib(bgBase).composite(placed.filter((p) => !p.main).map(({ input, left, top }) => ({ input, left, top }))).png().toBuffer(),
+    );
   }
 
   // Left half red, right half blue: where the camera ends up is readable from pixels alone.

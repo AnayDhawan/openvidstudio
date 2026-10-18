@@ -321,7 +321,11 @@ export function registerReformatVertical(server: McpServer): void {
         "silent. Runs as one ffmpeg pass (trim, crop, scale, pad, concat) rather than N renders and a join, " +
         "so there are no intermediates and no extra generation of quality lost. Active speaker tracking is " +
         "deliberately not in scope: it needs real face and audio analysis. Defaults to 1080x1920 written to " +
-        "output/<videoName>-1080x1920.mp4.",
+        "output/<videoName>-1080x1920.mp4. This is a crop of a finished 16:9 render, never a re-layout: each " +
+        "crop is a 608x1080 slice, under a third of the frame width, so a diagram or a wide equation is cut " +
+        "off. For content that has to be seen whole, render natively vertical instead (init_project with " +
+        "videoConfig 1080x1920), then package it with export_rendition format \"reels\"; PIPELINE.md, " +
+        "\"Native vertical (9:16)\", says when to use which.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),

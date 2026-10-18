@@ -28,8 +28,8 @@ lives inside it. Nothing renders outside one.
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `camera` | `CamKeyframe[]` | required | At least two, or nothing moves |
-| `stageWidth` | `number` | `1920` | |
-| `stageHeight` | `number` | `1080` | |
+| `stageWidth` | `number` | composition width | 1920 in 16:9, 1080 in a 9:16 reel. Camera x/y are in stage px, so the centre is 960,540 or 540,960 |
+| `stageHeight` | `number` | composition height | |
 | `variant` | `"dark" \| "light"` | `"dark"` | |
 | `grain` | `number` | `0.05` | |
 | `vignette` | `number` | `0.32` | |
@@ -420,7 +420,8 @@ position `CursorActor` draws at a frame.
 | `durationInFrames` | `number` | `270` |
 
 A whole scene, not a panel. Do not wrap it in a `CinematicScene`; it brings its own.
-No star action by default.
+No star action by default. Laid out from the composition size, so the card is centred in
+1920x1080 and in a 1080x1920 reel.
 
 ---
 
@@ -536,7 +537,8 @@ later `applyBrand` call never reaches into an already-built `DesignSystem`.
 |---|---|---|
 | `color`, `font` | tokens | Seeded from the current brand tokens |
 | `typeScale` | `{ display, headline, body, mono: [min, max] }` | px |
-| `grid` | `{ marginX, marginTop, marginBottom }` | px, at the 1920x1080 stage |
+| `grid` | `{ marginX, marginTop, marginBottom }` | px. Default 150 / 130 / 110 at 1920x1080; scaled to `stage` when one is passed (84 / 231 / 196 at 1080x1920). An explicit `grid` wins |
+| `stage` (input only) | `{ width, height }` | The frame the video renders at, default 1920x1080. Pass `{ width: 1080, height: 1920 }` in a native vertical project. Not stored on the result |
 | `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial"` | Default `"rounded-soft"` |
 | `motion` | `{ easing, staggerMs, cameraEnergy, cutRhythmSeconds }` | `easing` names an `E.*` preset by string, not a function reference, so the system stays JSON-serializable |
 | `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade", "push", "wipe", "light-leak"]` |
@@ -664,10 +666,10 @@ as one continuous move across the cut.
 | Component | Props | Notes |
 |---|---|---|
 | `Atmosphere` | `intensity?` (1), `colors?`, `seed?` (2) | Soft drifting radial colour fields behind everything, one blob per colour |
-| `DotGrid` | `gap?` (36), `color?` (`#ffffff`), `opacity?` (0.05), `w?`, `h?` | Faint texture pass behind a constructed (non-capture) panel |
+| `DotGrid` | `gap?` (36), `color?` (`#ffffff`), `opacity?` (0.05), `w?`, `h?` (composition size) | Faint texture pass behind a constructed (non-capture) panel. Covers the whole frame by default, 1080x1920 included |
 | `Flash` | `at`, `color?` (`#ffffff`), `strength?` (0.55), `dur?` (10) | Brief exposure flash on a hard hit |
 | `Black` | `from`, `to?` | Holds solid black. Omit `to` to hold forever |
-| `Letterbox` | `amount?` (1) | Bars for a cinematic moment. `amount` scales the bar height, 1 = full 64px |
+| `Letterbox` | `amount?` (1) | Bars for a cinematic moment. `amount` scales the bar height, 1 = 64/1080 of the frame height (64px at 1080, about 114px at 1920 tall) |
 | `TransitionOverlay` | `type` (`"fade"`, `"whip"`, `"push"`, `"wipe"`, `"light-leak"`), `length?` | A transition drawn over a hard cut, in the colour tokens. Mount it in a `Sequence` that starts `length / 2` frames before the cut (`layout="none"`): it peaks on the cut frame and is clear on its first and last frames. `length` is its total frames and defaults to the Sequence's. `stitch_composition` does this for every beat whose `transition` is not `"cut"`, so a scene rarely mounts one by hand |
 
 | | |

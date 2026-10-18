@@ -24,7 +24,15 @@ export const RepoCta: React.FC<{
   durationInFrames?: number;
 }> = ({ owner, name, description, chips, titleText, durationInFrames = 270 }) => {
   const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
+  // Everything is laid out from the frame centre, so the same card centres in 1920x1080 and in a
+  // 1080x1920 reel. At 1920x1080 these come out to the 560 / 350 / 180 the card has always had.
+  // The card sits 190px above centre in both: in a reel that puts it mid-way through the band
+  // the Instagram UI leaves clear (about 14% down to 78% down), not in the middle of the frame.
+  const cardW = Math.min(800, width - 160);
+  const cardLeft = (width - cardW) / 2;
+  const cardTop = Math.round(height / 2 - 190);
+  const glowSize = 800;
   const cardIn = pop(frame, fps, 8);
   const dip = tween(frame, [DIP_AT, DIP_AT + 16], [0, 1], E.cinematic);
   const endFade = tween(frame, [durationInFrames - 18, durationInFrames], [0, 1], E.cinematic);
@@ -32,8 +40,8 @@ export const RepoCta: React.FC<{
   return (
     <CinematicScene
       camera={[
-        { frame: 0, x: 960, y: 540, scale: 1.0 },
-        { frame: durationInFrames, x: 960, y: 530, scale: 1.12, easing: E.drift },
+        { frame: 0, x: width / 2, y: height / 2, scale: 1.0 },
+        { frame: durationInFrames, x: width / 2, y: height / 2 - 10, scale: 1.12, easing: E.drift },
       ]}
       overlay={
         <>
@@ -62,10 +70,10 @@ export const RepoCta: React.FC<{
         <div
           style={{
             position: "absolute",
-            left: 560,
-            top: 180,
-            width: 800,
-            height: 800,
+            left: (width - glowSize) / 2,
+            top: cardTop - 170,
+            width: glowSize,
+            height: glowSize,
             borderRadius: "50%",
             background: `radial-gradient(circle, ${color.accent}2e 0%, transparent 65%)`,
           }}
@@ -74,11 +82,12 @@ export const RepoCta: React.FC<{
 
       <Layer depth={0}>
         <div
+          data-ovs-repo-card=""
           style={{
             position: "absolute",
-            left: 560,
-            top: 350,
-            width: 800,
+            left: cardLeft,
+            top: cardTop,
+            width: cardW,
             transform: `scale(${0.85 + cardIn * 0.15}) translateY(${(1 - cardIn) * 60}px)`,
             opacity: Math.min(1, cardIn * 1.3),
             borderRadius: 18,

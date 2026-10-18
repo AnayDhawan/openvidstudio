@@ -170,6 +170,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Supernova mode, part 1: `packages/stem`, a production mode flag and the Void + Spark design system (#108).** New workspace package `@openvidstudio/stem` with `supernovaDesignSystem(subject)` (Void base `#07060B`, warm white text that is never pure white, one accent per subject: math, physics, cs, chemistry, biology), a new `void-spark` motif (added in `designSystem.ts` and `writeBrief.ts`), and Space Grotesk (SIL OFL) loaded from local files. `production.mode` (`"standard"` by default, `"supernova"`) is accepted by `init_project` and read by `validate_beats`, `write_brief` and `plan_production`; a lesson needs no creative level. `init_project` with `mode: "supernova"` vendors stem into the project (`copy-template.mjs`, as for core), copies the font, and defaults to 1080x1920; a standard project's files, config and `package.json` are unchanged (asserted).
+
 - **Director mode.** At the peak and mid creative levels the agent works as a director, not a
   template filler: a creative brief first (`write_brief`), a design system as code
   (`defineDesignSystem`), an original score (`compose_score`), scenes written from core's

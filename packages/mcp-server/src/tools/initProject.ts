@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { TEMPLATE_DIR, DOCS_DIR } from "../paths";
-import { writeConfig, type OpenvidstudioConfig, type VideoConfig } from "../config";
+import { configPath, writeConfig, type OpenvidstudioConfig, type ProductionMode, type VideoConfig } from "../config";
 import { resolveProjectRoot, sanitizeSegment, copyTemplateTree } from "../util";
 import {
   PREFLIGHT_BENCHMARK_COMPOSITION_ID,
@@ -22,6 +22,12 @@ export interface InitProjectInput {
   videoConfig?: Partial<VideoConfig>;
   appUrl?: string;
   demo?: boolean;
+  /**
+   * "standard" (the default) or "supernova", a STEM lesson. A supernova project also gets
+   * @openvidstudio/stem (vendored, with its display font), is stored as production.mode, and
+   * defaults to a 1080x1920 frame. A standard project's files and config do not change at all.
+   */
+  mode?: ProductionMode;
 }
 
 export interface InitProjectResult {
@@ -34,6 +40,35 @@ export interface InitProjectResult {
   demo: boolean;
   nextSteps: string[];
   runtime: { node: string; pnpm: string | null; warnings: string[] };
+}
+
+const STEM_DIR = "openvidstudio-stem";
+const STEM_DEPENDENCY = "@openvidstudio/stem";
+const SUPERNOVA_VIDEO_CONFIG: VideoConfig = { fps: 30, width: 1080, height: 1920 };
+
+/** Adds or removes the stem dependency in the project's package.json, leaving the rest as it is. */
+function setStemDependency(projectRoot: string, present: boolean): void {
+  const file = path.join(projectRoot, "package.json");
+  if (!fs.existsSync(file)) return;
+  const pkg = JSON.parse(fs.readFileSync(file, "utf8")) as { dependencies?: Record<string, string> };
+  const has = pkg.dependencies !== undefined && STEM_DEPENDENCY in pkg.dependencies;
+  if (present === has) return;
+  pkg.dependencies = pkg.dependencies ?? {};
+  if (present) pkg.dependencies[STEM_DEPENDENCY] = `file:./${STEM_DIR}`;
+  else delete pkg.dependencies[STEM_DEPENDENCY];
+  fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + "\n", "utf8");
+}
+
+/**
+ * Makes @openvidstudio/stem importable from a supernova project: the vendored package, the
+ * dependency on it, and its display font in public/fonts/ (where the project's local font loader
+ * looks). Safe on a project that already has any of them.
+ */
+function installStem(projectRoot: string): void {
+  copyTemplateTree(path.join(TEMPLATE_DIR, STEM_DIR), path.join(projectRoot, STEM_DIR));
+  setStemDependency(projectRoot, true);
+  const fonts = path.join(projectRoot, STEM_DIR, "public", "fonts");
+  if (fs.existsSync(fonts)) copyTemplateTree(fonts, path.join(projectRoot, "public", "fonts"));
 }
 
 /**
@@ -58,7 +93,12 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
   // copyTemplateTree never overwrites a file that's already there, so this is safe to
   // call again for a second video in an already-scaffolded project.
   const alreadyScaffolded = fs.existsSync(path.join(projectRoot, "package.json"));
-  copyTemplateTree(TEMPLATE_DIR, projectRoot);
+  const supernova = input.mode === "supernova";
+  const configExisted = fs.existsSync(configPath(projectRoot));
+  // The vendored stem package is part of the bundled shell but belongs only to supernova projects.
+  copyTemplateTree(TEMPLATE_DIR, projectRoot, supernova ? undefined : (rel) => rel === STEM_DIR);
+  if (supernova) installStem(projectRoot);
+  else if (!alreadyScaffolded) setStemDependency(projectRoot, false);
 
   const docsDir = path.join(projectRoot, "docs");
   copyTemplateTree(DOCS_DIR, docsDir);
@@ -94,8 +134,10 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
   const config = writeConfig(projectRoot, {
     hasHiggsfield: input.hasHiggsfield,
     targetDurationSeconds: input.targetDurationSeconds,
-    videoConfig: input.videoConfig,
+    // A lesson is a vertical video unless the caller (or an existing config) says otherwise.
+    videoConfig: input.videoConfig ?? (supernova && !configExisted ? { ...SUPERNOVA_VIDEO_CONFIG } : undefined),
     capture: input.appUrl ? { appUrl: input.appUrl } : undefined,
+    production: supernova ? { mode: "supernova" } : undefined,
   });
 
   // A demo project ships a ready beats.json so the very next call can be
@@ -197,6 +239,13 @@ export function registerInitProject(server: McpServer): void {
           .boolean()
           .optional()
           .describe("Also write a ready two beat beats.json, as a two minute end to end smoke test."),
+        mode: z
+          .enum(["standard", "supernova"])
+          .optional()
+          .describe(
+            "\"standard\" (default) or \"supernova\", a STEM lesson: also installs @openvidstudio/stem and its " +
+              "display font, records production.mode, and defaults the frame to 1080x1920.",
+          ),
         videoConfig: z
           .object({
             fps: z.number().positive().optional(),

@@ -43,7 +43,20 @@ export interface RenderConfig {
 
 export type CreativeLevel = "peak" | "mid" | "literal";
 
+/**
+ * "standard" is every product video: a story built from real captures, with a creative level.
+ * "supernova" is a STEM lesson: a script-first, narrated 1080x1920 explanation with no real
+ * product behind it. It is a different kind of production, not a fourth creative level.
+ */
+export type ProductionMode = "standard" | "supernova";
+export const PRODUCTION_MODES: readonly ProductionMode[] = ["standard", "supernova"];
+
 export interface ProductionConfig {
+  /**
+   * Stored only when it is "supernova": a standard project's config file never gains the key.
+   * Read it through productionMode(), which gives "standard" when it is absent.
+   */
+  mode?: ProductionMode;
   /**
    * peak: full creative liberty (bespoke story, design system, motion language, score).
    * mid: strong defaults, template-leaning, lighter review. literal: do exactly what was
@@ -95,6 +108,11 @@ export const DEFAULT_CONFIG: OpenvidstudioConfig = {
   production: {},
 };
 
+/** A project's production mode: "standard" unless its config says "supernova". */
+export function productionMode(config: { production?: ProductionConfig }): ProductionMode {
+  return config.production?.mode === "supernova" ? "supernova" : "standard";
+}
+
 export const CONFIG_FILE_NAME = "openvidstudio.config.json";
 
 export function configPath(projectRoot: string): string {
@@ -145,6 +163,7 @@ export function loadConfig(projectRoot: string): OpenvidstudioConfig {
       browserExecutable: raw.render?.browserExecutable ?? DEFAULT_CONFIG.render.browserExecutable,
     },
     production: {
+      mode: raw.production?.mode ?? DEFAULT_CONFIG.production.mode,
       creativeLevel: raw.production?.creativeLevel ?? DEFAULT_CONFIG.production.creativeLevel,
       timeBudgetMinutes: raw.production?.timeBudgetMinutes ?? DEFAULT_CONFIG.production.timeBudgetMinutes,
     },
@@ -181,6 +200,7 @@ export function writeConfig(projectRoot: string, patch: ConfigPatch): Openvidstu
       browserExecutable: patch.render?.browserExecutable ?? existing.render.browserExecutable,
     },
     production: {
+      mode: patch.production?.mode ?? existing.production.mode,
       creativeLevel: patch.production?.creativeLevel ?? existing.production.creativeLevel,
       timeBudgetMinutes: patch.production?.timeBudgetMinutes ?? existing.production.timeBudgetMinutes,
     },

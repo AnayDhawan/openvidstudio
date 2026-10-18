@@ -30,6 +30,7 @@ jobs:
       - run: pnpm --filter @openvidstudio/capture typecheck
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck
+      - run: pnpm --filter @openvidstudio/stem typecheck
       # README's tool counts and packages/docs/TOOLS.md are generated from the tools the
       # server registers; this fails when either has drifted (fix: node scripts/generate-tool-docs.mjs).
       - run: node scripts/generate-tool-docs.mjs --check

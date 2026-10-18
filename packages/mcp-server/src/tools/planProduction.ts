@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { PrimitiveSchemaDefinition } from "@modelcontextprotocol/sdk/types.js";
 import { resolveProjectRoot } from "../util";
-import { loadConfig, type CreativeLevel } from "../config";
+import { loadConfig, productionMode, type CreativeLevel, type ProductionMode } from "../config";
 import { runPreflight } from "./preflight";
 import { runTool } from "./mcp";
 
@@ -29,7 +29,10 @@ import { runTool } from "./mcp";
 
 export interface PlanProductionInput {
   projectRoot?: string;
-  creativeLevel: CreativeLevel;
+  /** "standard" (default) or "supernova", a STEM lesson, which has no creative level. */
+  mode?: ProductionMode;
+  /** Required for a standard video; a supernova lesson ignores it. */
+  creativeLevel?: CreativeLevel;
   timeBudgetMinutes: number;
   targetDurationSeconds?: number;
 }
@@ -41,7 +44,9 @@ export interface PhaseEstimate {
 }
 
 export interface PlanProductionResult {
-  creativeLevel: CreativeLevel;
+  mode: ProductionMode;
+  /** null for a supernova lesson, which is not planned on the peak/mid/literal scale. */
+  creativeLevel: CreativeLevel | null;
   timeBudgetMinutes: number;
   targetDurationSeconds: number;
   beatCountEstimate: number;
@@ -135,6 +140,22 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
   },
 };
 
+/**
+ * A Supernova lesson: script-first, narrated, built from stem primitives with nothing captured.
+ * Authoring and the render weight are engineering estimates (no lesson has been timed yet): a
+ * lesson scene is a few primitives rather than a bespoke layout, but Spark trails and the Nova's
+ * particles make a frame heavier than the flat benchmark composition.
+ */
+const SUPERNOVA_PROFILE: LevelProfile = {
+  qcRounds: 2,
+  customFraction: 1,
+  arc: "hook question, a concrete example, terms defined at first use, the formula as a shortcut, the aha on a Nova, a recap, a check question",
+  scoreStrategy: "compose_score with no percussion: a quiet pad under the voice",
+  authoringSecondsPerBeat: 60,
+  scoreSeconds: 20,
+  renderWeight: 2,
+};
+
 // ~10s/beat average across PIPELINE.md's Simple demo arc (60-75s over hook+problem+2-3
 // demos+differentiator+cta, 6-8 beats) -- the same ratio for any target duration.
 const SECONDS_PER_BEAT_ESTIMATE = 10;
@@ -144,7 +165,12 @@ export function runPlanProductionLogic(
   benchmark: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback"; bundleSeconds?: number | null },
   projectConfig: { fps: number },
 ): PlanProductionResult {
-  const profile = LEVEL_PROFILES[input.creativeLevel];
+  const mode: ProductionMode = input.mode ?? "standard";
+  if (mode === "standard" && input.creativeLevel === undefined) {
+    throw new Error("creativeLevel is required for a standard video (peak, mid or literal).");
+  }
+  const profile = mode === "supernova" ? SUPERNOVA_PROFILE : LEVEL_PROFILES[input.creativeLevel as CreativeLevel];
+  const levelLabel = mode === "supernova" ? "supernova" : (input.creativeLevel as CreativeLevel);
   const targetDurationSeconds = input.targetDurationSeconds ?? 60;
   const beatCountEstimate = Math.max(3, Math.round(targetDurationSeconds / SECONDS_PER_BEAT_ESTIMATE));
   const customScenes = Math.round(beatCountEstimate * profile.customFraction);
@@ -162,14 +188,15 @@ export function runPlanProductionLogic(
   const bundleSeconds = bundleMeasured ? (benchmark.bundleSeconds as number) : FALLBACK_BUNDLE_SECONDS;
   // One bundle per review round, one for the draft pass and one for the final render.
   const bundleCount = profile.qcRounds + 2;
-  const captureSeconds = beatCountEstimate * CAPTURE_SECONDS_PER_BEAT * (1 + CAPTURE_RETRY_FRACTION);
+  // A lesson captures nothing: every scene is constructed from primitives.
+  const captureSeconds = mode === "supernova" ? 0 : beatCountEstimate * CAPTURE_SECONDS_PER_BEAT * (1 + CAPTURE_RETRY_FRACTION);
   const authoringSeconds = beatCountEstimate * profile.authoringSecondsPerBeat;
 
   const phases: PhaseEstimate[] = [
     {
       phase: "brief + beats",
       seconds: Math.round(beatCountEstimate * 8),
-      note: `${beatCountEstimate} beats, ${input.creativeLevel} arc: ${profile.arc}`,
+      note: `${beatCountEstimate} beats, ${levelLabel} arc: ${profile.arc}`,
     },
     {
       phase: "score",
@@ -185,7 +212,10 @@ export function runPlanProductionLogic(
     {
       phase: "capture",
       seconds: Math.round(captureSeconds),
-      note: `${beatCountEstimate} beats x ${CAPTURE_SECONDS_PER_BEAT}s, plus an allowance for ${Math.round(CAPTURE_RETRY_FRACTION * 100)}% of them to be captured twice (engineering estimate)`,
+      note:
+        mode === "supernova"
+          ? "no real captures: a lesson is constructed from primitives"
+          : `${beatCountEstimate} beats x ${CAPTURE_SECONDS_PER_BEAT}s, plus an allowance for ${Math.round(CAPTURE_RETRY_FRACTION * 100)}% of them to be captured twice (engineering estimate)`,
     },
     {
       phase: "review bundles",
@@ -196,7 +226,7 @@ export function runPlanProductionLogic(
     {
       phase: "stills QC",
       seconds: Math.round(stillsPassSeconds * profile.qcRounds),
-      note: `${profile.qcRounds} round${profile.qcRounds === 1 ? "" : "s"} x ${stillsFramesTotal} frames at ${sceneFps.toFixed(2)}fps (${fps.toFixed(2)}fps benchmark / ${profile.renderWeight}x ${input.creativeLevel} scene weight)`,
+      note: `${profile.qcRounds} round${profile.qcRounds === 1 ? "" : "s"} x ${stillsFramesTotal} frames at ${sceneFps.toFixed(2)}fps (${fps.toFixed(2)}fps benchmark / ${profile.renderWeight}x ${levelLabel} scene weight)`,
     },
     {
       phase: "draft render",
@@ -206,7 +236,7 @@ export function runPlanProductionLogic(
     {
       phase: "final render",
       seconds: Math.round(finalRenderSeconds),
-      note: `${totalFrames} frames at ${sceneFps.toFixed(2)}fps: the measured ${fps.toFixed(2)}fps benchmark divided by a ${profile.renderWeight}x ${input.creativeLevel} scene weight${benchmark.source === "fallback" ? " (unmeasured fallback, run preflight with benchmark: true for a real number)" : ""}`,
+      note: `${totalFrames} frames at ${sceneFps.toFixed(2)}fps: the measured ${fps.toFixed(2)}fps benchmark divided by a ${profile.renderWeight}x ${levelLabel} scene weight${benchmark.source === "fallback" ? " (unmeasured fallback, run preflight with benchmark: true for a real number)" : ""}`,
     },
   ];
 
@@ -247,7 +277,8 @@ export function runPlanProductionLogic(
   }
 
   return {
-    creativeLevel: input.creativeLevel,
+    mode,
+    creativeLevel: mode === "supernova" ? null : (input.creativeLevel as CreativeLevel),
     timeBudgetMinutes: input.timeBudgetMinutes,
     targetDurationSeconds,
     beatCountEstimate,
@@ -281,7 +312,8 @@ export async function runPlanProduction(input: PlanProductionInput): Promise<Pla
         }
       : { fps: null, cpuCount: null, source: "fallback" };
 
-  const result = runPlanProductionLogic(input, benchmark, { fps: config.videoConfig.fps });
+  const mode = input.mode ?? productionMode(config);
+  const result = runPlanProductionLogic({ ...input, mode }, benchmark, { fps: config.videoConfig.fps });
   if (!preflight.ok) {
     result.warnings.push(
       `preflight reports this machine isn't fully ready: ${preflight.blockers.join("; ")}. The estimate above assumes those get fixed first.`,
@@ -331,9 +363,14 @@ export function registerPlanProduction(server: McpServer): void {
         "missing one(s) itself (a structured form, not drafted content). If the client doesn't support " +
         "elicitation and either is still missing, it fails with an explicit instruction for the calling agent " +
         "to ask the dev directly (PLANNING.md §0) and call this again with both set -- it never guesses a " +
-        "level or a budget.",
+        "level or a budget. In supernova mode (a STEM lesson, from the project's production.mode or the mode " +
+        "input) only the budget is asked for: a lesson has no creative level, and its plan has no capture term.",
       inputSchema: {
         projectRoot: z.string().optional(),
+        mode: z
+          .enum(["standard", "supernova"])
+          .optional()
+          .describe("Defaults to the project's production.mode. A supernova lesson needs no creativeLevel."),
         creativeLevel: z.enum(["peak", "mid", "literal"]).optional(),
         timeBudgetMinutes: z.number().positive().optional(),
         targetDurationSeconds: z.number().positive().optional(),
@@ -342,12 +379,15 @@ export function registerPlanProduction(server: McpServer): void {
     async (input) =>
       runTool("plan_production", async () => {
         let { creativeLevel, timeBudgetMinutes } = input;
+        const mode = input.mode ?? productionMode(loadConfig(resolveProjectRoot(input.projectRoot)));
+        // A lesson is not planned on the peak/mid/literal scale, so it is never asked for one.
+        const needsLevel = mode === "standard";
 
-        if (creativeLevel === undefined || timeBudgetMinutes === undefined) {
+        if ((needsLevel && creativeLevel === undefined) || timeBudgetMinutes === undefined) {
           const caps = server.server.getClientCapabilities();
           if (caps?.elicitation) {
             const properties: Record<string, PrimitiveSchemaDefinition> = {};
-            if (creativeLevel === undefined) properties.creativeLevel = CREATIVE_LEVEL_SCHEMA;
+            if (needsLevel && creativeLevel === undefined) properties.creativeLevel = CREATIVE_LEVEL_SCHEMA;
             if (timeBudgetMinutes === undefined) properties.timeBudgetMinutes = TIME_BUDGET_SCHEMA;
 
             const elicited = await server.server.elicitInput({
@@ -364,8 +404,8 @@ export function registerPlanProduction(server: McpServer): void {
           }
         }
 
-        if (creativeLevel === undefined || timeBudgetMinutes === undefined) {
-          const missing = [creativeLevel === undefined && "creativeLevel", timeBudgetMinutes === undefined && "timeBudgetMinutes"]
+        if ((needsLevel && creativeLevel === undefined) || timeBudgetMinutes === undefined) {
+          const missing = [needsLevel && creativeLevel === undefined && "creativeLevel", timeBudgetMinutes === undefined && "timeBudgetMinutes"]
             .filter(Boolean)
             .join(" and ");
           throw new Error(
@@ -375,7 +415,7 @@ export function registerPlanProduction(server: McpServer): void {
           );
         }
 
-        return runPlanProduction({ ...input, creativeLevel, timeBudgetMinutes });
+        return runPlanProduction({ ...input, mode, creativeLevel, timeBudgetMinutes });
       }),
   );
 }

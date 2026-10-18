@@ -82,11 +82,38 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/stem:
+    devDependencies:
+      '@fontsource/space-grotesk':
+        specifier: ^5.2.0
+        version: 5.3.0
+      '@openvidstudio/core':
+        specifier: workspace:*
+        version: link:../core
+      '@types/react':
+        specifier: 19.3.0
+        version: 19.3.0
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
+      remotion:
+        specifier: 4.0.534
+        version: 4.0.534(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+
   templates/default:
     dependencies:
       '@openvidstudio/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@openvidstudio/stem':
+        specifier: workspace:*
+        version: link:../../packages/stem
       '@remotion/cli':
         specifier: 4.0.534
         version: 4.0.534(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(typescript@7.0.2)
@@ -380,6 +407,9 @@ packages:
 
   '@fontsource/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-fqDfB5I9f1p1TV486aUgB9t8zP84P0O1FtQR5Ol9vjwPy+S+EIGlVYm1cvj2W5shcZMTg2nZFdVMoH5wFu8a1A==}
+
+  '@fontsource/space-grotesk@5.3.0':
+    resolution: {integrity: sha512-ksnGizDPXIDuvqcTYTSrmZ+evx9sDlS8rp7+42BQ7wU+spt3twEoXfbJz672C+5CLg6VeUQwRy5RXshWb67LcQ==}
 
   '@hono/node-server@2.1.1':
     resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
@@ -2503,6 +2533,8 @@ snapshots:
   '@fontsource/inter@5.3.0': {}
 
   '@fontsource/jetbrains-mono@5.3.0': {}
+
+  '@fontsource/space-grotesk@5.3.0': {}
 
   '@hono/node-server@2.1.1(hono@4.13.5)':
     dependencies:

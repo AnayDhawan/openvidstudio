@@ -27,6 +27,7 @@ export const MAX_READING_WORDS_PER_SEC = 3.5;
 export const READING_OVERHEAD_SEC = 0.8;
 const NARRATION_MODES = ["voice", "none"] as const;
 const CREATIVE_LEVELS = ["peak", "mid", "literal"] as const;
+const PRODUCTION_MODES = ["standard", "supernova"] as const;
 const CAPTURE_METHODS = ["screenshot", "recording", "dom-demo", "higgsfield", "existing-asset"] as const;
 const TRANSITIONS = ["cut", "whip", "fade", "push", "wipe", "light-leak"] as const;
 const ARTIFACT_KEYS = ["screenshotPath", "recordingPath", "voPath", "terminalPath"] as const;
@@ -72,9 +73,17 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
   // job at authoring time (plan_production, scaffold_scene's template-vs-custom choice).
   if (root.production !== undefined) {
     if (typeof root.production !== "object" || root.production === null || Array.isArray(root.production)) {
-      errors.push(`production must be an object: { creativeLevel?, timeBudgetMinutes? }`);
+      errors.push(`production must be an object: { mode?, creativeLevel?, timeBudgetMinutes? }`);
     } else {
       const production = root.production as Record<string, unknown>;
+      if (production.mode !== undefined && !(PRODUCTION_MODES as readonly string[]).includes(production.mode as string)) {
+        errors.push(`production.mode must be one of ${PRODUCTION_MODES.map((m) => `"${m}"`).join(", ")} (omit for "standard")`);
+      }
+      if (production.mode === "supernova" && narrationRaw === "none") {
+        warnings.push(
+          `production.mode is "supernova" but narration is "none": a lesson is carried by its voice, so a silent one has nothing to teach with.`,
+        );
+      }
       if (
         production.creativeLevel !== undefined &&
         !(CREATIVE_LEVELS as readonly string[]).includes(production.creativeLevel as string)

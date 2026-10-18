@@ -64,6 +64,7 @@ To try your build with an agent, point your MCP config at the built server:
 | --- | --- |
 | `packages/mcp-server` | the MCP tools an agent calls, and their tests |
 | `packages/core` | the Remotion building blocks scenes are made from |
+| `packages/stem` | Supernova mode: the Void + Spark design system and the STEM lesson primitives |
 | `packages/capture` | browser, desktop, mobile and terminal capture, no Remotion needed |
 | `packages/docs` | the guides copied into every scaffolded project |
 | `templates/default` | the project `init_project` creates |

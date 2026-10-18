@@ -338,6 +338,29 @@ read the render plus `beats.json`, so none of them can drift from the video:
   screen. It does not write the narration and does not install the manifest:
   both go through the approval gate in `PLANNING.md` §5.
 
+## Production mode: standard and supernova
+
+`production.mode` in `openvidstudio.config.json` is `"standard"` when it is absent, and that is every
+product video: real captures, a story, a creative level (peak, mid or literal). `"supernova"` is a
+different kind of production, a short STEM lesson that is written script first, narrated, and built
+from constructed pictures rather than captures. It is not a fourth creative level, so a lesson is not
+asked for one and is not planned on that scale.
+
+`init_project` with `mode: "supernova"` makes a lesson project: it stores the mode, defaults the frame
+to 1080x1920, vendors `@openvidstudio/stem` (with its display font, Space Grotesk, copied into
+`public/fonts/`) and adds the dependency. A standard project gets none of that: its files, config and
+`package.json` are exactly what they were. `@openvidstudio/stem` exports `supernovaDesignSystem(subject)`,
+the Void + Spark design system with one accent per subject (math, physics, cs, chemistry, biology):
+
+```ts
+import { supernovaDesignSystem } from "@openvidstudio/stem";
+export const design = supernovaDesignSystem("physics");
+```
+
+`validate_beats` reads `production.mode` (an unknown value is an error; a silent lesson is a warning),
+`write_brief` takes `mode` and needs no `creativeLevel` for a lesson, and `plan_production` plans a
+lesson with its own arc, no capture time and no creative level.
+
 ## Native vertical (9:16)
 
 For Reels, Shorts and TikTok there are two ways to get a 1080x1920 file, and they are not

@@ -67,12 +67,30 @@ if (existsSync(coreSrc)) {
   process.stderr.write(`copy-template: packages/core not found at ${coreSrc}, skipping core vendoring\n`);
 }
 
+// Supernova mode (packages/stem) is vendored the same way, as ./openvidstudio-stem, with its
+// public/ (the display font) so init_project can copy the font into the project. init_project
+// leaves both out of a standard project, so only a project made with mode "supernova" has them.
+const stemSrc = join(monorepoRoot, "packages", "stem");
+const vendoredStemDest = join(dest, "openvidstudio-stem");
+if (existsSync(stemSrc)) {
+  copyDir(join(stemSrc, "src"), join(vendoredStemDest, "src"));
+  if (existsSync(join(stemSrc, "public"))) copyDir(join(stemSrc, "public"), join(vendoredStemDest, "public"));
+  const stemPkg = JSON.parse(readFileSync(join(stemSrc, "package.json"), "utf8"));
+  writeFileSync(join(vendoredStemDest, "package.json"), JSON.stringify(stemPkg, null, 2) + "\n");
+  process.stderr.write(`copy-template: vendored @openvidstudio/stem -> ${vendoredStemDest}\n`);
+} else {
+  process.stderr.write(`copy-template: packages/stem not found at ${stemSrc}, skipping stem vendoring\n`);
+}
+
 const templatePkgPath = join(dest, "package.json");
 const templatePkg = JSON.parse(readFileSync(templatePkgPath, "utf8"));
 if (templatePkg.dependencies && templatePkg.dependencies["@openvidstudio/core"]) {
   templatePkg.dependencies["@openvidstudio/core"] = "file:./openvidstudio-core";
+  if (templatePkg.dependencies["@openvidstudio/stem"]) {
+    templatePkg.dependencies["@openvidstudio/stem"] = "file:./openvidstudio-stem";
+  }
   writeFileSync(templatePkgPath, JSON.stringify(templatePkg, null, 2) + "\n");
   process.stderr.write(
-    `copy-template: rewrote bundled package.json's @openvidstudio/core dependency to file:./openvidstudio-core\n`,
+    `copy-template: rewrote bundled package.json's @openvidstudio/core (and stem) dependency to a relative file: reference\n`,
   );
 }

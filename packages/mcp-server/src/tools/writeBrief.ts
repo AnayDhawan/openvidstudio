@@ -46,13 +46,13 @@ export interface DesignRationale {
   paletteRationale: string;
   /** Mirrors designSystem.ts's Motif union. Kept as a local literal copy (mcp-server does
    * not depend on @openvidstudio/core) -- update MOTIFS here if that union ever changes. */
-  motif: "pixel-grid" | "rounded-soft" | "geometric" | "editorial";
+  motif: "pixel-grid" | "rounded-soft" | "geometric" | "editorial" | "void-spark";
   motifRationale: string;
   motionRationale: string;
 }
 
-/** One of defineDesignSystem's four motifs (packages/core/src/designSystem.ts). */
-const MOTIFS = ["pixel-grid", "rounded-soft", "geometric", "editorial"] as const;
+/** One of defineDesignSystem's five motifs (packages/core/src/designSystem.ts). */
+const MOTIFS = ["pixel-grid", "rounded-soft", "geometric", "editorial", "void-spark"] as const;
 
 /** A video score's section vocabulary. Doubles as the section's identity and its intensity. */
 const INTENSITY_LABELS = ["intro", "tension", "reveal", "groove", "break", "peak", "outro"] as const;
@@ -122,7 +122,9 @@ export interface BriefJson {
   /** Mirrors openvidstudio.config.json's production.creativeLevel (PLANNING.md §0). Recorded
    * here too because the brief is authored before beats.json exists, so this is the only
    * place on disk that says which level this brief was written under. */
-  creativeLevel: "peak" | "mid" | "literal";
+  creativeLevel?: "peak" | "mid" | "literal";
+  /** Mirrors production.mode. Omitted means "standard"; "supernova" marks a STEM lesson. */
+  mode?: "standard" | "supernova";
   logline: string;
   audience: string;
   /** The one feeling the viewer should leave with. */
@@ -193,8 +195,15 @@ export function validateBriefLogic(briefJson: unknown): ValidateBriefResult {
   }
   const b = briefJson;
 
-  if (typeof b.creativeLevel !== "string" || !(CREATIVE_LEVELS as readonly string[]).includes(b.creativeLevel)) {
+  // A lesson has no creative level (that scale is for product videos), so it is required only
+  // outside supernova mode, and still checked if a lesson brief gives one.
+  const creativeLevelOptional = b.mode === "supernova" && b.creativeLevel === undefined;
+  if (!creativeLevelOptional && (typeof b.creativeLevel !== "string" || !(CREATIVE_LEVELS as readonly string[]).includes(b.creativeLevel))) {
     errors.push(`creativeLevel must be one of ${CREATIVE_LEVELS.map((l) => `"${l}"`).join(", ")}`);
+  }
+
+  if (b.mode !== undefined && b.mode !== "standard" && b.mode !== "supernova") {
+    errors.push(`mode must be "standard" or "supernova" (omit for "standard")`);
   }
 
   requireNonEmptyString(b, "logline", "", errors);
@@ -413,7 +422,7 @@ export function registerWriteBrief(server: McpServer): void {
         "reveal, a build-up montage, a \"made with itself\" twist, or something else entirely, never " +
         "defaulted); arc ({ hook, tension, turn, proof, payoff, cta }, the hook must land within 2 seconds " +
         "per STYLE.md and the payoff must resolve the hook); designSystem ({ path, paletteRationale, motif " +
-        "[\"pixel-grid\"/\"rounded-soft\"/\"geometric\"/\"editorial\", mirrors defineDesignSystem's Motif " +
+        "[\"pixel-grid\"/\"rounded-soft\"/\"geometric\"/\"editorial\"/\"void-spark\", mirrors defineDesignSystem's Motif " +
         "union], motifRationale, motionRationale } -- the WHY behind this video's src/videos/<name>/design.ts, " +
         "never a duplicate copy of its actual color/type/motion values, which live only in design.ts); music " +
         "({ bpm, key, sectionMap: non-empty array of { label [\"intro\"/\"tension\"/\"reveal\"/\"groove\"/" +

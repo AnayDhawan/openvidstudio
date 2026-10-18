@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
+    "@openvidstudio/stem": "workspace:*",
     "@remotion/cli": "4.0.534",
     "@remotion/google-fonts": "4.0.534",
     "@remotion/motion-blur": "4.0.534",

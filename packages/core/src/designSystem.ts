@@ -54,9 +54,10 @@ export interface MotionPersonality {
  * A signature motif lifted from the brand: the visual idea a transition or a recurring
  * shape expresses. "pixel-grid" pairs with PixelWipe/PixelLogo (C4) for a brand whose logo
  * is built from square rects; the others are named for extract_brand (A10) to map a brand's
- * shape language onto, and for a bespoke scene to key off deliberately.
+ * shape language onto, and for a bespoke scene to key off deliberately. "void-spark" is Supernova
+ * mode's: a flat dark field with one luminous point (see @openvidstudio/stem).
  */
-export type Motif = "pixel-grid" | "rounded-soft" | "geometric" | "editorial";
+export type Motif = "pixel-grid" | "rounded-soft" | "geometric" | "editorial" | "void-spark";
 
 export interface Texture {
   /** 0-1. STYLE.md's default range is 0.04-0.06. */

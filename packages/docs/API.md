@@ -4,6 +4,12 @@ Written because the alternative is reading the library source. If you are an age
 about to write a scene, this file has every prop you need and you should not have to
 open `packages/core/src`.
 
+These are **building blocks**, not a template. At peak and mid creative level the agent is
+expected to compose scenes from them against the video's own `design.ts`, and to write its
+own component when the brief's motif needs something the library does not have. Every
+primitive below has a still, rendered for real by `scripts/build-api-gallery.mjs`. The MCP
+tools are listed in [TOOLS.md](TOOLS.md).
+
 Import everything from the package root:
 
 ```tsx
@@ -83,6 +89,49 @@ One focal plane per shot. Put background elements on a non-zero depth so they bl
 
 `CinematicScene` sets these up for you. Reach for them only when building a scene
 that needs the camera state directly.
+
+`CameraRig` also takes `viewportWidth` and `viewportHeight`, the size of the window the camera
+looks through (default: the composition's size). A rig nested in a smaller box, such as
+`DirectedShot`, passes that box's size. `resolveCamera(keyframes, frame)` returns the camera
+state the rig renders at a frame, for code that needs to know where the camera is without
+rendering.
+
+### `DirectedShot`
+
+A nested camera rig that turns a flat capture into a directed move: a push-in on one point,
+an optional tilt, depth of field that follows the focal point, and a cursor, all in the
+capture's own pixel space. It owns its own `CameraRig`, so it sits inside a `CinematicScene`
+(or anywhere) without touching that scene's camera.
+
+```tsx
+<DirectedShot
+  src={staticFile("images/dashboard.png")}
+  focus={{ x: 1560, y: 280 }}
+  push={1.9}
+  tilt={{ y: -4, x: 2 }}
+  move={{ from: 0, to: 70 }}
+  cursor={{ path: [{ frame: 0, x: 900, y: 600 }, { frame: 55, x: 1500, y: 300 }], clicks: [60] }}
+/>
+```
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `src` | `string` | | Image URL, usually `staticFile("images/<beat>.png")`. Use `children` for anything else |
+| `focus` | `{ x, y }` | required | The point in the capture, in capture pixels, the move pushes into |
+| `push` | `number` | `1.4` | End zoom relative to fitting the whole capture in the box. `1` holds the full frame |
+| `tilt` | `{ x?, y?, z? }` | | Rotation in degrees at the end of the move. 2 to 6 reads as depth |
+| `move` | `{ from?, to?, easing? }` | `0` to `90` | Frames, local to the scene. Defaults to `E.cinematic` |
+| `depthOfField` | `number` | `6` | Blur in px away from the focal point. `0` turns it off |
+| `cursor` | `{ path, clicks? }` | | A `CursorActor` path and click frames, in capture pixels |
+| `captureWidth`, `captureHeight` | `number` | `1920`, `1080` | The capture's natural size |
+| `width`, `height` | `number` | the composition | The box the shot fills |
+
+The move starts on the whole capture and ends pushed in on `focus`. The end centre is clamped
+so the camera never leaves the capture (empty stage reads as a mistake).
+
+| Start of the move | End of the move |
+|---|---|
+| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end: pushed in, tilted, soft at the edges, cursor on the target](img/api/directedshot-end.png) |
 
 ---
 
@@ -282,6 +331,41 @@ Narration is separate: `generate_narration` writes
 
 ---
 
+## Music clock
+
+The score's grid as scene-local frames, so a cut, a reveal or a glow can land on the music.
+`stitch_composition` copies the bed's `<stem>.cues.json` next to the composition and mounts
+`MusicClockProvider` with each beat's start frame; a scene just asks for its own beat.
+
+```tsx
+const clock = useMusicClock("reveal");   // the beat id, exactly as in beats.json
+const hit = clock.at(8);                  // first downbeat of bar 8, as a frame local to this scene
+const glow = clock.beatPulse();           // 1 on each beat, decaying to 0 before the next
+if (clock.onDownbeat()) { /* a bar starts on this frame */ }
+```
+
+![useMusicClock: on a downbeat the pulse is full](img/api/musicclock-downbeat.png)
+![...three frames later it has decayed](img/api/musicclock-decay.png)
+
+Bars count from 0 at the start of the track, in 4/4 (what `compose_score` writes), and the bed
+is mounted at composition frame 0. `useMusicClock(beatId)` must be called inside that beat's
+scene, because the pulse helpers read the scene's current frame.
+
+| Member | Notes |
+|---|---|
+| `at(bar, beat?)` | Scene-local frame of that bar and beat (`beat` may be fractional: `at(8, 2.5)`). Rounded to the nearest frame; negative when it is before the scene starts |
+| `position(frame)` | `{ bar, beat }` a scene-local frame falls in |
+| `impact(label)` | Scene-local frame of the score's impact point with that label, or `null` |
+| `sectionAt(frame)` | The section label a frame falls in, or `null` without sections |
+| `beatPulse({ decay?, strongOnly? })` | 1 on a beat, decaying to 0 over `decay` (0.6) of a beat; `strongOnly` pulses on downbeats only |
+| `onBeat()`, `onDownbeat()` | True on the frame a beat or a bar starts, using the same rounding as `at` |
+| `available`, `bpm`, `framesPerBeat`, `framesPerBar` | `available` is false when the bed has no cues file; the clock then runs a 120 bpm grid so a scene still renders |
+
+`createMusicClock({ cues, fps, sceneStartFrame, frame })` is the pure core, for tests.
+`plan_beats` with `snapToBars` plans beat boundaries onto the same downbeats.
+
+---
+
 ## Look pass
 
 `FilmGrain`, `Vignette`, `ColorGrade`, `LookPass`. `CinematicScene` applies these, so
@@ -358,6 +442,8 @@ it instead of the package's global tokens.
 
 ### `Words`
 
+![Words: a masked word reveal with one accented word](img/api/words.png)
+
 Per-word masked reveal. Never a plain opacity fade (STYLE.md): each word clips
 in from below on its own stagger, and clips back out the same way if `out` is
 set.
@@ -385,6 +471,8 @@ caller can drive `TypingSfx` off the exact same numbers the visible text uses.
 
 ### `Caret`
 
+![useTyped and Caret: a typed command with a blinking caret in a Window](img/api/typed-caret.png)
+
 | Prop | Type | Default |
 |---|---|---|
 | `h` | `number` | `40` |
@@ -398,6 +486,8 @@ Blinking text caret, sized to a line height. Pair with `useTyped` for a typed li
 ## Pixel-grid family
 
 ### `DotText`
+
+![DotText: 5x7 dot-matrix text](img/api/dottext.png)
 
 5x7 dot-matrix text, built pixel by pixel rather than drawn with a font file.
 
@@ -414,6 +504,8 @@ Blinking text caret, sized to a line height. Pair with `useTyped` for a typed li
 | `seed` | `number` | `3` | |
 
 ### `PixelLogo`
+
+![PixelLogo: a four-square mark assembled from its own rects](img/api/pixellogo.png)
 
 Assembles a pixel-grid logo from its own rect shapes, each flying in from a ring
 around the mark (`build="scatter"`) or rendered flat (`build="none"`). The ring's
@@ -432,6 +524,8 @@ pixel-grid logo.
 | `style` | `CSSProperties` | | |
 
 ### `PixelWipe`
+
+![PixelWipe: a pixel-grid transition part-way through clearing](img/api/pixelwipe.png)
 
 Transition pair, pixel-grid's natural home but usable standalone. Call both
 ends of a cut with the same `cell`/`seed` so the out and the following in read
@@ -459,11 +553,19 @@ as one continuous move across the cut.
 | `Black` | `from`, `to?` | Holds solid black. Omit `to` to hold forever |
 | `Letterbox` | `amount?` (1) | Bars for a cinematic moment. `amount` scales the bar height, 1 = full 64px |
 
+| | |
+|---|---|
+| ![Atmosphere: drifting colour fields](img/api/atmosphere.png) `Atmosphere` | ![DotGrid: a faint dot texture behind a Glass panel](img/api/dotgrid.png) `DotGrid` |
+| ![Flash: the frame during an exposure flash](img/api/flash.png) `Flash` | ![Letterbox: cinematic bars](img/api/letterbox.png) `Letterbox` |
+| ![Black: a solid black frame, with the scene held under it](img/api/black.png) `Black` | |
+
 ---
 
 ## UI chrome
 
 ### `Window`
+
+![Window with JsonView: real JSON revealed line by line](img/api/window-jsonview.png)
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
@@ -493,6 +595,8 @@ being DOM text instead of a recorded terminal).
 
 ### `Check`, `Cross`
 
+![Check and Cross inside a Glass panel](img/api/check-cross-glass.png)
+
 | Prop | Type | Default |
 |---|---|---|
 | `size` | `number` | required |
@@ -500,6 +604,8 @@ being DOM text instead of a recorded terminal).
 | `at` | `number` | `0`, `Check` only (draws its tick stroke in) |
 
 ### `ToolChip`
+
+![ToolChip with a finished check, and two Pills](img/api/toolchip-pill.png)
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
@@ -531,6 +637,8 @@ being DOM text instead of a recorded terminal).
 Frosted glass panel: `backdrop-filter: blur`, for a floating card over motion.
 
 ### `ChapterHud`
+
+![ChapterHud: the chapter label top left and the progress rail along the bottom](img/api/chapterhud.png)
 
 Screen space, meant for a scene's `overlay` (like `Caption`), not camera-transformed.
 A dot-matrix chapter number and label top-left, a progress rail bottom.

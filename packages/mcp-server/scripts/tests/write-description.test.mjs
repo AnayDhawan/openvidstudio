@@ -225,6 +225,23 @@ console.log("\n== C9: chapters from the beats, and credits read from disk ==");
   });
   check("a sound effect whose licence asks for credit is credited, from ATTRIBUTION.md", describe(sfx, "sfx").r.credits.some((c) => c === "Sound effect click.wav: freesound.org/s/1, Jane, CC-BY-4.0. The licence asks for this credit."));
 
+  // sampleContent: write_brief documents it as surfacing in the description; it used to be read by nothing.
+  const sampleBrief = (name, entries) => ({ [`src/videos/${name}/brief.json`]: JSON.stringify({ shotList: [{ beatId: "hook", real: true, provenance: "capture", focalPoint: "x" }], sampleContent: entries }) });
+  const sampled = make("sc", sampleBrief("sc", [
+    { beatId: "hook", whatItIs: "Acme Tasks, a fictional task board", whyConstructed: "the video needs a running product and this one exists only to be filmed" },
+    { beatId: "middle", whatItIs: "Acme Tasks, a fictional task board", whyConstructed: "the video needs a running product and this one exists only to be filmed" },
+    { beatId: "end", whatItIs: "Acme Tasks, a fictional task board", whyConstructed: "the video needs a running product and this one exists only to be filmed" },
+  ]));
+  const sc = describe(sampled, "sc");
+  check("sampleContent is disclosed in the description, and beats filmed from the same sample read as one sentence", /The hook, middle and end segments show Acme Tasks, a fictional task board\./.test(sc.text) && (sc.text.match(/fictional task board/g) ?? []).length === 1);
+  check("...and the result lists every beat it disclosed", sc.r.sampleContentDisclosed.join() === "hook,middle,end");
+  const twoKinds = make("sc2", { "src/videos/sc2/brief.json": JSON.stringify({ shotList: [{ beatId: "end", real: false, provenance: "a constructed end card", whyConstructed: "a title card is not product UI", focalPoint: "x" }], sampleContent: [{ beatId: "hook", whatItIs: "a fictional app", whyConstructed: "it is a sample" }] }) });
+  const tk = describe(twoKinds, "sc2");
+  check("a constructed shot and a sample-content beat are told as two separate disclosures", /The end segment shows a constructed end card\./.test(tk.text) && /The hook segment shows a fictional app\./.test(tk.text));
+  let badSample = "";
+  try { describe(make("sc3", sampleBrief("sc3", [{ beatId: "hook", whatItIs: "a fictional app" }])), "sc3"); } catch (e) { badSample = String(e.message); }
+  check("a sampleContent entry with no whyConstructed throws rather than being skipped", /sampleContent\[0\] is missing "whyConstructed"/.test(badSample));
+
   const short = make("shortone", {}, [beat("a", 4), beat("b", 4)]);
   const s = describe(short, "shortone");
   check("a too-short video's file says chapters were left out and writes no Chapters heading", /Chapters left out: YouTube lists chapters only when there are at least 3/.test(s.text) && !s.text.includes("## Chapters") && s.r.chapters.length === 0);

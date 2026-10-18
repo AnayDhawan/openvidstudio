@@ -3,12 +3,14 @@
 //
 //   node evals/acme-launch/mcp-call.mjs list
 //   node evals/acme-launch/mcp-call.mjs <tool> '<json arguments>'
+//   node evals/acme-launch/mcp-call.mjs <tool> @args.json        (arguments read from a file)
 //
 // Set MCP_CWD to the project the tools should act on (the server resolves relative paths and the
 // project root against it). Output is each text block the tool returned, one per line. A tool
 // that fails exits 1 with the error text, so a script can stop on it.
 
 import * as path from "node:path";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 
@@ -40,7 +42,10 @@ try {
     console.error(`${r.tools.length} tools`);
   } else {
     const hours = 2 * 60 * 60 * 1000;
-    const r = await client.callTool({ name: tool, arguments: JSON.parse(argJson || "{}") }, undefined, {
+    // "@path/to/args.json" reads the arguments from a file, which keeps long briefs and beats out of
+    // the shell's quoting.
+    const rawArgs = argJson?.startsWith("@") ? readFileSync(argJson.slice(1), "utf8") : argJson;
+    const r = await client.callTool({ name: tool, arguments: JSON.parse(rawArgs || "{}") }, undefined, {
       timeout: hours,
       resetTimeoutOnProgress: true,
       maxTotalTimeout: hours,

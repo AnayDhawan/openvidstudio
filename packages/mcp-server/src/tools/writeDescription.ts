@@ -121,6 +121,31 @@ function readBrief(projectRoot: string, videoName: string): BriefLike | undefine
     });
   }
 
+  // sampleContent: beats whose real capture is of a sample app, dataset or repo built to be filmed.
+  // write_brief documents these as surfacing in the description, so they are disclosed here exactly
+  // like a constructed shot. A malformed entry throws for the same reason a malformed shot does.
+  if (raw.sampleContent !== undefined) {
+    if (!Array.isArray(raw.sampleContent)) {
+      throw new Error(`${briefPath}: "sampleContent" must be an array if present.`);
+    }
+    (raw.sampleContent as unknown[]).forEach((entry, i) => {
+      if (typeof entry !== "object" || entry === null) {
+        throw new Error(`${briefPath}: sampleContent[${i}] is not an object.`);
+      }
+      const e = entry as Record<string, unknown>;
+      for (const key of ["beatId", "whatItIs", "whyConstructed"] as const) {
+        if (typeof e[key] !== "string" || (e[key] as string).trim().length === 0) {
+          throw new Error(`${briefPath}: sampleContent[${i}] is missing "${key}".`);
+        }
+      }
+      constructedShots.push({
+        beatId: (e.beatId as string).trim(),
+        provenance: (e.whatItIs as string).trim(),
+        whyConstructed: (e.whyConstructed as string).trim(),
+      });
+    });
+  }
+
   return { logline, audience, feeling, constructedShots };
 }
 
@@ -275,6 +300,11 @@ function buildCredits(projectRoot: string, videoName: string, beats: BeatLike[])
   return credits;
 }
 
+/** ["a"] -> "a", ["a", "b"] -> "a and b", ["a", "b", "c"] -> "a, b and c". */
+function joinNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 function formatSeconds(frames: number, fps: number): string {
   const rounded = Math.round((frames / fps) * 10) / 10;
   return rounded % 1 === 0 ? `${rounded}s` : `${rounded.toFixed(1)}s`;
@@ -341,10 +371,20 @@ function buildDescription(
   if (constructedShots.length > 0) {
     lines.push("## Sample content used in this video");
     lines.push("");
+    // One sentence per distinct disclosure: six beats filmed from the same sample app are one fact
+    // told once, with every beat named, not the same sentence six times.
+    const groups = new Map<string, { provenance: string; whyConstructed: string; beatIds: string[] }>();
     for (const shot of constructedShots) {
+      const key = `${shot.provenance}\u0000${shot.whyConstructed}`;
+      const group = groups.get(key) ?? { provenance: shot.provenance, whyConstructed: shot.whyConstructed, beatIds: [] };
+      if (!group.beatIds.includes(shot.beatId)) group.beatIds.push(shot.beatId);
+      groups.set(key, group);
+    }
+    for (const group of groups.values()) {
+      const names = group.beatIds.length === 1 ? `The ${group.beatIds[0]} segment` : `The ${joinNames(group.beatIds)} segments`;
       lines.push(
-        `The ${shot.beatId} segment shows ${shot.provenance}. It was built specifically for this video, not ` +
-          `captured from the real product, because ${shot.whyConstructed}.`,
+        `${names} ${group.beatIds.length === 1 ? "shows" : "show"} ${group.provenance}. It was built specifically for ` +
+          `this video, not captured from the real product, because ${group.whyConstructed}.`,
       );
       lines.push("");
     }

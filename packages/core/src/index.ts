@@ -61,7 +61,8 @@ export { CinematicScene } from "./CinematicScene";
 export { BrowserFrame } from "./DeviceFrame";
 
 // Kinetic typography
-export { TitleSlam, Caption } from "./KineticText";
+export { TitleSlam, Caption, captionLayout } from "./KineticText";
+export type { CaptionPosition, CaptionRect } from "./KineticText";
 
 // Terminal replay
 export {

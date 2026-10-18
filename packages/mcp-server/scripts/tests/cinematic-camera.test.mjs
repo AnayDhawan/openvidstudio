@@ -61,6 +61,20 @@ export const ${name}: React.FC = () => (
 `;
 }
 
+/** A scene file from a component name, the core names it imports and the JSX to render. */
+function sceneFile(name, coreImports, jsx, { extra = "" } = {}) {
+  return String.raw`import React from "react";
+import { AbsoluteFill, staticFile } from "remotion";
+import { ${coreImports.join(", ")} } from "@openvidstudio/core";
+${extra}
+export const ${name}: React.FC = () => (
+  <AbsoluteFill style={{ background: "#0b0e14" }}>
+    ${jsx}
+  </AbsoluteFill>
+);
+`;
+}
+
 const pascal = (id) => id.split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join("");
 
 // ============================================================ 1. DirectedShot defects
@@ -178,6 +192,189 @@ section(
   },
 );
 
+// ============================================================ 2. Caption
+
+const FOURTEEN = "One click turns a messy backlog into a clear plan you can actually ship";
+const captionScene = (name, props, text = FOURTEEN) =>
+  sceneFile(name, ["Caption"], `<Caption text="${text}" at={10} ${props} />`);
+
+section(
+  "2. Caption: placement, a settled reveal, width from the composition",
+  [
+    { id: "cap-bottom", frames: 60, source: captionScene("CapBottom", "") },
+    { id: "cap-top", frames: 60, source: captionScene("CapTop", 'position="top"') },
+    { id: "cap-left", frames: 60, source: captionScene("CapLeft", 'position="left"') },
+    { id: "cap-right", frames: 60, source: captionScene("CapRight", 'position="right"') },
+    { id: "cap-auto-none", frames: 60, source: captionScene("CapAutoNone", 'position="auto"') },
+    {
+      id: "cap-auto-left-product",
+      frames: 60,
+      source: captionScene("CapAutoLeftProduct", 'position="auto" avoid={{ x: 100, y: 100, width: 800, height: 880 }}'),
+    },
+    {
+      id: "cap-auto-top-product",
+      frames: 60,
+      source: captionScene("CapAutoTopProduct", 'position="auto" avoid={{ x: 200, y: 80, width: 1500, height: 300 }}'),
+    },
+    {
+      id: "cap-auto-bottom-product",
+      frames: 60,
+      source: captionScene("CapAutoBottomProduct", 'position="auto" avoid={{ x: 200, y: 700, width: 1500, height: 300 }}'),
+    },
+    {
+      id: "cap-long",
+      frames: 60,
+      source: captionScene("CapLong", "", Array.from({ length: 40 }, (_, i) => `word${i}`).join(" ")),
+    },
+    {
+      id: "cap-layout",
+      frames: 30,
+      source: sceneFile(
+        "CapLayout",
+        ["captionLayout"],
+        `<div id="cap-layout-readout" style={{ color: "#fff", fontSize: 24, whiteSpace: "pre" }}>{JSON.stringify([
+      captionLayout("bottom", undefined, 1920, 1080, 34),
+      captionLayout("bottom", undefined, 1080, 1920, 34),
+      captionLayout("bottom", undefined, 3840, 2160, 34),
+      captionLayout("left", undefined, 1080, 1920, 34),
+      captionLayout("auto", { x: 100, y: 100, width: 800, height: 880 }, 1920, 1080, 34),
+      captionLayout("auto", { x: 0, y: 0, width: 1080, height: 1000 }, 1080, 1920, 34),
+    ])}</div>`,
+      ),
+    },
+  ],
+  async (t) => {
+    const REVEALED = 0.01;
+    const wipes = (frame) =>
+      t.eval(frame, () =>
+        Array.from(document.querySelectorAll("[data-ovs-caption-word]")).map((el) => {
+          const cp = getComputedStyle(el).clipPath;
+          if (cp === "none") return 0;
+          const m = cp.match(/inset\(\S+\s+([\d.]+)%/);
+          return m ? parseFloat(m[1]) : -1;
+        }),
+      );
+    const at = 10;
+    const n = 14;
+    check("the test caption renders 14 word elements", (await wipes(t.frameOf("cap-bottom", at + 8))).length === n);
+
+    // The first frame on which every word is fully revealed.
+    let settleFrame = null;
+    for (let f = at; f <= at + 40 && settleFrame === null; f++) {
+      const w = await wipes(t.frameOf("cap-bottom", f));
+      if (w.length === n && w.every((v) => v >= 0 && v <= REVEALED)) settleFrame = f;
+    }
+    const oldSettle = at + (n - 1) * 2 + 5;
+    console.log(`  14-word caption settles at at+${settleFrame === null ? "never" : settleFrame - at} (the old 2-frame stagger: at+${oldSettle - at})`);
+    check("every word is fully revealed at at+8 for a 14-word caption", settleFrame !== null && settleFrame <= at + 8);
+    check("the new settle frame is earlier than the old stagger's (at + (n-1)*2 + 5)", settleFrame !== null && settleFrame < oldSettle);
+    const early = await wipes(t.frameOf("cap-bottom", at + 2));
+    check("it still reveals as a wipe, not a pop: at at+2 some words are partly clipped", early.some((v) => v > 5 && v < 100));
+    const before = await wipes(t.frameOf("cap-bottom", at));
+    check("nothing is revealed on the 'at' frame itself", before.length === n && before.every((v) => v > 99));
+
+    const box = (frame) =>
+      t.eval(frame, () => {
+        const r = document.querySelector("[data-ovs-caption-card]")?.getBoundingClientRect();
+        return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+      });
+    const settled = (id) => t.frameOf(id, at + 12);
+    const bottom = await box(settled("cap-bottom"));
+    const top = await box(settled("cap-top"));
+    const left = await box(settled("cap-left"));
+    const right = await box(settled("cap-right"));
+    const centre = (b) => ({ cx: b.x + b.w / 2, cy: b.y + b.h / 2 });
+    console.log(`  cards: bottom y=${bottom?.y.toFixed(0)} top y=${top?.y.toFixed(0)} left x=${left?.x.toFixed(0)} right x=${right?.x.toFixed(0)}`);
+    check("position bottom (the default) lands in the lower half", bottom !== null && centre(bottom).cy > 540);
+    check("position top lands in the upper half", top !== null && centre(top).cy < 540);
+    check("position left lands in the left half", left !== null && centre(left).cx < 960);
+    check("position right lands in the right half", right !== null && centre(right).cx > 960);
+    check(
+      "every placement keeps the whole card inside the frame",
+      [bottom, top, left, right].every((b) => b && b.x >= 0 && b.y >= 0 && b.x + b.w <= 1920 && b.y + b.h <= 1080),
+    );
+
+    const autoNone = await box(settled("cap-auto-none"));
+    check("auto without an avoid rect behaves like bottom", autoNone !== null && bottom !== null && Math.abs(autoNone.y - bottom.y) < 1);
+    const overlaps = (b, a) => b.x < a.x + a.width && b.x + b.w > a.x && b.y < a.y + a.height && b.y + b.h > a.y;
+    const autoLeft = await box(settled("cap-auto-left-product"));
+    const leftProduct = { x: 100, y: 100, width: 800, height: 880 };
+    check("auto picks the far side from a product on the left (right half, clear of it)", autoLeft !== null && centre(autoLeft).cx > 960 && !overlaps(autoLeft, leftProduct));
+    const autoTop = await box(settled("cap-auto-top-product"));
+    const topProduct = { x: 200, y: 80, width: 1500, height: 300 };
+    check("auto picks the bottom when the product sits at the top, clear of it", autoTop !== null && centre(autoTop).cy > 540 && !overlaps(autoTop, topProduct));
+    const autoBottom = await box(settled("cap-auto-bottom-product"));
+    const bottomProduct = { x: 200, y: 700, width: 1500, height: 300 };
+    check("auto picks the top when the product sits at the bottom, clear of it", autoBottom !== null && centre(autoBottom).cy < 540 && !overlaps(autoBottom, bottomProduct));
+
+    const longBox = await box(settled("cap-long"));
+    console.log(`  long caption card width=${longBox?.w.toFixed(0)}`);
+    check("a 40-word caption wraps inside min(1400, 0.9 * width) = 1400", longBox !== null && longBox.w <= 1400.5 && longBox.w > 1000);
+
+    const layout = JSON.parse(await t.text(t.frameOf("cap-layout", 0), "#cap-layout-readout"));
+    console.log(`  layouts: ${JSON.stringify(layout)}`);
+    check("maxWidth is min(1400, 0.9 * width): 1400 at 1920", layout[0].maxWidth === 1400);
+    check("...972 in a 1080 wide (9:16) composition", layout[1].maxWidth === 972);
+    check("...still 1400 in a 4K composition", layout[2].maxWidth === 1400);
+    check("side placements use a narrower column that still fits a 1080 wide frame", layout[3].side === "left" && layout[3].maxWidth <= 0.34 * 1080 + 0.5);
+    check("auto picks right for a product on the left of a landscape frame", layout[4].side === "right");
+    check("auto picks bottom for a product filling the top of a portrait frame", layout[5].side === "bottom");
+  },
+);
+
+// ---- 2b. scaffold_scene templates: caption spots vary, the push on a capture is capped
+
+const templates = require(path.join(distDir, "scenes", "templates.js"));
+const TPL_IDS = ["problem", "install", "dashboard", "export", "share", "outro"];
+const tplCtx = (id, extra = {}) => ({
+  beatId: id,
+  componentName: pascal(id),
+  description: "",
+  vo: "One click turns a messy backlog into a clear plan you can actually ship.",
+  durationFrames: 120,
+  captureWidth: 1440,
+  captureHeight: 900,
+  url: "https://example.com",
+  ...extra,
+});
+
+section(
+  "2b. scaffold_scene templates: the caption does not sit in the same spot in every scene; pushes on captures stay at or below 1.6",
+  TPL_IDS.map((id) => ({
+    id: `tpl-${id}`,
+    frames: 120,
+    needsImage: `tpl-${id}`,
+    source: templates.renderTemplate("browser-capture", tplCtx(`tpl-${id}`), "real-screenshot"),
+  })),
+  async (t) => {
+    const sides = [];
+    for (const id of TPL_IDS) {
+      const info = await t.eval(t.frameOf(`tpl-${id}`, 100), () => {
+        const root = document.querySelector("[data-ovs-caption]");
+        const r = document.querySelector("[data-ovs-caption-card]")?.getBoundingClientRect();
+        return { side: root?.getAttribute("data-ovs-caption-side") ?? null, box: r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null };
+      });
+      sides.push(info.side);
+      check(
+        `the "${id}" scene's caption is on screen and inside the frame`,
+        info.box !== null && info.box.x >= 0 && info.box.y >= 0 && info.box.x + info.box.w <= 1920 && info.box.y + info.box.h <= 1080,
+      );
+    }
+    console.log(`  caption sides across ${TPL_IDS.length} scaffolded scenes: ${sides.join(", ")}`);
+    check("the scaffolded scenes use at least 3 different caption spots", new Set(sides).size >= 3);
+    check("...and the choice is stable: the same beat id gives the same source", templates.renderTemplate("browser-capture", tplCtx("tpl-problem"), "real-screenshot") === templates.renderTemplate("browser-capture", tplCtx("tpl-problem"), "real-screenshot"));
+
+    const pushes = [];
+    for (const [w, h] of [[1440, 900], [1920, 1080], [800, 600], [1280, 720], [400, 300]]) {
+      const src = templates.renderTemplate("browser-capture", tplCtx("probe", { captureWidth: w, captureHeight: h }), "real-screenshot");
+      pushes.push(Math.max(...[...src.matchAll(/scale: ([\d.]+)/g)].map((m) => Number(m[1]))));
+    }
+    console.log(`  browser-capture end scales for five capture sizes: ${pushes.join(", ")}`);
+    check("the browser-capture template never pushes past 1.6 on a capture with text", pushes.every((p) => p <= 1.6));
+    check("...but it still pushes in on the commonest capture size (>= 1.3)", pushes[0] >= 1.3);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");
@@ -229,6 +426,7 @@ if (!fs.existsSync(templateNodeModules)) {
   for (const s of sections) {
     for (const sc of s.scenes) {
       fs.writeFileSync(path.join(customDir, `${pascal(sc.id)}.tsx`), sc.source, "utf8");
+      if (sc.needsImage) fs.copyFileSync(path.join(root, "public", "images", "stripes.png"), path.join(root, "public", "images", `${sc.needsImage}.png`));
       beats.push({ id: sc.id, start: cursorFrame, duration: sc.frames, scene: `./custom-scenes/${pascal(sc.id)}.tsx` });
       starts.set(sc.id, cursorFrame);
       cursorFrame += sc.frames;
@@ -279,6 +477,10 @@ if (!fs.existsSync(templateNodeModules)) {
             await page.screenshot({ path: file });
             const { data, info } = await sharpLib(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
             return { data, w: info.width, h: info.height, file };
+          },
+          eval: async (frame, fn, arg) => {
+            await bridge.seekToFrame(page, comp.id, frame, 20000);
+            return page.evaluate(fn, arg);
           },
           text: async (frame, selector) => {
             await bridge.seekToFrame(page, comp.id, frame, 20000);

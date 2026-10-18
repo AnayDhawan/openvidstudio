@@ -8,6 +8,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import { spawnSync } from "node:child_process";
 import {
   require,
   packageRoot,
@@ -402,6 +403,116 @@ ${body}
   check("render: text placed at x=1500 in the 1080-wide frame is a crop error", crops("offscreen").length === 1 && crops("offscreen")[0].severity === "error" && crops("offscreen")[0].message.includes("Placed beyond"));
   check("render: the 1500px block holds only a short line that fits, so only the static pass reports it", crops("wide").length === 0);
   check("the overflow makes the result not ok", rendered.ok === false);
+}
+
+
+console.log("\n== vertical 4: export_rendition reels, measured with ffprobe on real files ==");
+{
+  const { runExportRendition, planReelsExport } = require(path.join(distDir, "tools", "exportRendition.js"));
+  const ffOk = spawnSync("ffmpeg", ["-version"]).status === 0 && spawnSync("ffprobe", ["-version"]).status === 0;
+  if (!ffOk) {
+    skip("vertical 4: export_rendition reels", "ffmpeg or ffprobe is not available");
+  } else {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-reels-"));
+    fs.mkdirSync(path.join(root, "output"), { recursive: true });
+    fs.mkdirSync(path.join(root, "src", "videos", "lesson"), { recursive: true });
+    fs.writeFileSync(path.join(root, "src", "videos", "lesson", "beats.json"), JSON.stringify({ fps: 30, beats: [{ id: "one", start: 0, duration: 60 }] }));
+
+    const ff = (args) => {
+      const r = spawnSync("ffmpeg", ["-nostdin", "-y", "-loglevel", "error", ...args], { cwd: root, encoding: "utf8" });
+      if (r.status !== 0) throw new Error(`ffmpeg ${args.join(" ")} failed: ${r.stderr}`);
+    };
+    // A real source: moving test pattern plus a tone, 2 seconds. No faststart, so moov lands after mdat.
+    const make = (name, { size = "1080x1920", rate = 30, audio = "aac" } = {}) => {
+      const args = ["-f", "lavfi", "-i", `testsrc2=size=${size}:rate=${rate}:duration=2`];
+      if (audio) args.push("-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100:duration=2");
+      args.push("-c:v", "libx264", "-pix_fmt", "yuv420p");
+      if (audio) args.push("-c:a", audio);
+      args.push(path.join("output", name));
+      ff(args);
+      return path.join("output", name);
+    };
+    const probe = (rel) => {
+      const r = spawnSync("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", path.join(root, rel)], { encoding: "utf8" });
+      const doc = JSON.parse(r.stdout);
+      return { video: doc.streams.find((st) => st.codec_type === "video"), audio: doc.streams.find((st) => st.codec_type === "audio"), duration: Number.parseFloat(doc.format.duration) };
+    };
+    // Top-level mp4 boxes in file order: faststart means moov comes before mdat.
+    const boxOrder = (rel) => {
+      const fd = fs.openSync(path.join(root, rel), "r");
+      const size = fs.fstatSync(fd).size;
+      const names = [];
+      let pos = 0;
+      const head = Buffer.alloc(16);
+      while (pos + 8 <= size) {
+        fs.readSync(fd, head, 0, 16, pos);
+        let len = head.readUInt32BE(0);
+        names.push(head.toString("latin1", 4, 8));
+        if (len === 1) len = Number(head.readBigUInt64BE(8));
+        if (len === 0) break;
+        pos += len;
+      }
+      fs.closeSync(fd);
+      return names;
+    };
+    const streamMd5 = (rel, map) => {
+      const r = spawnSync("ffmpeg", ["-nostdin", "-v", "error", "-i", path.join(root, rel), "-map", map, "-c", "copy", "-f", "md5", "-"], { encoding: "utf8" });
+      return r.stdout.trim();
+    };
+    const reels = (inPath, outName, extra = {}) => runExportRendition({ projectRoot: root, videoName: "lesson", format: "reels", inPath, outPath: path.join("output", outName), ...extra });
+    const oneFrame = 1 / 30 + 1e-3;
+
+    // 1. A native vertical H.264 + AAC 30fps source: nothing to re-encode, only the container to fix.
+    const native = make("native.mp4");
+    const nativeBoxes = boxOrder(native);
+    check(`control: the fixture itself is not faststart (boxes ${nativeBoxes.join(",")})`, nativeBoxes.indexOf("moov") > nativeBoxes.indexOf("mdat"));
+    const a = await reels(native, "native-reels.mp4");
+    const pa = probe(a.files[0]);
+    console.log(`  native source: ${pa.video.width}x${pa.video.height} ${pa.video.codec_name}/${pa.audio.codec_name} ${pa.video.r_frame_rate}, ${pa.duration.toFixed(3)}s, boxes ${boxOrder(a.files[0]).join(",")}, copy video=${!a.reels.videoReencoded} audio=${!a.reels.audioReencoded}`);
+    check("reels from a native 1080x1920 source is 1080x1920 H.264 + AAC at 30fps", pa.video.width === 1080 && pa.video.height === 1920 && pa.video.codec_name === "h264" && pa.audio.codec_name === "aac" && pa.video.r_frame_rate === "30/1");
+    check("...with the duration within one frame of the source", Math.abs(pa.duration - probe(native).duration) < oneFrame);
+    check("...faststart: moov comes before mdat", boxOrder(a.files[0]).indexOf("moov") < boxOrder(a.files[0]).indexOf("mdat"));
+    check("...and it re-encoded nothing: the video and audio streams are byte-identical to the source", a.reels.videoReencoded === false && a.reels.audioReencoded === false && streamMd5(a.files[0], "0:v:0") === streamMd5(native, "0:v:0") && streamMd5(a.files[0], "0:a:0") === streamMd5(native, "0:a:0"));
+    check("...and the result reports what was measured on disk", a.reels.width === 1080 && a.reels.height === 1920 && a.reels.fps === 30 && a.reels.bytes === fs.statSync(path.join(root, a.files[0])).size);
+
+    // 2. 60fps video with mp3 audio: both streams have to be re-encoded, and only they.
+    const rough = make("rough.mp4", { rate: 60, audio: "libmp3lame" });
+    const b = await reels(rough, "rough-reels.mp4");
+    const pb = probe(b.files[0]);
+    console.log(`  60fps + mp3 source: ${pb.video.width}x${pb.video.height} ${pb.video.codec_name}/${pb.audio.codec_name} ${pb.video.r_frame_rate}, ${pb.duration.toFixed(3)}s, re-encoded video=${b.reels.videoReencoded} audio=${b.reels.audioReencoded}`);
+    check("a 60fps source comes out at 30fps H.264 with the mp3 audio turned into AAC", pb.video.r_frame_rate === "30/1" && pb.video.codec_name === "h264" && pb.audio.codec_name === "aac" && b.reels.videoReencoded === true && b.reels.audioReencoded === true);
+    check("...duration within one frame, faststart", Math.abs(pb.duration - probe(rough).duration) < oneFrame && boxOrder(b.files[0]).indexOf("moov") < boxOrder(b.files[0]).indexOf("mdat"));
+
+    // 3. A smaller 9:16 source is scaled up to the Reels frame; its AAC is still copied.
+    const small = make("small.mp4", { size: "720x1280" });
+    const c = await reels(small, "small-reels.mp4");
+    const pc = probe(c.files[0]);
+    check("a 720x1280 source is scaled to 1080x1920 (video re-encoded, AAC copied)", pc.video.width === 1080 && pc.video.height === 1920 && c.reels.videoReencoded === true && c.reels.audioReencoded === false);
+
+    // 4. A silent vertical source stays silent; the video is still copied.
+    const silent = make("silent.mp4", { audio: null });
+    const d = await reels(silent, "silent-reels.mp4");
+    const pd = probe(d.files[0]);
+    check("a silent source gets no audio track made up, and says so", pd.audio === undefined && d.reels.audioCodec === null && d.notes.join(" ").includes("no audio") && d.reels.videoReencoded === false);
+
+    // 5. Not vertical: refuse rather than crop. Nothing is written.
+    const wide = make("wide.mp4", { size: "1920x1080" });
+    let refusal = "";
+    try { await reels(wide, "wide-reels.mp4"); } catch (err) { refusal = err instanceof Error ? err.message : String(err); }
+    console.log(`  16:9 refusal: ${refusal.slice(0, 160)}`);
+    check("a 1920x1080 source is refused, naming its size and pointing at reformat_vertical and a native render", refusal.includes("1920x1080") && refusal.includes("reformat_vertical") && refusal.includes("videoConfig"));
+    check("...and no file is written for it", !fs.existsSync(path.join(root, "output", "wide-reels.mp4")));
+    const feed = make("feed.mp4", { size: "1080x1350" });
+    let feedRefusal = "";
+    try { await reels(feed, "feed-reels.mp4"); } catch (err) { feedRefusal = err instanceof Error ? err.message : String(err); }
+    check("control: a 4:5 feed-shaped 1080x1350 source is not 9:16 either and is refused", feedRefusal.includes("1080x1350") && !fs.existsSync(path.join(root, "output", "feed-reels.mp4")));
+
+    // The plan is pure: the same decisions without touching ffmpeg.
+    const base = { width: 1080, height: 1920, fps: 30, videoCodec: "h264", pixFmt: "yuv420p", audioCodec: "aac" };
+    check("planReelsExport: the exact target needs no re-encode", (() => { const p = planReelsExport(base); return p.ok && !p.videoReencode && !p.audioReencode; })());
+    check("planReelsExport: HEVC, a 4:2:2 pixel format or 24fps each force a video re-encode", [{ videoCodec: "hevc" }, { pixFmt: "yuv422p" }, { fps: 24 }].every((o) => planReelsExport({ ...base, ...o }).videoReencode === true));
+    check("planReelsExport: 2160x3840 is 9:16 and gets scaled", (() => { const p = planReelsExport({ ...base, width: 2160, height: 3840 }); return p.ok && p.videoReencode && p.scale; })());
+  }
 }
 
 finish();

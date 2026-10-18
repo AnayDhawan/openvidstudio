@@ -22,7 +22,7 @@ import { runTool } from "./mcp";
  * release or two, which is the whole problem with hand-made docs images.
  */
 
-export type Rendition = "gif" | "screenshots" | "store-frames" | "poster" | "share";
+export type Rendition = "gif" | "screenshots" | "store-frames" | "poster" | "share" | "reels";
 
 export interface RenditionBeat {
   id: string;
@@ -82,7 +82,24 @@ export interface ExportRenditionResult {
   posterPick?: { beatId: string; seconds: number; scores: { beatId: string; score: number }[] };
   /** share only: what was actually produced, measured from the file on disk. */
   share?: ShareResult;
+  /** reels only: what was actually produced, measured from the file on disk. */
+  reels?: ReelsResult;
   notes: string[];
+}
+
+export interface ReelsResult {
+  path: string;
+  bytes: number;
+  width: number;
+  height: number;
+  fps: number;
+  durationSec: number;
+  videoCodec: string;
+  /** Null when the source had no audio: none is made up. */
+  audioCodec: string | null;
+  /** False means the video stream was copied byte for byte and only the container was rewritten. */
+  videoReencoded: boolean;
+  audioReencoded: boolean;
 }
 
 export interface ShareResult {
@@ -463,6 +480,142 @@ async function exportShare(opts: {
   }
 }
 
+// ---------------------------------------------------------------------------------------
+// Reels: a native 9:16 render, packaged for upload
+// ---------------------------------------------------------------------------------------
+
+/** The Reels frame: 1080x1920, 30fps, H.264 in yuv420p, AAC audio, moov atom first. */
+const REELS = { width: 1080, height: 1920, fps: 30 } as const;
+/** How far a source's aspect ratio may sit from 9:16 before it is not a vertical render at all. */
+const REELS_ASPECT_TOLERANCE = 0.01;
+
+export interface ReelsSource {
+  width: number;
+  height: number;
+  fps: number;
+  videoCodec: string;
+  pixFmt: string;
+  audioCodec: string | null;
+}
+
+export type ReelsPlan =
+  | { ok: false; reason: string }
+  | { ok: true; videoReencode: boolean; audioReencode: boolean; scale: boolean; retime: boolean };
+
+/**
+ * Decides what a source needs to become a Reels file, and nothing more. A 9:16 source that is
+ * already 1080x1920 H.264 yuv420p at 30fps keeps its video stream byte for byte, and AAC audio is
+ * copied too; only the container is rewritten so the moov atom leads. A source that is not 9:16 is
+ * refused: turning a 16:9 render into a vertical one means cropping or letterboxing it, which
+ * cuts diagrams off or shrinks them to a strip, and that is a choice for reformat_vertical or a
+ * native render, not something an export step should make silently. Pure, so the rules are
+ * testable without encoding anything.
+ */
+export function planReelsExport(src: ReelsSource): ReelsPlan {
+  const aspect = src.width / src.height;
+  const target = REELS.width / REELS.height;
+  if (Math.abs(aspect - target) / target > REELS_ASPECT_TOLERANCE) {
+    return {
+      ok: false,
+      reason:
+        `The source is ${src.width}x${src.height}, not 9:16. A reels export never crops or letterboxes a frame ` +
+        `silently. For a finished 16:9 render, use reformat_vertical (it crops per beat from the manifest, and a ` +
+        `crop can cut a diagram off). For a lesson with diagrams, render natively vertical instead: init_project ` +
+        `with videoConfig { width: 1080, height: 1920 }, then render and export that. PIPELINE.md, "Native ` +
+        `vertical (9:16)", says when to use which.`,
+    };
+  }
+  const scale = src.width !== REELS.width || src.height !== REELS.height;
+  const retime = Math.abs(src.fps - REELS.fps) > 0.01;
+  const videoReencode = scale || retime || src.videoCodec !== "h264" || src.pixFmt !== "yuv420p";
+  const audioReencode = src.audioCodec !== null && src.audioCodec !== "aac";
+  return { ok: true, videoReencode, audioReencode, scale, retime };
+}
+
+export function buildReelsArgs(opts: { inPath: string; outPath: string; plan: Extract<ReelsPlan, { ok: true }>; hasAudio: boolean }): string[] {
+  const { plan } = opts;
+  const args = ["-nostdin", "-y", "-i", opts.inPath, "-map", "0:v:0"];
+  if (opts.hasAudio) args.push("-map", "0:a:0");
+  if (plan.videoReencode) {
+    const filters = [
+      ...(plan.scale ? [`scale=${REELS.width}:${REELS.height}:flags=lanczos`, "setsar=1"] : []),
+      ...(plan.retime ? [`fps=${REELS.fps}`] : []),
+    ];
+    // crf 18 is close to visually lossless; Instagram re-encodes on upload, so the file it receives
+    // should be the clean one, not one already compressed hard.
+    args.push(...(filters.length ? ["-vf", filters.join(",")] : []), "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p");
+  } else {
+    args.push("-c:v", "copy");
+  }
+  if (opts.hasAudio) {
+    args.push(...(plan.audioReencode ? ["-c:a", "aac", "-b:a", "128k", "-ar", "48000"] : ["-c:a", "copy"]));
+  }
+  args.push("-movflags", "+faststart", opts.outPath);
+  return args;
+}
+
+async function probeReelsSource(inPath: string, cwd: string): Promise<ReelsSource & { durationSec: number }> {
+  const r = await spawnCapture("ffprobe", ["-v", "error", "-show_streams", "-show_format", "-of", "json", inPath], cwd);
+  if (r.code !== 0) throw new Error(`ffprobe failed on ${inPath}:\n${r.stderr.slice(-600)}`);
+  const doc = JSON.parse(r.stdout) as {
+    streams?: { codec_type?: string; codec_name?: string; pix_fmt?: string; width?: number; height?: number; r_frame_rate?: string; disposition?: { attached_pic?: number } }[];
+    format?: { duration?: string };
+  };
+  // A baked poster is a second, one-frame video stream; the picture is the first real one.
+  const video = doc.streams?.find((st) => st.codec_type === "video" && !st.disposition?.attached_pic);
+  if (!video?.width || !video.height) throw new Error(`${inPath} has no video stream.`);
+  const [num, den] = (video.r_frame_rate ?? "30/1").split("/").map(Number);
+  const durationSec = Number.parseFloat(doc.format?.duration ?? "");
+  if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error(`${inPath} has no usable duration.`);
+  return {
+    width: video.width,
+    height: video.height,
+    fps: den ? num / den : 30,
+    videoCodec: video.codec_name ?? "",
+    pixFmt: video.pix_fmt ?? "",
+    audioCodec: doc.streams?.find((st) => st.codec_type === "audio")?.codec_name ?? null,
+    durationSec,
+  };
+}
+
+async function exportReels(opts: { projectRoot: string; inPathRel: string; outRel: string; notes: string[] }): Promise<ReelsResult> {
+  const { projectRoot, inPathRel, outRel, notes } = opts;
+  const src = await probeReelsSource(inPathRel, projectRoot);
+  const plan = planReelsExport(src);
+  if (!plan.ok) throw new Error(plan.reason);
+  fs.mkdirSync(path.dirname(path.join(projectRoot, outRel)), { recursive: true });
+  const r = await spawnCapture("ffmpeg", buildReelsArgs({ inPath: inPathRel, outPath: outRel, plan, hasAudio: src.audioCodec !== null }), projectRoot);
+  if (r.code !== 0) throw new Error(`reels export failed:\n${r.stderr.slice(-1200)}`);
+
+  // Measured from the file on disk, not assumed from the plan.
+  const out = await probeReelsSource(outRel, projectRoot);
+  const bytes = fs.statSync(path.join(projectRoot, outRel)).size;
+  const video = plan.videoReencode ? "re-encoded (the source was not already 1080x1920 H.264 yuv420p at 30fps)" : "copied unchanged";
+  const audio =
+    src.audioCodec === null
+      ? "no audio in the source and none added"
+      : plan.audioReencode
+        ? `audio ${src.audioCodec} re-encoded to AAC`
+        : "audio AAC copied unchanged";
+  notes.push(`${out.width}x${out.height} at ${out.fps}fps, ${(bytes / 1_000_000).toFixed(2)}MB. Video ${video}, ${audio}, moov atom first.`);
+  if (src.audioCodec === null) {
+    notes.push("The source has no audio, so the file has none. Reels accept a silent video; add a music bed first if the reel should have sound.");
+  }
+  notes.push('Instagram\'s own interface covers part of the top, bottom and right edge of a reel. PIPELINE.md, "Native vertical (9:16)", lists approximate safe zones.');
+  return {
+    path: outRel,
+    bytes,
+    width: out.width,
+    height: out.height,
+    fps: out.fps,
+    durationSec: out.durationSec,
+    videoCodec: out.videoCodec,
+    audioCodec: out.audioCodec,
+    videoReencoded: plan.videoReencode,
+    audioReencoded: plan.audioReencode,
+  };
+}
+
 function readBeats(projectRoot: string, videoName: string): { fps: number; beats: RenditionBeat[] } {
   const beatsPath = path.join(projectRoot, "src", "videos", videoName, "beats.json");
   if (!fs.existsSync(beatsPath)) {
@@ -622,6 +775,20 @@ export async function runExportRendition(input: ExportRenditionInput): Promise<E
     return { format: "share", files, notes, share };
   }
 
+  if (input.format === "reels") {
+    const outRel = input.outPath ?? path.join(path.dirname(inPathRel), `${videoName}-reels.mp4`);
+    sanitizeRelativeOutPath(projectRoot, outRel, "outPath");
+    if (path.resolve(projectRoot, outRel) === path.resolve(projectRoot, inPathRel)) {
+      throw new Error("outPath is the same file as the input render. Pick a different outPath.");
+    }
+    const reels = await exportReels({ projectRoot, inPathRel, outRel, notes });
+    files.push(outRel);
+    return { format: "reels", files, notes, reels };
+  }
+
+  if (input.format !== "store-frames") {
+    throw new Error(`Unknown format "${String(input.format)}". Known: gif, screenshots, store-frames, poster, share, reels.`);
+  }
   const deviceKey = input.device ?? "iphone-6.9";
   const device = STORE_DEVICES[deviceKey];
   if (!device) throw new Error(`Unknown device "${deviceKey}". Known: ${Object.keys(STORE_DEVICES).join(", ")}.`);
@@ -682,15 +849,20 @@ export function registerExportRendition(server: McpServer): void {
         "the last beat's midpoint instead. format: \"share\" encodes a copy under a hard size cap " +
         "(maxMB, default 10): the bitrate is computed from the cap and the duration, the largest resolution " +
         "that bitrate can carry is chosen, it is encoded two-pass H.264 with +faststart, and the file on disk " +
-        "is measured and re-encoded smaller if it came out over the cap. All five formats read the finished " +
-        "render plus beats.json rather than re-capturing, so run render_video first.",
+        "is measured and re-encoded smaller if it came out over the cap. format: \"reels\" packages a render " +
+        "that is already native 9:16 (init_project videoConfig 1080x1920) as an Instagram Reels file: 1080x1920 " +
+        "H.264 + AAC at 30fps with the moov atom first, re-encoding only what the source is not already (a " +
+        "1080x1920 H.264 AAC 30fps source keeps its streams byte for byte; a 60fps one, or an mp3 track, is " +
+        "converted, and a smaller 9:16 one is scaled). It refuses a 16:9 render instead of cropping it, and " +
+        "points at reformat_vertical or a native render, since a crop can cut a diagram off. All six formats " +
+        "read the finished render plus beats.json rather than re-capturing, so run render_video first.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
-        format: z.enum(["gif", "screenshots", "store-frames", "poster", "share"]),
+        format: z.enum(["gif", "screenshots", "store-frames", "poster", "share", "reels"]),
         inPath: z.string().optional().describe("The finished render. Defaults to output/<videoName>.mp4."),
         outDir: z.string().optional(),
-        outPath: z.string().optional().describe("gif and poster only."),
+        outPath: z.string().optional().describe("gif, poster, share and reels. Reels defaults to output/<videoName>-reels.mp4."),
         fps: z.number().int().positive().optional().describe("gif only. Defaults to 12."),
         width: z.number().int().positive().optional().describe("gif only. Defaults to 720."),
         device: z

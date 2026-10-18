@@ -450,7 +450,11 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     voByLanguage[language] = map;
 
     const missing = beats.map((b) => b.id).filter((id) => !(id in map));
-    if (missing.length > 0) {
+    // A video declared narration: "none" is silent on purpose. Warning that every beat has no voice
+    // contradicts the mode the beats file itself declares, and buries a real warning under eight
+    // that are not. requireNarration still means what it says, so it is not skipped.
+    const silentOnPurpose = beatsData.narration === "none" && input.requireNarration !== true;
+    if (missing.length > 0 && !silentOnPurpose) {
       const detail =
         `${missing.length} of ${beats.length} beats have no ${language} narration file and will render ` +
         `silent: ${missing.join(", ")}. Expected at public/${publicRel}/<beatId>.mp3. ` +

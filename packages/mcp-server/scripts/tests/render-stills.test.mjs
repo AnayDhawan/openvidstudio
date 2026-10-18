@@ -223,12 +223,12 @@ console.log("\n== C6: render_stills samples frames, tiles a contact grid, and re
   }
   const grid = await buildContactGrid(tiles, path.join(dir, "grid.png"));
   check("a perBeat-shaped set is one row per beat: 3 columns, 2 rows", grid.columns === 3 && grid.rows === 2 && grid.tiles === 6);
-  check("the sheet size follows from tile width 480, aspect 16:9 and the gaps", grid.width === 3 * 480 + 4 * 6 && grid.height === 2 * 270 + 3 * 6);
+  check("the sheet size follows from tile width 480, aspect 16:9, the 30px label band and the gaps", grid.width === 3 * 480 + 4 * 6 && grid.height === 2 * (270 + 30) + 3 * 6);
   const meta = await sharpLib(grid.path).metadata();
   check("the written PNG has exactly those dimensions", meta.width === grid.width && meta.height === grid.height);
   const { data, info } = await sharpLib(grid.path).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const px = (x, y) => data[(y * info.width + x) * 3];
-  check("each tile carries a dark label bar along its top edge and the picture below it", px(6 + 470, 6 + 3) < 120 && px(6 + 240, 6 + 150) === 255);
+  check("each tile carries a dark label band above its picture, and the picture is not covered by it", px(6 + 470, 6 + 3) < 120 && px(6 + 240, 6 + 30 + 2) === 255);
   const odd = await buildContactGrid(tiles.slice(0, 5).map((t, i) => ({ ...t, beatId: `b${i}` })), path.join(dir, "grid2.png"));
   check("five single stills (one per beat) fill rows of up to four instead", odd.columns === 4 && odd.rows === 2);
 

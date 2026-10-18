@@ -264,7 +264,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
   if (!fs.existsSync(beatsFile)) {
     throw new Error(`No beats.json at ${beatsFile}. Run write_beats_file first.`);
   }
-  const doc = JSON.parse(fs.readFileSync(beatsFile, "utf8")) as { beats: BeatLike[] };
+  const doc = JSON.parse(fs.readFileSync(beatsFile, "utf8")) as { beats: BeatLike[]; narration?: string };
   const findings: SceneFinding[] = [];
   let checked = 0;
 
@@ -386,8 +386,9 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
     }
   }
 
-  // Narration, which stitch_composition skips silently when absent.
-  for (const beat of doc.beats) {
+  // Narration, which stitch_composition skips silently when absent. Not for a video that declares
+  // narration: "none", which has no voice to miss.
+  for (const beat of doc.narration === "none" ? [] : doc.beats) {
     const vo = path.join(projectRoot, "public", "audio", "vo", `${beat.id}.mp3`);
     if (!fs.existsSync(vo)) {
       findings.push({

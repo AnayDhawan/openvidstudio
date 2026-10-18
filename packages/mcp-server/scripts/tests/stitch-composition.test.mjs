@@ -249,6 +249,17 @@ console.log("\n== Part 34: narration:\"none\", onScreenText, musicBed volume, ov
   check("...at full volume by default with no narration", stitched.musicBedVolume === 1);
   const demoContent1 = fs.readFileSync(stitched.demoPath, "utf8");
   check("...and the generated composition actually carries volume={1}", demoContent1.includes("volume={1}"));
+  check(
+    "narration:none is silent on purpose: no per-beat 'no narration' warning",
+    !(stitched.warnings ?? []).some((w) => /narration/i.test(w)),
+  );
+  let requiredThrew = false;
+  try {
+    runStitchComposition({ projectRoot, videoName, requireNarration: true });
+  } catch (err) {
+    requiredThrew = /Narration is required/.test(String(err.message ?? err));
+  }
+  check("...but requireNarration: true still fails on narration:none with no voice files", requiredThrew);
 
   const stitchedCustom = runStitchComposition({ projectRoot, videoName, musicBed: { file: "music-bed.mp3", volume: 0.42 } });
   check("musicBed.volume overrides the default", stitchedCustom.musicBedVolume === 0.42);

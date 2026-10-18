@@ -214,7 +214,7 @@ function escapeXml(text: string): string {
  * Tiles rendered stills into one labelled PNG. A beat's stills share a row when perBeat was
  * used, so reading across is time within a beat and reading down is the cut from one beat to
  * the next; otherwise tiles fill rows of up to four. Each tile carries its beat id and
- * position in a bar along its top edge, drawn as SVG so no font file has to be installed.
+ * position in a band above its picture, drawn as SVG so no font file has to be installed.
  */
 export async function buildContactGrid(
   stills: Pick<RenderStillOutput, "beatId" | "path" | "position" | "offset" | "frame">[],
@@ -236,20 +236,23 @@ export async function buildContactGrid(
   const columns = opts.columns ?? (rowPerBeat ? [...counts][0]! : Math.min(4, stills.length));
   const rows = Math.ceil(stills.length / columns);
 
-  const width = columns * tileW + (columns + 1) * gap;
-  const height = rows * tileH + (rows + 1) * gap;
+  // The label sits in its own band above each picture. Laid over the picture it hid the top tenth of
+  // every frame, which is where a headline lives.
   const barH = 30;
+  const rowH = tileH + barH;
+  const width = columns * tileW + (columns + 1) * gap;
+  const height = rows * rowH + (rows + 1) * gap;
 
   const layers: sharp.OverlayOptions[] = [];
   for (const [i, s] of stills.entries()) {
     const col = i % columns;
     const row = Math.floor(i / columns);
     const left = gap + col * (tileW + gap);
-    const top = gap + row * (tileH + gap);
+    const top = gap + row * (rowH + gap);
     const tile = await sharp(s.path).resize(tileW, tileH, { fit: "cover" }).png().toBuffer();
-    layers.push({ input: tile, left, top });
+    layers.push({ input: tile, left, top: top + barH });
     const label = escapeXml(`${s.beatId}  ${s.position}  f${s.frame}`);
-    const bar = `<svg xmlns="http://www.w3.org/2000/svg" width="${tileW}" height="${barH}"><rect width="${tileW}" height="${barH}" fill="#000" fill-opacity="0.72"/><text x="10" y="21" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#fff">${label}</text></svg>`;
+    const bar = `<svg xmlns="http://www.w3.org/2000/svg" width="${tileW}" height="${barH}"><rect width="${tileW}" height="${barH}" fill="#000" fill-opacity="0.85"/><text x="10" y="21" font-family="Arial, Helvetica, sans-serif" font-size="17" fill="#fff">${label}</text></svg>`;
     layers.push({ input: Buffer.from(bar), left, top });
   }
 

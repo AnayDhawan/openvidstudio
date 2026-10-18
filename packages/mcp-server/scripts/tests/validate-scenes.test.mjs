@@ -297,6 +297,12 @@ console.log("\n== Part 53: validate_scenes render mode, pure judgement (C7) ==")
     check("a scene that imports facts.json is not", sourcing("sourced").length === 0);
     check("an ovs-numbers-ok comment opts a file out", sourcing("opted-out").length === 0);
     check("copy with no numbers is untouched", sourcing("clean").length === 0);
+
+    // narration: "none" has no voice to miss; a voiced video with no mp3 still warns.
+    const noVo = (o) => o.findings.filter((f) => /No narration at/.test(f.message));
+    check("a voiced video with no narration files warns per beat", noVo(out).length === 4);
+    fs.writeFileSync(path.join(dir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", beats: ["typed", "sourced", "opted-out", "clean"].map((id, i) => ({ id, start: i * 90, duration: 90 })) }));
+    check("narration:none raises no missing-narration warning", noVo(runValidateScenes({ projectRoot: root, videoName: "c8" })).length === 0);
   }
 
   // ---- background sampling and the palette check, on real pixels ----

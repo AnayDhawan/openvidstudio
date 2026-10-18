@@ -30,7 +30,7 @@ export interface TypeScale {
 }
 
 export interface LayoutGrid {
-  /** Side margins, px, at the 1920x1080 stage. */
+  /** Side margins, px. DEFAULT_GRID is the 1920x1080 stage's; defineDesignSystem scales it to `stage`. */
   marginX: number;
   marginTop: number;
   /** Bottom margin, reserved for a ChapterHud or caption bar even when neither is present. */
@@ -85,11 +85,37 @@ export const DEFAULT_TYPE_SCALE: TypeScale = {
   mono: [15, 22],
 };
 
+/** The stage a design system's margins are laid out for, px. */
+export interface StageSize {
+  width: number;
+  height: number;
+}
+
+export const DEFAULT_STAGE: StageSize = { width: 1920, height: 1080 };
+
 export const DEFAULT_GRID: LayoutGrid = {
   marginX: 150,
   marginTop: 130,
   marginBottom: 110,
 };
+
+/**
+ * DEFAULT_GRID scaled to another stage: side margins follow the width, top and bottom follow the
+ * height, so the proportions of a 1920x1080 layout carry over. 1920x1080 gives DEFAULT_GRID
+ * back exactly; a 1080x1920 reel gets 84 / 231 / 196. A reel that has to clear Instagram's UI
+ * wants more at the bottom than that (see PIPELINE.md's native vertical section), which is what
+ * the `grid` override is for.
+ */
+function gridForStage(stage: StageSize): LayoutGrid {
+  if (!(stage.width > 0) || !(stage.height > 0) || !Number.isFinite(stage.width) || !Number.isFinite(stage.height)) {
+    throw new Error(`defineDesignSystem: stage must be a positive width and height in px, got ${stage.width}x${stage.height}.`);
+  }
+  return {
+    marginX: Math.round((DEFAULT_GRID.marginX * stage.width) / DEFAULT_STAGE.width),
+    marginTop: Math.round((DEFAULT_GRID.marginTop * stage.height) / DEFAULT_STAGE.height),
+    marginBottom: Math.round((DEFAULT_GRID.marginBottom * stage.height) / DEFAULT_STAGE.height),
+  };
+}
 
 export const DEFAULT_MOTION: MotionPersonality = {
   easing: "drift",
@@ -114,13 +140,16 @@ export const DEFAULT_TRANSITIONS = ["cut", "whip", "fade", "push", "wipe", "ligh
  * imported, which is deliberate: unlike the global brand tokens (meant to apply uniformly
  * forever), a per-video design system is a one-time creative decision, not something a
  * later applyBrand call should silently reach into.
+ *
+ * `stage` is the frame the video renders at (1080x1920 for a native vertical reel); the layout
+ * grid's margins are scaled to it. Leave it out for 1920x1080. An explicit `grid` wins.
  */
-export function defineDesignSystem(overrides: Partial<DesignSystem> = {}): DesignSystem {
+export function defineDesignSystem(overrides: Partial<DesignSystem> & { stage?: StageSize } = {}): DesignSystem {
   return {
     color: { ...defaultColor, ...overrides.color },
     font: { ...defaultFont, ...overrides.font },
     typeScale: { ...DEFAULT_TYPE_SCALE, ...overrides.typeScale },
-    grid: { ...DEFAULT_GRID, ...overrides.grid },
+    grid: { ...gridForStage(overrides.stage ?? DEFAULT_STAGE), ...overrides.grid },
     motif: overrides.motif ?? "rounded-soft",
     motion: { ...DEFAULT_MOTION, ...overrides.motion },
     transitions: overrides.transitions ?? [...DEFAULT_TRANSITIONS],

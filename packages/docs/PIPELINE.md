@@ -311,8 +311,14 @@ read the render plus `beats.json`, so none of them can drift from the video:
   blocking is chosen, it is encoded two-pass H.264, and the file on disk is
   measured and re-encoded smaller if it came out over. When the cap cannot be met
   it says so rather than reporting success.
+- `export_rendition` with `format: "reels"` packages a render that is already
+  1080x1920 as an Instagram Reels file: H.264 + AAC at 30fps, moov atom first.
+  It re-encodes only what the source is not already and refuses a 16:9 render
+  rather than cropping it. See "Native vertical (9:16)" below.
 - `reformat_vertical` writes a 9:16 cut with the crop chosen per beat from the
-  manifest rather than by taking the middle of the frame.
+  manifest rather than by taking the middle of the frame. It crops a finished
+  16:9 render, so for content that has to be seen whole render natively instead
+  ("Native vertical (9:16)" below).
 
 ### Keeping it true after it ships
 
@@ -327,6 +333,83 @@ read the render plus `beats.json`, so none of them can drift from the video:
   before/after manifest covering only the routes that actually changed on
   screen. It does not write the narration and does not install the manifest:
   both go through the approval gate in `PLANNING.md` §5.
+
+## Native vertical (9:16)
+
+For Reels, Shorts and TikTok there are two ways to get a 1080x1920 file, and they are not
+interchangeable.
+
+| | Native vertical | `reformat_vertical` |
+|---|---|---|
+| What it does | Renders the composition at 1080x1920 and lays every scene out for that frame | Crops a finished 1920x1080 render, one crop per beat |
+| Content wider than a phone | Designed to fit | Cut off: each crop is a 608x1080 slice, under a third of the frame width |
+| Use it when | The video exists for a phone: diagrams, equations, a lesson where the picture has to be seen whole | A 16:9 render already exists and what matters sits at the left, centre or right (a terminal's left margin, a centred panel) |
+
+`reformat_vertical` never re-lays anything out, so a diagram, a graph or a wide equation in
+the 16:9 version is cropped, not reflowed. If the picture is the content, render natively.
+
+### Setting up a native vertical project
+
+1. `init_project` with `videoConfig: { fps: 30, width: 1080, height: 1920 }`. `stitch_composition`
+   writes that size into the composition, and `validate_scenes` reads it from
+   `openvidstudio.config.json`, so framing is judged against 1080 wide, not 1920.
+2. Camera coordinates are stage pixels, and `CinematicScene`'s stage is the composition size, so
+   the frame centre is `x: 540, y: 960` (not 960,540). `scaffold_scene` writes 960,540 into its
+   starter and its templates, which are laid out for 1920x1080: in a vertical project change
+   those keyframes, or write the scene by hand with a `scene` override on the beat.
+3. In the video's `design.ts`, pass the stage so the layout grid scales to it: `defineDesignSystem({
+   stage: { width: 1080, height: 1920 } })` gives margins of 84 / 231 / 196 instead of
+   150 / 130 / 110. Set `grid` yourself for the safe zones below.
+4. Run `validate_scenes` with `render: true` and look at stills (`render_stills`, `contact_sheet`)
+   before a full render. The crop, safe-area and text-size checks measure the real 1080x1920 frame.
+5. Package the finished render with `export_rendition` and `format: "reels"` (1080x1920 H.264 +
+   AAC, 30fps, moov atom first). It re-encodes only what the file is not already, and it refuses
+   a 16:9 render instead of cropping it.
+
+### Reels safe zones
+
+Instagram draws its own interface over a reel: the account and caption block along the bottom, the
+action buttons down the right edge, the header along the top. Keep key content (text, the part of a
+diagram being explained, a face) clear of those. Approximate figures for a 1080x1920 frame:
+
+| Edge | Keep clear | In pixels |
+|---|---|---|
+| Top | about 14% | 270 |
+| Bottom | about 22% | 420 |
+| Right | about 10% | 108 |
+
+These are rounded estimates, not Instagram's published numbers, and the interface changes. Check
+them against Instagram's current guidance before relying on them, and against a real upload of a
+test reel. Backgrounds and atmosphere can run to the edge; it is key content that stays inside.
+A design system that follows them:
+
+```ts
+export const design = defineDesignSystem({
+  stage: { width: 1080, height: 1920 },
+  grid: { marginX: 108, marginTop: 270, marginBottom: 420 },
+});
+```
+
+`validate_scenes`'s safe-area check is a floor (4% in from the sides, 5% from the top and bottom,
+as fractions of the real frame), not this zone. The Reels zone is a design decision, so it is
+checked by looking at a still.
+
+### What follows the frame size
+
+These read the composition size, so the same scene source works at 1920x1080 and at 1080x1920.
+Each is checked at both sizes in `vertical.test.mjs`.
+
+- `CinematicScene`: `stageWidth` and `stageHeight` default to the composition size.
+- `DotGrid`: `w` and `h` default to the composition size, so the grid covers the whole frame.
+- `Letterbox`: bars are 64/1080 of the frame height, about 114px at 1920 tall.
+- `RepoCta`: laid out from the frame centre, so the card is centred in either shape.
+- `defineDesignSystem`: the layout grid scales to the `stage` it is given.
+- `validate_scenes`: the static framing check uses the project's `videoConfig`; render mode already
+  measured the real composition.
+- `export_rendition` with `format: "reels"`.
+
+Anything not on this list has not been checked at 1080x1920. Measure it with `validate_scenes`
+(`render: true`) and a still before trusting it in a vertical video.
 
 ## Run records and facts
 

@@ -422,7 +422,8 @@ later `applyBrand` call never reaches into an already-built `DesignSystem`.
 |---|---|---|
 | `color`, `font` | tokens | Seeded from the current brand tokens |
 | `typeScale` | `{ display, headline, body, mono: [min, max] }` | px |
-| `grid` | `{ marginX, marginTop, marginBottom }` | px, at the 1920x1080 stage |
+| `grid` | `{ marginX, marginTop, marginBottom }` | px. Default 150 / 130 / 110 at 1920x1080; scaled to `stage` when one is passed (84 / 231 / 196 at 1080x1920). An explicit `grid` wins |
+| `stage` (input only) | `{ width, height }` | The frame the video renders at, default 1920x1080. Pass `{ width: 1080, height: 1920 }` in a native vertical project. Not stored on the result |
 | `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial"` | Default `"rounded-soft"` |
 | `motion` | `{ easing, staggerMs, cameraEnergy, cutRhythmSeconds }` | `easing` names an `E.*` preset by string, not a function reference, so the system stays JSON-serializable |
 | `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade"]` |

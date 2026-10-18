@@ -163,6 +163,29 @@ export const Cta: React.FC = () => (
 );
 `;
 
+// Prints the layout grid defineDesignSystem builds for each stage, from inside the real bundle.
+const DESIGN_SCENE = `import React from "react";
+import { AbsoluteFill } from "remotion";
+import { defineDesignSystem, DEFAULT_GRID } from "@openvidstudio/core";
+
+export const Design: React.FC = () => {
+  const reel = { width: 1080, height: 1920 };
+  const wide = { width: 1920, height: 1080 };
+  const grids = {
+    defaults: DEFAULT_GRID,
+    plain: defineDesignSystem().grid,
+    wide: defineDesignSystem({ stage: wide }).grid,
+    reel: defineDesignSystem({ stage: reel }).grid,
+    custom: defineDesignSystem({ stage: reel, grid: { marginTop: 270 } }).grid,
+  };
+  return (
+    <AbsoluteFill>
+      <pre id="grids">{JSON.stringify(grids)}</pre>
+    </AbsoluteFill>
+  );
+};
+`;
+
 /** What a page.evaluate reads off the dots scene: the camera stage the scene actually got. */
 const readStage = () => {
   const stage = document.querySelector("[data-ovs-camera-stage]");
@@ -197,6 +220,7 @@ if (have) {
       dots: { source: DOTS_SCENE(), duration: 60 },
       bars: { source: BARS_SCENE, duration: 60 },
       cta: { source: CTA_SCENE, duration: 90 },
+      design: { source: DESIGN_SCENE, duration: 30 },
     },
   });
   landscape = scaffold({
@@ -270,6 +294,17 @@ if (have) {
       check(`...vertically within 6% of the frame centre, sitting 190px above centre as it does in 16:9 (card top ${card.styleTop})`, Math.abs(cy - 960) < 1920 * 0.06 && card.styleTop === "770px");
       check("...and inside the frame with at least 80px to spare either side", card.left >= 80 && 1080 - card.right >= 80);
     }
+
+    // designSystem: the grid follows the stage
+    await seek("design", 5);
+    const grids = JSON.parse(await page.evaluate(() => document.getElementById("grids")?.textContent ?? "{}"));
+    console.log(`  grids: ${JSON.stringify(grids)}`);
+    const same = (a, b) => a && b && a.marginX === b.marginX && a.marginTop === b.marginTop && a.marginBottom === b.marginBottom;
+    check("DEFAULT_GRID is still 150 / 130 / 110", same(grids.defaults, { marginX: 150, marginTop: 130, marginBottom: 110 }));
+    check("a design system with no stage keeps the 1920x1080 margins", same(grids.plain, grids.defaults));
+    check("...and so does one built for a 1920x1080 stage", same(grids.wide, grids.defaults));
+    check("a 1080x1920 stage scales the side margin with the width (150 of 1920 is 84 of 1080) and top and bottom with the height (130 of 1080 is 231 of 1920, 110 is 196)", same(grids.reel, { marginX: 84, marginTop: 231, marginBottom: 196 }));
+    check("an explicit grid override still wins over the scaled one", same(grids.custom, { marginX: 84, marginTop: 270, marginBottom: 196 }));
   });
 
   await inBrowser(landscape, async ({ comp, page, seek, frame }) => {

@@ -1025,6 +1025,46 @@ section(
   },
 );
 
+// ============================================================ 8. E.sine and E.expo
+
+section(
+  "8. easing presets E.sine and E.expo (in-out)",
+  [
+    {
+      id: "ease-readout",
+      frames: 30,
+      source: sceneFile(
+        "EaseReadout",
+        ["E", "tween"],
+        `<div id="ease-readout" style={{ color: "#fff", fontSize: 12, whiteSpace: "pre" }}>{JSON.stringify((() => {
+      const samples = Array.from({ length: 101 }, (_, i) => i / 100);
+      return {
+        keys: Object.keys(E),
+        sine: samples.map((t) => (E.sine ? E.sine(t) : null)),
+        expo: samples.map((t) => (E.expo ? E.expo(t) : null)),
+        tweened: [tween(0, [0, 30], [100, 200], E.expo), tween(30, [0, 30], [100, 200], E.expo), tween(15, [0, 30], [100, 200], E.sine)],
+      };
+    })())}</div>`,
+      ),
+    },
+  ],
+  async (t) => {
+    const r = JSON.parse(await t.text(t.frameOf("ease-readout", 0), "#ease-readout"));
+    check("E has sine and expo alongside the original four", ["cinematic", "whip", "drift", "snap", "sine", "expo"].every((k) => r.keys.includes(k)));
+    for (const name of ["sine", "expo"]) {
+      const v = r[name];
+      check(`E.${name}: exactly 0 at 0 and exactly 1 at 1`, v[0] === 0 && v[100] === 1);
+      check(`E.${name}: half-way at t = 0.5`, Math.abs(v[50] - 0.5) < 1e-9);
+      check(`E.${name}: never goes backwards`, v.every((x, i) => i === 0 || x >= v[i - 1]));
+      check(`E.${name}: eases in and out (< 0.1 at t = 0.1, > 0.9 at t = 0.9; not linear)`, v[10] < 0.1 && v[90] > 0.9);
+    }
+    const slope = (v) => v[60] - v[40];
+    console.log(`  slope across the middle fifth: sine ${slope(r.sine).toFixed(3)}, expo ${slope(r.expo).toFixed(3)}; value at 0.1: sine ${r.sine[10].toFixed(4)}, expo ${r.expo[10].toFixed(5)}`);
+    check("expo is the harder curve: steeper through the middle and flatter at the ends than sine", slope(r.expo) > slope(r.sine) && r.expo[10] < r.sine[10]);
+    check("tween takes them: 100 at the start, 200 at the end, 150 half-way", r.tweened[0] === 100 && r.tweened[1] === 200 && Math.abs(r.tweened[2] - 150) < 1e-9);
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");

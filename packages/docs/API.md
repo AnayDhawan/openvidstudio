@@ -144,6 +144,8 @@ E.cinematic  // default move: slow out, soft landing
 E.whip       // aggressive, for cuts and fast pans
 E.drift      // gentle ambient motion inside a shot
 E.snap       // snappy UI reaction, button press, blip reveal
+E.sine       // symmetric ease in and out along a sine: calm, even, no hard push
+E.expo       // symmetric ease in and out along an exponential: still at the ends, fast through the middle
 
 SPRING.soft  SPRING.pop  SPRING.heavy
 ```

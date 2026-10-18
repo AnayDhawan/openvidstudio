@@ -9,12 +9,26 @@
 import "./localFonts";
 
 // Camera + layers
-export { CameraRig, Layer, useCamera, resolveCamera } from "./camera";
-export type { CamKeyframe } from "./camera";
+export { CameraRig, Layer, useCamera, resolveCamera, projectToScreen, Z_STEP } from "./camera";
+export type { CamKeyframe, CameraInfo } from "./camera";
 
 // Directed shot: a flat capture turned into a push-in with tilt, depth of field and a cursor (C4)
-export { DirectedShot } from "./DirectedShot";
-export type { DirectedShotProps } from "./DirectedShot";
+export { DirectedShot, directedKeyframes } from "./DirectedShot";
+export type { DirectedShotProps, DirectedKeyframeOptions, CaptureRect } from "./DirectedShot";
+
+// Cinematic shots (camera half): the shot vocabulary
+export { resolveShot, SHOT_NAMES } from "./shots";
+export type { ShotName, ShotOptions, ResolvedShot } from "./shots";
+
+// Cinematic shots (camera half): layered shots and motion blur
+export { LayeredShot } from "./LayeredShot";
+export type { LayeredShotProps, LayerManifest, ShotLayer } from "./LayeredShot";
+export { MotionBlur } from "./motionBlur";
+export type { MotionBlurOptions } from "./motionBlur";
+
+// Cinematic shots (camera half): handheld sway and impact shake
+export { handheldOffset, holdWeight, useHandheld, impactShake, useImpactShake } from "./handheld";
+export type { ShakeOffset } from "./handheld";
 
 // Music-first timing: the score's grid as scene-local frames (C3)
 export { MusicClockProvider, useMusicClock, createMusicClock } from "./musicClock";
@@ -61,7 +75,8 @@ export { CinematicScene } from "./CinematicScene";
 export { BrowserFrame } from "./DeviceFrame";
 
 // Kinetic typography
-export { TitleSlam, Caption } from "./KineticText";
+export { TitleSlam, Caption, captionLayout } from "./KineticText";
+export type { CaptionPosition, CaptionRect } from "./KineticText";
 
 // Terminal replay
 export {
@@ -79,7 +94,7 @@ export { ChecklistPanel } from "./ChecklistPanel";
 export type { ChecklistItem } from "./ChecklistPanel";
 
 // Cursor actor
-export { CursorActor } from "./CursorActor";
+export { CursorActor, cursorPositionAt } from "./CursorActor";
 export type { CursorKeyframe } from "./CursorActor";
 
 // Repo CTA scene

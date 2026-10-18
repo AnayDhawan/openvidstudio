@@ -11,6 +11,12 @@ export const E = {
   drift: Easing.bezier(0.4, 0.0, 0.6, 1.0),
   // snappy UI reaction (button press, blip reveal)
   snap: Easing.bezier(0.2, 0.9, 0.25, 1.0),
+  // symmetric ease in and out along a sine: a calm, even move with no hard push at either end
+  sine: (t: number): number => (t <= 0 ? 0 : t >= 1 ? 1 : -(Math.cos(Math.PI * t) - 1) / 2),
+  // symmetric ease in and out along an exponential: nearly still at both ends, fast through the
+  // middle. Exact 0 and 1 at the ends (Remotion's Easing.exp is not), so a tween lands on its target.
+  expo: (t: number): number =>
+    t <= 0 ? 0 : t >= 1 ? 1 : t < 0.5 ? Math.pow(2, 20 * t - 10) / 2 : (2 - Math.pow(2, -20 * t + 10)) / 2,
 } as const;
 
 export const SPRING = {

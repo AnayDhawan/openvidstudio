@@ -66,8 +66,9 @@ warn. The binding number is the scene's **highest** scale, not its first.
 
 Rules of thumb:
 
-- Real captures: 1.2 to 2.5. STYLE.md requires the camera to sit inside the UI
-  rather than showing a flat full-screen grab.
+- Real captures with text: 1.05 to 1.6. STYLE.md requires the camera to sit inside the UI
+  rather than showing a flat full-screen grab, but past 1.6 the product text goes soft.
+  Captures without text to read can push further.
 - Constructed panels: 1.04 to 1.15. They are already built at stage size, so they
   need a gentle push, not a zoom.
 - Run `validate_scenes` and it will tell you which scenes are cropping. That is a read of
@@ -79,11 +80,20 @@ Rules of thumb:
 
 | Prop | Type | Default | Notes |
 |---|---|---|---|
-| `depth` | `number` | `0` | Parallax and blur. `0` is the focal plane |
-| `maxBlur` | `number` | `10` | Blur in px at `depth` 1 |
+| `depth` | `number` | `0` | Distance from the focal plane. `0` is the focal plane, positive is behind it, negative is in front |
+| `maxBlur` | `number` | `10` | Blur in px at `|depth|` 1, scaled by `|depth|`. `0` turns the depth blur off |
 | `style` | `CSSProperties` | | |
 
-One focal plane per shot. Put background elements on a non-zero depth so they blur.
+Depth is a place in space. A layer is moved back (or forward) by `depth * 170` px and scaled
+about the stage centre so it looks the same size, so with the camera still on the stage centre
+every depth shows the same picture. When the camera pans, the rig's perspective does the rest:
+a layer at depth 1 moves 0.89 as far as the focal plane, depth 2 about 0.80, and a layer at
+depth -1 moves 1.14 times as far. Depth also orders layers: one behind stays behind however the
+JSX is ordered. A Layer has to be a direct child of the rig's stage (a plain wrapper `div`
+in between flattens the depth).
+
+One focal plane per shot. Blur on a layer softens any text in it, so pass `maxBlur={0}` to a
+layer that carries text.
 
 ### `CameraRig`, `useCamera`
 
@@ -96,11 +106,15 @@ looks through (default: the composition's size). A rig nested in a smaller box, 
 state the rig renders at a frame, for code that needs to know where the camera is without
 rendering.
 
+`useCamera()` returns the camera state plus `stageWidth` and `stageHeight` (type `CameraInfo`), or
+`null` outside a rig. `projectToScreen(camera, viewportWidth, viewportHeight, x, y)` returns where
+a stage point lands on screen, through the same rotation, scale and perspective the rig applies.
+
 ### `DirectedShot`
 
 A nested camera rig that turns a flat capture into a directed move: a push-in on one point,
-an optional tilt, depth of field that follows the focal point, and a cursor, all in the
-capture's own pixel space. It owns its own `CameraRig`, so it sits inside a `CinematicScene`
+an optional tilt, optional depth of field and motion blur, handheld sway, and a cursor, all in
+the capture's own pixel space. It owns its own `CameraRig`, so it sits inside a `CinematicScene`
 (or anywhere) without touching that scene's camera.
 
 ```tsx
@@ -117,21 +131,101 @@ capture's own pixel space. It owns its own `CameraRig`, so it sits inside a `Cin
 | Prop | Type | Default | Notes |
 |---|---|---|---|
 | `src` | `string` | | Image URL, usually `staticFile("images/<beat>.png")`. Use `children` for anything else |
-| `focus` | `{ x, y }` | required | The point in the capture, in capture pixels, the move pushes into |
-| `push` | `number` | `1.4` | End zoom relative to fitting the whole capture in the box. `1` holds the full frame |
+| `focus` | `{ x, y }` | the middle | The point in the capture, in capture pixels, the move pushes into |
+| `push` | `number` | `1.4` | End zoom relative to fitting the whole capture in the box. `1` holds the full frame. Keep it at or under `1.6` when the capture has text |
+| `shot` | `ShotName` | | A named move (see Shots below). It supplies zoom, start and end position, tilt, easing and length; `push`, `tilt` and `move` given explicitly win |
 | `tilt` | `{ x?, y?, z? }` | | Rotation in degrees at the end of the move. 2 to 6 reads as depth |
-| `move` | `{ from?, to?, easing? }` | `0` to `90` | Frames, local to the scene. Defaults to `E.cinematic` |
-| `depthOfField` | `number` | `6` | Blur in px away from the focal point. `0` turns it off |
-| `cursor` | `{ path, clicks? }` | | A `CursorActor` path and click frames, in capture pixels |
+| `move` | `{ from?, to?, easing? }` | `0` to `90` | Frames, local to the scene. Defaults to `E.cinematic`; a `shot` sets its own length |
+| `depthOfField` | `number` | `0` | Blur in px away from the focal point. Off by default: blur smears product text. Never use it on a shot whose text has to be read |
+| `protect` | `{ x, y, width, height }[]` | | Regions of the capture, in capture pixels, that stay sharp under `depthOfField`. Hard edged, and they follow the camera through a push and a tilt |
+| `rackTo` | `{ x, y }` | | Rack focus: the sharp region slides from `focus` to this point, in capture pixels, across the move |
+| `blur` | `boolean \| { shutterAngle?, samples? }` | on for `whip`, else off | Motion blur while the camera moves, and only then. `true` is a 180 degree shutter with 8 samples. Costs `samples` times the render work for those frames |
+| `handheld` | `number` | `0` | Handheld sway, the largest drift in px at 1080p. 3 to 8 reads as a person holding the camera |
+| `shake` | `number[]` | | Local frames of impacts. The shot jolts 12px (at 1080p) on each and settles within about 24 frames |
+| `cursor` | `{ path, clicks? }` | | A `CursorActor` path and click frames, in capture pixels. The cursor sits above the blur layers and is never blurred |
 | `captureWidth`, `captureHeight` | `number` | `1920`, `1080` | The capture's natural size |
 | `width`, `height` | `number` | the composition | The box the shot fills |
 
 The move starts on the whole capture and ends pushed in on `focus`. The end centre is clamped
-so the camera never leaves the capture (empty stage reads as a mistake).
+so the camera never leaves the capture (empty stage reads as a mistake). Sway and shake move the
+whole shot, cursor included, and the shot is scaled up slightly so the shift never shows an edge;
+with neither set, nothing extra is rendered.
+
+`directedKeyframes({ W, H, captureWidth, captureHeight, focus?, push?, tilt?, move?, shot? })`
+returns the two camera keyframes a `DirectedShot` renders with, so `resolveCamera` can read the
+camera at any frame without mounting the component.
 
 | Start of the move | End of the move |
 |---|---|
-| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end: pushed in, tilted, soft at the edges, cursor on the target](img/api/directedshot-end.png) |
+| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end: pushed in, tilted, cursor on the target (this still was rendered with depthOfField 6, which is no longer the default)](img/api/directedshot-end.png) |
+
+### Shots: `resolveShot`, `SHOT_NAMES`
+
+`<DirectedShot shot="whip" />` applies a named move. Each is plain data from a pure function, so a
+scene can read it too: `resolveShot(name, { focus?, push?, captureWidth?, captureHeight? })` returns
+`{ startScale, endScale, startFocus, endFocus, startTilt, tilt, easing, moveFrames, blur }`
+(zoom relative to fitting the whole capture, camera positions in capture pixels, tilt in degrees).
+`push` overrides the preset's zoom.
+
+| Shot | The move | Zoom | Frames |
+|---|---|---|---|
+| `pushIn` | From the whole capture in to the focus. The default workhorse | 1 to 1.4 | 90 |
+| `pullOut` | Starts close on the focus and backs out to the whole capture, to reveal context | 1.5 to 1 | 90 |
+| `pan` | Same zoom throughout; the camera slides sideways onto the focus with a slight yaw | 1.35 | 75 |
+| `whip` | A fast slide in from the side, `E.whip` easing, motion blur on | 1.5 | 18 |
+| `orbit` | The camera swings around the focus: `rotY` goes from -5 to +5 degrees | 1.15 to 1.35 | 120 |
+| `dutch` | A push that rolls the horizon off level, 3.5 degrees | 1 to 1.35 | 90 |
+| `hold` | The whole capture with a 2% creep so it is never dead. For action inside the frame: a cursor, typing | 1 to 1.02 | 60 |
+| `drift` | Ambient: a long, small move toward the focus with a sub-degree wander in the tilt | 1 to 1.06 | 150 |
+
+### `LayeredShot`
+
+A `DirectedShot` whose picture is a stack of layers instead of one flat image: a background plus
+the elements that float above it, each at its own depth, so a push and a tilt make them slide
+against each other. At rest the stack composites to the same picture as the flat capture. Takes
+every `DirectedShot` prop except `src` and `children`, plus:
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `manifest` | `{ width, height, background, layers }` | | The capture's size, the flat background URL and the layers |
+| `background`, `layers` | `string`, `ShotLayer[]` | | Instead of `manifest`; give `captureWidth` and `captureHeight` too |
+| `backgroundDepth` | `number` | `1` | Depth of the background plane, a notch behind the focal plane |
+| `maxBlur` | `number` | `0` | Blur per unit of depth, in px. Off, because the layers are real UI |
+
+```ts
+type ShotLayer = { src: string; x: number; y: number; width: number; height: number; depth: number };
+// x, y, width, height in capture pixels; depth > 0 is behind the focal plane, < 0 in front
+```
+
+### `MotionBlur`
+
+Wraps children in Remotion's `CameraMotionBlur`, but only for the frames of a window. Outside it the
+children render directly, as if the wrapper were not there.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `from` | `number` | `0` | First frame of the window, local to the scene |
+| `to` | `number` | never | Last frame of the window, inclusive |
+| `shutterAngle` | `number` | `180` | Degrees, 0 to 360. Larger smears more |
+| `samples` | `number` | `8` | Sub-frame renders blended. More is smoother and slower |
+
+### Handheld and impact shake
+
+Small deterministic camera motion, as pure functions and hooks. `DirectedShot` uses them for its
+`handheld` and `shake` props; use them directly to move anything else.
+
+```ts
+handheldOffset(frame, amount, seed = 1): { x, y, rot }       // px and degrees; |x|, |y| <= amount
+useHandheld(amount, { holds?, seed?, ramp? }): { x, y, rot }  // scaled to the composition height
+impactShake(frame, impactFrames, { amplitude = 12, decay = 8 }): { x, y, rot }
+useImpactShake(impactFrames, { amplitude?, decay? }): { x, y, rot }
+```
+
+Sway is two unrelated sines per axis, so the path does not repeat. `holds` is a list of
+`[from, to]` frame windows where `useHandheld` is exactly zero (the camera is set down while a
+cursor clicks or a block of text is read), easing in and out over `ramp` frames (default 6).
+Shake is exactly zero before an impact frame, at full `amplitude` on it, and below 5% of it
+after `3 * decay` frames. All of it is a function of the frame, never `Math.random()`.
 
 ---
 
@@ -144,6 +238,8 @@ E.cinematic  // default move: slow out, soft landing
 E.whip       // aggressive, for cuts and fast pans
 E.drift      // gentle ambient motion inside a shot
 E.snap       // snappy UI reaction, button press, blip reveal
+E.sine       // symmetric ease in and out along a sine: calm, even, no hard push
+E.expo       // symmetric ease in and out along an exponential: still at the ends, fast through the middle
 
 SPRING.soft  SPRING.pop  SPRING.heavy
 ```
@@ -189,8 +285,22 @@ default because a blip every few frames sounds like a ticking clock under a titl
 | `at` | `number` | required |
 | `out` | `number` | |
 | `fontSize` | `number` | `34` |
+| `position` | `"bottom" \| "top" \| "left" \| "right" \| "auto"` | `"bottom"` |
+| `avoid` | `{ x, y, width, height }` | |
 
-Sits 84px from the bottom. Put it in `overlay`, not `children`.
+Sits 84px from the chosen edge. Put it in `overlay`, not `children`. Vary `position` from scene to
+scene; the same spot in every scene covers the same part of the product every time.
+
+- `"auto"` with `avoid` (the part of the frame that carries the product, in composition pixels)
+  takes the edge with the most free room beside that rect, counting only edges where the card fits.
+  Ties go bottom, top, right, left. With no `avoid` it stays at the bottom.
+- The reveal is always finished within 8 frames of `at`, however many words there are: the
+  per-word stagger shrinks as the caption grows (2 frames for short ones), so no frame a reviewer
+  lands on shows a half-typed line.
+- The card is at most `min(1400, 0.9 * composition width)` wide, so it fits a 1080 wide
+  vertical frame. `"left"` and `"right"` use a column of `min(640, 0.34 * width)`.
+- `captionLayout(position, avoid, width, height, fontSize)` returns `{ side, maxWidth }`, the
+  rule above as a function.
 
 ---
 
@@ -291,7 +401,12 @@ keyframes can land frame-exact on content events rather than being guessed.
 type CursorKeyframe = { frame: number; x: number; y: number };
 ```
 
-Coordinates are stage space. Movement is eased automatically; never linear.
+Coordinates are stage space. Movement is eased automatically; never linear. Each segment bows
+sideways by up to 6% of its length (the side alternates from one segment to the next) and swings
+2.5% of its length past the target before settling, so the cursor moves like a hand. Progress
+along the segment still follows `E.cinematic`, and on a keyframe's own frame the cursor is exactly
+on the keyframe, so a click ring lands on its target. `cursorPositionAt(path, frame)` returns the
+position `CursorActor` draws at a frame.
 
 ### `RepoCta`
 

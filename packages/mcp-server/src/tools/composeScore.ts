@@ -38,9 +38,8 @@ import { runTool } from "./mcp";
  * public/audio/<stem>.mp3 has a cues file next to it at public/audio/<stem>.cues.json,
  * shaped like MusicCuesResult (see musicCues.ts). `source: "generated"` means "exact by
  * construction", and plan_music_cues treats a generated cues file as ground truth,
- * returning it directly with no re-analysis, exactly like it already does for the
- * built-in pulse-bed.mp3. compose-score.py's own cues fields already use matching
- * names (beats, strongCues, bpm) for exactly this reason.
+ * returning it directly with no re-analysis. compose-score.py's own cues fields already
+ * use matching names (beats, strongCues, bpm) for exactly this reason.
  *
  * WAV handling: compose-score.py masters to a 24-bit PCM wav, a transient intermediate,
  * not a shipped artifact. It is written to a temp path, transcoded to mp3 with ffmpeg,
@@ -89,6 +88,13 @@ export interface ComposeScoreInput {
    * video (narration: "none") where the score is the only thing on the audio track.
    */
   mode: "bed" | "music";
+  /**
+   * "none" (default): no kick, clap, hat or tick, and the bass and arp play uneven
+   * rhythms with small timing and level variation, so nothing repeats identically on a
+   * fixed grid. A perfectly even, short-decay hit reads as a ticking clock under a
+   * voiceover. "full": the old drum-machine arrangement, kept as an opt-in.
+   */
+  percussion?: "none" | "full";
 }
 
 export interface ComposeScoreResult {
@@ -178,6 +184,7 @@ interface ComposeScoreSpec {
   sections: { label: string; bars: number }[];
   impacts: { label: string; atBar: number; atBeat: number }[];
   mode: "bed" | "music";
+  percussion: "none" | "full";
   trackName: string;
   outWav: string;
   outCues: string;
@@ -191,6 +198,7 @@ export function buildComposeScoreSpec(
   outCues: string,
   outSpectrogram: string,
   mode: "bed" | "music",
+  percussion: "none" | "full" = "none",
 ): ComposeScoreSpec {
   return {
     bpm: music.bpm,
@@ -198,6 +206,7 @@ export function buildComposeScoreSpec(
     sections: sectionsToPythonSections(music.sectionMap),
     impacts: impactPointsToPythonImpacts(music.impactPoints),
     mode,
+    percussion,
     trackName,
     outWav,
     outCues,
@@ -224,6 +233,14 @@ export function computeWarnings(cues: Record<string, unknown>): string[] {
   const clickCount = checks.clickCount;
   if (typeof clickCount === "number" && clickCount > 0) {
     warnings.push(`${clickCount} click${clickCount === 1 ? "" : "s"} detected in the mastered mix.`);
+  }
+
+  const tick = checks.percussionTick as Record<string, unknown> | undefined;
+  if (tick && tick.verdict === "periodic") {
+    warnings.push(
+      `Periodic high-frequency transients every ~${tick.lagMs} ms (autocorrelation ${tick.peak}, threshold ` +
+        `${tick.thresholdPeak}): this score will sound like a ticking clock. Use percussion "none" or vary the rhythm.`,
+    );
   }
 
   const truePeakDbtp = cues.truePeakDbtp;
@@ -328,7 +345,15 @@ export function runComposeScore(input: ComposeScoreInput): ComposeScoreResult {
   // path: the wav is a transient intermediate, transcoded to mp3 below, then deleted.
   fs.mkdirSync(path.dirname(mp3Abs), { recursive: true });
   const tmpWavAbs = path.join(os.tmpdir(), `ovs-compose-score-${process.pid}-${Date.now()}.wav`);
-  const spec = buildComposeScoreSpec(music, trackName, tmpWavAbs, cuesAbs, spectrogramAbs, input.mode);
+  const spec = buildComposeScoreSpec(
+    music,
+    trackName,
+    tmpWavAbs,
+    cuesAbs,
+    spectrogramAbs,
+    input.mode,
+    input.percussion ?? "none",
+  );
   const specAbs = path.join(os.tmpdir(), `ovs-compose-score-spec-${process.pid}-${Date.now()}.json`);
   fs.writeFileSync(specAbs, JSON.stringify(spec, null, 2), "utf8");
 
@@ -444,10 +469,13 @@ export function registerComposeScore(server: McpServer): void {
         "brief's sectionMap is contiguous (each section's endBar equal to the next section's startBar) " +
         "before composing anything, and throws naming exactly which two sections don't connect if not. " +
         "Surfaces the script's own mastering checks as a warnings array: a band-balance verdict other than " +
-        "\"ok\", any detected click, a true peak over the limiter's ceiling, or an integrated loudness far " +
-        "from target. This is the highest-effort of the three music options (built-in pulse-bed.mp3, a found " +
-        "CC0 track via find_music_bed, or this), meant for peak creative level: an original score built to " +
-        "match the video's own arc rather than a pre-made or found track.",
+        "\"ok\", any detected click, a periodic high-frequency tick pattern, a true peak over the limiter's " +
+        "ceiling, or an integrated loudness far from target. percussion defaults to \"none\": no kick, clap, " +
+        "hat or tick, with uneven bass and arp rhythms, because evenly repeated short hits read as a ticking " +
+        "clock under a voiceover. Pass percussion \"full\" only if you want the old drum-machine arrangement. " +
+        "This is the highest-effort of the music options (the built-in ambient music-bed.mp3, a found CC0 " +
+        "track via find_music_bed, or this), meant for peak creative level: an original score built to match " +
+        "the video's own arc rather than a pre-made or found track.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
@@ -457,6 +485,9 @@ export function registerComposeScore(server: McpServer): void {
         ),
         outFile: z.string().optional().describe('Bare filename under public/audio/, ending in .mp3. Defaults to "music-bed.mp3".'),
         mode: z.enum(["bed", "music"]).describe('Required: "bed" (-15 LUFS) for narrated videos (most common); "music" (-14 LUFS) for music-only videos. No default.'),
+        percussion: z.enum(["none", "full"]).optional().describe(
+          'Defaults to "none": no kick, clap, hat or tick, uneven bass and arp rhythms. "full" is the old drum-machine arrangement and is flagged by the periodic-tick check.',
+        ),
       },
     },
     async (input) => runTool("compose_score", () => runComposeScore(input)),

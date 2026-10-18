@@ -8,7 +8,7 @@ import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { writeFactRecord } from "../facts";
 import { resolveCompositionId } from "./renderStills";
-import { readTypeMinimums, runRenderChecks } from "./validateScenesRender";
+import { readDeliberateHolds, readTypeMinimums, runRenderChecks } from "./validateScenesRender";
 
 /**
  * The worst failure class in this pipeline is silent wrongness: a scene renders
@@ -442,6 +442,7 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
     beats,
     fps: doc.fps ?? 30,
     minimums: readTypeMinimums(videoDir),
+    deliberateHolds: readDeliberateHolds(videoDir),
   });
 
   const findings = [...result.findings, ...rendered.findings];

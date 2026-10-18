@@ -15,7 +15,7 @@ import {
 import type { HeadlessBrowser } from "@remotion/renderer";
 import { runTool } from "./mcp";
 import type { SceneFinding } from "./validateScenes";
-import { readTypeMinimums, runRenderChecks } from "./validateScenesRender";
+import { readDeliberateHolds, readTypeMinimums, runRenderChecks } from "./validateScenesRender";
 
 /**
  * A fast QC loop: render a handful of representative frames (not a full video) so an
@@ -370,6 +370,7 @@ export async function runRenderStills(input: RenderStillsInput): Promise<RenderS
         beats,
         fps: doc.fps ?? 30,
         minimums: readTypeMinimums(path.join(projectRoot, "src", "videos", videoName)),
+        deliberateHolds: readDeliberateHolds(path.join(projectRoot, "src", "videos", videoName)),
         bundleDir: serveUrl,
       });
       result.findings = measured.findings;

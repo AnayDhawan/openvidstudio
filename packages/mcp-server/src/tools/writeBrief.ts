@@ -89,6 +89,12 @@ export interface ShotListEntry {
   whyConstructed?: string;
   /** The one thing in this shot that matters (STYLE.md's "one focal point per shot" rule). */
   focalPoint: string;
+  /**
+   * True when this beat is meant to hold still (a title card the music breathes under, a
+   * deliberate beat of silence). validate_scenes's render mode treats a beat whose frames never
+   * change as a dead-frames finding; this is the brief saying that, for this beat, it is intended.
+   */
+  deliberateHold?: boolean;
 }
 
 export interface StyleOverride {
@@ -287,6 +293,9 @@ export function validateBriefLogic(briefJson: unknown): ValidateBriefResult {
       }
       requireNonEmptyString(raw, "provenance", `${prefix}.`, errors);
       requireNonEmptyString(raw, "focalPoint", `${prefix}.`, errors);
+      if (raw.deliberateHold !== undefined && typeof raw.deliberateHold !== "boolean") {
+        errors.push(`${prefix}.deliberateHold must be a boolean when present`);
+      }
       if (raw.real === false) {
         requireNonEmptyString(raw, "whyConstructed", `${prefix}.`, errors);
       }
@@ -396,7 +405,7 @@ export function registerWriteBrief(server: McpServer): void {
         "\"break\"/\"peak\"/\"outro\", whatever subset applies], startBar, endBar }, impactPoints: array of " +
         "{ name, bar, note } }); shotList (non-empty array of { beatId, real [boolean], provenance [which " +
         "real capture/tool's output, or what was constructed instead], whyConstructed [required when real " +
-        "is false], focalPoint [the one thing in this shot that matters] }). Optional: styleOverrides (array " +
+        "is false], focalPoint [the one thing in this shot that matters], deliberateHold [optional boolean: this beat is meant to hold still, so validate_scenes does not report its unchanging frames as dead] }). Optional: styleOverrides (array " +
         "of { rule, reason } for any STYLE.md default this video overrides) and sampleContent (array of " +
         "{ beatId, whatItIs, whyConstructed }, disclosing any beat whose real capture is of constructed " +
         "sample content -- a fictional app/dataset/repo built specifically to film -- rather than the actual " +

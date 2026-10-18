@@ -142,6 +142,8 @@ export interface RenderCheckInput {
   minimums: TypeScaleMinimums;
   /** An already-built bundle directory to measure against, instead of bundling the project again. */
   bundleDir?: string;
+  /** Beat ids the brief marks as deliberate holds: unchanging frames there are not a dead-frames finding. */
+  deliberateHolds?: string[];
 }
 
 export interface RenderCheckResult {
@@ -366,6 +368,22 @@ export function backgroundBehind(
 }
 
 /**
+ * Beat ids the brief marks `deliberateHold: true` in its shotList. A missing or unreadable brief
+ * means no holds are declared, which is the strict reading: unchanging frames get reported.
+ */
+export function readDeliberateHolds(videoDir: string): string[] {
+  try {
+    const brief = JSON.parse(fs.readFileSync(path.join(videoDir, "brief.json"), "utf8")) as { shotList?: unknown };
+    if (!Array.isArray(brief.shotList)) return [];
+    return brief.shotList
+      .filter((s): s is { beatId: string; deliberateHold: true } => typeof s === "object" && s !== null && (s as { deliberateHold?: unknown }).deliberateHold === true && typeof (s as { beatId?: unknown }).beatId === "string")
+      .map((s) => s.beatId);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * The #rrggbb colours src/brand.ts sets, minus pure black and white (which nearly any frame
  * contains, so they could not tell a branded render from an unbranded one). Empty when there is
  * no brand file or it carries no hex colours.
@@ -482,6 +500,8 @@ export function judgeBeat(opts: {
   samples: TextProbe[][];
   /** Largest changed-pixel ratio between any two sampled frames, or null if not measured. */
   maxChangedRatio: number | null;
+  /** The brief marks this beat as a deliberate hold, so unchanging frames are intended. */
+  deliberateHold?: boolean;
 }): SceneFinding[] {
   const { beat, fps, minimums, samples, maxChangedRatio } = opts;
   const scene = `${pascalCase(beat.id)}.tsx`;
@@ -640,7 +660,7 @@ export function judgeBeat(opts: {
   }
 
   // Dead frames.
-  if (maxChangedRatio !== null && maxChangedRatio < DEAD_CHANGED_RATIO) {
+  if (!opts.deliberateHold && maxChangedRatio !== null && maxChangedRatio < DEAD_CHANGED_RATIO) {
     findings.push({
       ...base,
       check: "dead-frames",
@@ -729,7 +749,14 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
         }
 
         findings.push(
-          ...judgeBeat({ beat, fps: input.fps, minimums: input.minimums, samples, maxChangedRatio }),
+          ...judgeBeat({
+            beat,
+            fps: input.fps,
+            minimums: input.minimums,
+            samples,
+            maxChangedRatio,
+            deliberateHold: input.deliberateHolds?.includes(beat.id),
+          }),
         );
         measured++;
       } catch (err) {

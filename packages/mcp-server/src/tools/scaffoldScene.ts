@@ -16,6 +16,7 @@ import { castToSteps, serializeSteps, type TerminalCastLike } from "../scenes/ca
 import { probeVideoDurationFrames } from "../scenes/videoDuration";
 import { readCursorPoints } from "../scenes/cursorPoints";
 import { detectRepoInfo } from "../scenes/repoInfo";
+import { loadConfig } from "../config";
 
 export type { SceneKind };
 
@@ -147,8 +148,8 @@ export const ${ctx.componentName}: React.FC = () => {
   return (
     <CinematicScene
       camera={[
-        { frame: 0, x: 960, y: 540, scale: 1.04, rotZ: -0.4 },
-        { frame: ${ctx.durationFrames}, x: 960, y: 548, scale: 1.15, rotZ: 0.35, easing: E.drift },
+        { frame: 0, x: ${Math.round((ctx.stageWidth ?? 1920) / 2)}, y: ${Math.round((ctx.stageHeight ?? 1080) / 2)}, scale: 1.04, rotZ: -0.4 },
+        { frame: ${ctx.durationFrames}, x: ${Math.round((ctx.stageWidth ?? 1920) / 2)}, y: ${Math.round((ctx.stageHeight ?? 1080) / 2) + 8}, scale: 1.15, rotZ: 0.35, easing: E.drift },
       ]}
     >
       <Layer depth={0}>
@@ -200,6 +201,15 @@ export function runScaffoldScene(
     );
   }
 
+  const { width: stageWidth, height: stageHeight } = loadConfig(projectRoot).videoConfig;
+  const stage = { width: stageWidth, height: stageHeight };
+  if (stage.height > stage.width) {
+    notes.push(
+      `This project is ${stage.width}x${stage.height}: the camera is centred on ${Math.round(stage.width / 2)},${Math.round(stage.height / 2)} ` +
+        `and the layout is sized to the frame (content stacks instead of sitting side by side).`,
+    );
+  }
+
   const description = beat?.visual?.description ?? "";
   const ctx: SceneContext = {
     beatId,
@@ -208,6 +218,8 @@ export function runScaffoldScene(
     vo: beat?.vo ?? "",
     durationFrames: beat?.duration ?? 300,
     url: beat?.visual?.url,
+    stageWidth: stage.width,
+    stageHeight: stage.height,
   };
 
   if (mode === "starter") {

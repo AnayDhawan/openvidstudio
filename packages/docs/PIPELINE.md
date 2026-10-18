@@ -358,9 +358,12 @@ the 16:9 version is cropped, not reflowed. If the picture is the content, render
    writes that size into the composition, and `validate_scenes` reads it from
    `openvidstudio.config.json`, so framing is judged against 1080 wide, not 1920.
 2. Camera coordinates are stage pixels, and `CinematicScene`'s stage is the composition size, so
-   the frame centre is `x: 540, y: 960` (not 960,540). `scaffold_scene` writes 960,540 into its
-   starter and its templates, which are laid out for 1920x1080: in a vertical project change
-   those keyframes, or write the scene by hand with a `scene` override on the beat.
+   the frame centre is `x: 540, y: 960` (not 960,540). `scaffold_scene` reads the project's frame
+   size and writes that centre into its starter and templates, and lays the templates out for it:
+   the camera is centred, content is sized to the 1080 wide frame, and the side-by-side templates
+   (split-panel, comparison) stack. A scene you write by hand takes the centre from
+   `useVideoConfig()`. A landscape recording or capture in a vertical frame is cropped (a recording
+   fills the frame with `object-fit: cover`), so for those keep what matters near the centre.
 3. In the video's `design.ts`, pass the stage so the layout grid scales to it: `defineDesignSystem({
    stage: { width: 1080, height: 1920 } })` gives margins of 84 / 231 / 196 instead of
    150 / 130 / 110. Set `grid` yourself for the safe zones below.
@@ -407,6 +410,12 @@ Each is checked at both sizes in `vertical.test.mjs`.
 - `DotGrid`: `w` and `h` default to the composition size, so the grid covers the whole frame.
 - `Letterbox`: bars are 64/1080 of the frame height, about 114px at 1920 tall.
 - `RepoCta`: laid out from the frame centre, so the card is centred in either shape.
+- `scaffold_scene`: every template and the starter, generated from the project's frame size
+  (checked at both sizes in `scaffold-vertical.test.mjs`; the 1920x1080 output is unchanged byte
+  for byte). `DirectedShot` is not used by any scaffolded scene, so there is nothing to set there;
+  when you use it by hand, pass the real `captureWidth` and `captureHeight`.
+- `ChapterHud`: with no `design` it takes the layout grid for the composition's size, so in a reel
+  the rail sits above the bottom safe zone rather than 46px from the edge.
 - `defineDesignSystem`: the layout grid scales to the `stage` it is given.
 - `validate_scenes`: the static framing check uses the project's `videoConfig`; render mode already
   measured the real composition.

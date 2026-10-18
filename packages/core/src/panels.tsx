@@ -6,7 +6,7 @@
 
 import React from "react";
 import { useCurrentFrame, useVideoConfig } from "remotion";
-import { DEFAULT_GRID, type DesignSystem } from "./designSystem";
+import { gridForStage, type DesignSystem } from "./designSystem";
 import { E, pop, SPRING, tween } from "./motion";
 import { DotText } from "./pixel";
 import { color, monoStack, radius, uiStack } from "./tokens";
@@ -327,7 +327,9 @@ export const ChapterHud: React.FC<{
   accentColor?: string;
 }> = ({ chapters, activeIndex, firstFrame = true, at = 4, fillDurationInFrames = 90, design, accentColor }) => {
   const frame = useCurrentFrame();
-  const marginBottom = design?.grid.marginBottom ?? DEFAULT_GRID.marginBottom;
+  const { width, height } = useVideoConfig();
+  // With no design the grid is the one for this composition's size (1920x1080 gives DEFAULT_GRID).
+  const marginBottom = design?.grid.marginBottom ?? gridForStage({ width, height }).marginBottom;
   const railBottom = Math.max(16, marginBottom - HUD_RAIL_FOOTPRINT);
   const accent = accentColor ?? design?.color.success ?? color.success;
   const faint = design?.color.textSecondary ?? color.textSecondary;

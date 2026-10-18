@@ -106,7 +106,7 @@ export const DEFAULT_GRID: LayoutGrid = {
  * wants more at the bottom than that (see PIPELINE.md's native vertical section), which is what
  * the `grid` override is for.
  */
-function gridForStage(stage: StageSize): LayoutGrid {
+export function gridForStage(stage: StageSize): LayoutGrid {
   if (!(stage.width > 0) || !(stage.height > 0) || !Number.isFinite(stage.width) || !Number.isFinite(stage.height)) {
     throw new Error(`defineDesignSystem: stage must be a positive width and height in px, got ${stage.width}x${stage.height}.`);
   }

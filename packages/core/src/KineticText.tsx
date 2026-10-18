@@ -74,32 +74,96 @@ export const TitleSlam: React.FC<{
   );
 };
 
-/** Bottom caption bar: single line, word-stagger clip reveal, auto-out. */
+export type CaptionPosition = "bottom" | "top" | "left" | "right" | "auto";
+export type CaptionRect = { x: number; y: number; width: number; height: number };
+
+/** Gap between a caption card and the frame edge, in px. */
+const CAPTION_MARGIN = 84;
+/** The whole word-by-word reveal finishes this many frames after `at`, however many words there are. */
+const CAPTION_SETTLE_FRAMES = 8;
+/** One word's wipe. */
+const CAPTION_WIPE_FRAMES = 5;
+
+/**
+ * Which edge a caption sits on and how wide its card may grow, for a composition of this size.
+ *
+ * "auto" looks at `avoid` (the part of the frame that carries the product, in composition px) and
+ * takes the edge with the most free room beside that rect, so the caption lands where it covers
+ * nothing. A side only counts if the card actually fits there; with no `avoid` it stays at the
+ * bottom. Ties go bottom, top, right, left.
+ */
+export const captionLayout = (
+  position: CaptionPosition,
+  avoid: CaptionRect | undefined,
+  videoWidth: number,
+  videoHeight: number,
+  fontSize: number,
+): { side: "bottom" | "top" | "left" | "right"; maxWidth: number } => {
+  const columnWidth = Math.min(640, 0.34 * videoWidth);
+  let side: "bottom" | "top" | "left" | "right" = position === "auto" ? "bottom" : position;
+  if (position === "auto" && avoid) {
+    const room = {
+      bottom: videoHeight - (avoid.y + avoid.height) - CAPTION_MARGIN,
+      top: avoid.y - CAPTION_MARGIN,
+      right: videoWidth - (avoid.x + avoid.width) - CAPTION_MARGIN,
+      left: avoid.x - CAPTION_MARGIN,
+    };
+    // Two lines of text plus padding, or a full column.
+    const need = { bottom: fontSize * 3.4, top: fontSize * 3.4, right: columnWidth, left: columnWidth };
+    const order = ["bottom", "top", "right", "left"] as const;
+    const fits = order.filter((s) => room[s] >= need[s]);
+    side = (fits.length ? fits : order).reduce((best, s) => (room[s] > room[best] ? s : best));
+  }
+  const sideways = side === "left" || side === "right";
+  return { side, maxWidth: sideways ? columnWidth : Math.min(1400, 0.9 * videoWidth) };
+};
+
+/**
+ * Caption card with a per-word clip reveal and an auto-out. Defaults to the bottom edge; `position`
+ * moves it to another edge and "auto" picks the edge farthest from `avoid` (composition px).
+ * Every word is fully revealed within 8 frames of `at`, whatever the word count, so a caption is
+ * never caught half-typed on a frame someone reviews.
+ */
 export const Caption: React.FC<{
   text: string;
   at: number;
   out?: number;
   fontSize?: number;
-}> = ({ text, at, out, fontSize = 34 }) => {
+  position?: CaptionPosition;
+  avoid?: CaptionRect;
+}> = ({ text, at, out, fontSize = 34, position = "bottom", avoid }) => {
   const frame = useCurrentFrame();
+  const { width: videoWidth, height: videoHeight } = useVideoConfig();
   const words = text.split(" ");
   if (frame < at || (out !== undefined && frame > out + 10)) return null;
   const exit =
     out !== undefined ? tween(frame, [out, out + 10], [0, 1], E.snap) : 0;
+  const { side, maxWidth } = captionLayout(position, avoid, videoWidth, videoHeight, fontSize);
+  // Stagger so the last word's wipe ends exactly at the settle frame; a short caption keeps the
+  // 2-frame stagger it always had.
+  const step = words.length > 1 ? Math.min(2, (CAPTION_SETTLE_FRAMES - CAPTION_WIPE_FRAMES) / (words.length - 1)) : 0;
+  const travel = exit * 24;
+  const anchor: React.CSSProperties =
+    side === "bottom"
+      ? { bottom: CAPTION_MARGIN, left: 0, right: 0, justifyContent: "center", transform: `translateY(${travel}px)` }
+      : side === "top"
+        ? { top: CAPTION_MARGIN, left: 0, right: 0, justifyContent: "center", transform: `translateY(${-travel}px)` }
+        : side === "left"
+          ? { top: 0, bottom: 0, left: CAPTION_MARGIN, alignItems: "center", transform: `translateX(${-travel}px)` }
+          : { top: 0, bottom: 0, right: CAPTION_MARGIN, alignItems: "center", justifyContent: "flex-end", transform: `translateX(${travel}px)` };
   return (
     <div
+      data-ovs-caption=""
+      data-ovs-caption-side={side}
       style={{
         position: "absolute",
-        bottom: 84,
-        left: 0,
-        right: 0,
         display: "flex",
-        justifyContent: "center",
-        transform: `translateY(${exit * 24}px)`,
         opacity: 1 - exit,
+        ...anchor,
       }}
     >
       <div
+        data-ovs-caption-card=""
         style={{
           fontFamily: uiFamily,
           fontWeight: 500,
@@ -117,16 +181,18 @@ export const Caption: React.FC<{
           display: "flex",
           gap: fontSize * 0.26,
           flexWrap: "wrap",
-          justifyContent: "center",
-          maxWidth: 1400,
+          justifyContent: side === "left" || side === "right" ? "flex-start" : "center",
+          boxSizing: "border-box",
+          maxWidth,
         }}
       >
         {words.map((w, i) => {
-          const d = at + staggerDelay(i, 2);
-          const wipe = tween(frame, [d, d + 5], [100, 0], E.snap);
+          const d = at + i * step;
+          const wipe = tween(frame, [d, d + CAPTION_WIPE_FRAMES], [100, 0], E.snap);
           return (
             <span
               key={i}
+              data-ovs-caption-word=""
               style={{
                 clipPath: `inset(0 ${wipe}% 0 0)`,
                 display: "inline-block",

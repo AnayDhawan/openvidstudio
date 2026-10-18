@@ -6,13 +6,18 @@ a rule here, it fails QC.
 ## What good cinematography for this pipeline looks like (decoded)
 
 1. **Camera lives INSIDE the UI.** Never show a flat full-screen
-   screenshot. The camera is always zoomed into a region (120-250% scale),
-   slightly tilted (1-4 degrees rotateZ, 2-8 degrees rotateX/Y
-   perspective), and moving (push-in, drift, pan). UI is rendered oversized
-   on a stage; the camera crops into it.
-2. **Shallow depth of field.** One focal plane per shot. Everything else
-   (background layers, edge regions, sidebars) carries gaussian blur.
-   Focus can rack between layers mid-shot.
+   screenshot. The camera is always zoomed into a region (105-160% scale
+   on a capture with text; constructed panels with nothing to read can go
+   further), slightly tilted (1-4 degrees rotateZ, 2-8 degrees rotateX/Y
+   perspective), and moving (push-in, drift, pan). Past 160% the product
+   text goes soft. UI is rendered oversized on a stage; the camera crops
+   into it.
+2. **Depth without blur.** One focal plane per shot. Depth comes from
+   parallax (`Layer` depth, `LayeredShot`), a slight tilt and handheld
+   sway, not from smearing the frame. Blur is opt-in (`depthOfField`
+   defaults to 0), is never applied to text the viewer has to read (list
+   those regions in `protect`), and stays under about 4px when used.
+   Focus can still rack from one point to another mid-shot (`rackTo`).
 3. **Low-key lighting.** Dark scenes: deep vignette, soft glow accents on
    the key element (accent-colored text-shadow/box-shadow). Light scenes:
    soft large-radius drop shadows, floating cards, generous negative

@@ -10,6 +10,7 @@
     "@openvidstudio/core": "workspace:*",
     "@remotion/cli": "4.0.534",
     "@remotion/google-fonts": "4.0.534",
+    "@remotion/motion-blur": "4.0.534",
     "@remotion/shapes": "4.0.534",
     "@remotion/tailwind-v4": "4.0.534",
     "@remotion/transitions": "4.0.534",

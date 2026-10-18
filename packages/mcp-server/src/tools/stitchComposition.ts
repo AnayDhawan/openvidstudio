@@ -113,6 +113,8 @@ interface BeatLike {
    * path -- only the file location changes.
    */
   scene?: string;
+  /** The way into this beat. Anything but "cut" is drawn over the cut by TransitionOverlay. */
+  transition?: string;
 }
 
 /**
@@ -185,6 +187,19 @@ function sceneImportPath(b: BeatLike): string {
   if (!b.scene) return `./scenes/${pascalCase(b.id)}`;
   const normalized = b.scene.replace(/\\/g, "/").replace(/\.(tsx|ts|jsx|js)$/, "");
   return normalized.startsWith("./") || normalized.startsWith("../") ? normalized : `./${normalized}`;
+}
+
+/**
+ * Frames either side of a cut that a transition overlay covers: about 0.2s, so the whole
+ * overlay is 2 * this. Scaled with fps so the transition keeps its duration in seconds.
+ */
+export function transitionHalfFrames(fps: number): number {
+  return Math.max(2, Math.round((6 * fps) / 30));
+}
+
+/** True when some beat after the first asks for a transition other than a cut. */
+function hasTransitions(beats: BeatLike[]): boolean {
+  return beats.some((b) => b.start > 0 && typeof b.transition === "string" && b.transition !== "cut");
 }
 
 const AUTO_MUSIC_BEDS = ["music-bed.mp3"];
@@ -261,8 +276,10 @@ function renderDemoTsx(opts: {
   musicBedSource: StitchCompositionResult["musicBedSource"];
   hasMusicCues: boolean;
   hasOverrides: boolean;
+  /** Frames either side of a cut a transition overlay covers, or null when no beat has a transition. */
+  transitionHalf: number | null;
 }): string {
-  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, musicBedSource, hasMusicCues, hasOverrides } = opts;
+  const { componentName, beats, voByLanguage, baseLanguage, musicBedFile, musicBedVolume, musicBedSource, hasMusicCues, hasOverrides, transitionHalf } = opts;
   const sceneImports = beats
     .map((b) => `import { ${pascalCase(b.id)} } from "${sceneImportPath(b)}";`)
     .join("\n");
@@ -291,6 +308,39 @@ function renderDemoTsx(opts: {
   const overridesImport = hasOverrides ? `import Overrides from "./overrides";\n` : "";
   const overridesBlock = hasOverrides ? `      <Overrides />\n` : "";
 
+  // Emitted only when a beat asks for a transition, so a composition without one is
+  // byte-for-byte what it was before transitions existed.
+  const coreImport =
+    transitionHalf === null
+      ? `import { MusicClockProvider } from "@openvidstudio/core";`
+      : `import { MusicClockProvider, TransitionOverlay, type TransitionType } from "@openvidstudio/core";`;
+  const transitionConst =
+    transitionHalf === null
+      ? ""
+      : `
+// Frames either side of a cut that a transition overlay covers (about 0.2s at any fps).
+// The overlay is drawn over the cut and never moves a beat boundary, so the Series, the VO
+// and the music all keep the timing beats.json gave them.
+const TRANSITION_HALF = ${transitionHalf};
+const transitionOf = (b: object): TransitionType | "cut" =>
+  ((b as Record<string, unknown>).transition as TransitionType | undefined) ?? "cut";
+`;
+  const transitionBlock =
+    transitionHalf === null
+      ? ""
+      : `      {beats.beats
+        .filter((b) => b.start > 0 && transitionOf(b) !== "cut")
+        .map((b) => {
+          // Clamped so the overlay never starts before frame 0 or outlasts the beat it opens.
+          const half = Math.min(TRANSITION_HALF, b.start, b.duration);
+          return (
+            <Sequence key={\`transition-\${b.id}\`} from={b.start - half} durationInFrames={2 * half} layout="none">
+              <TransitionOverlay type={transitionOf(b)} length={2 * half} />
+            </Sequence>
+          );
+        })}
+`;
+
   // One component per language, all wrapping the same inner one. The picture is identical
   // across languages, so duplicating the scene tree per language would be a second copy of
   // the thing most likely to be edited.
@@ -308,7 +358,7 @@ function renderDemoTsx(opts: {
 
 import React from "react";
 import { AbsoluteFill, Audio, Sequence, Series, staticFile } from "remotion";
-import { MusicClockProvider } from "@openvidstudio/core";
+${coreImport}
 import beats from "./beats.json";
 ${hasMusicCues ? `import musicCues from "./music.cues.json";
 ` : ""}${overridesImport}${sceneImports}
@@ -325,7 +375,7 @@ ${voBlocks}
 
 const last = beats.beats[beats.beats.length - 1];
 export const DURATION_IN_FRAMES = last.start + last.duration;
-
+${transitionConst}
 // The score's grid, handed to useMusicClock(beatId) in any scene. BEAT_STARTS turns the track's
 // bars into scene-local frames.
 const MUSIC_CUES = ${hasMusicCues ? "musicCues" : "null"};
@@ -347,7 +397,7 @@ const Narrated: React.FC<{ language: string }> = ({ language }) => {
           })}
         </Series>
       </MusicClockProvider>
-      {beats.beats
+${transitionBlock}      {beats.beats
         .filter((b) => vo[b.id])
         .map((b) => (
           <Sequence key={\`vo-\${b.id}\`} from={b.start} durationInFrames={b.duration} layout="none">
@@ -539,6 +589,7 @@ function stitchComposition(input: StitchCompositionInput): StitchCompositionResu
     musicBedSource,
     hasMusicCues: musicCues !== null,
     hasOverrides,
+    transitionHalf: hasTransitions(beats) ? transitionHalfFrames(fps) : null,
   });
   fs.writeFileSync(demoPath, demoTsx, "utf8");
 
@@ -592,7 +643,9 @@ export function registerStitchComposition(server: McpServer): void {
         "Reads src/videos/<videoName>/beats.json and writes src/videos/<videoName>/<PascalName>Demo.tsx: a " +
         "SCENES map from beat id to its scaffold_scene component (imported from ./scenes/<BeatId>, the same " +
         "PascalCase convention scaffold_scene uses -- beats without a scaffolded scene file will fail to " +
-        "type-check, scaffold every beat first), a <Series> of <Series.Sequence> per beat, a VO Audio layer " +
+        "type-check, scaffold every beat first), a <Series> of <Series.Sequence> per beat (and, for each beat after the first whose transition is " +
+        "not \"cut\", a TransitionOverlay Sequence centred on the cut: drawn over it, so no beat start or " +
+        "duration moves; nothing is emitted when no beat has a transition), a VO Audio layer " +
         "per beat only where public/audio/vo/<beatId>.mp3 actually exists on disk, and a looping " +
         "full-duration music bed layer if public/audio/music-bed.mp3 exists. The scaffold ships an ambient " +
         "music-bed.mp3 with no pulse to cut against; compose_score writes an original arc-matched score to the " +

@@ -22,7 +22,10 @@ export type CamKeyframe = {
 
 type CamState = Required<Omit<CamKeyframe, "easing" | "frame">>;
 
-const CameraContext = createContext<CamState | null>(null);
+/** What useCamera() returns: the camera plus the size of the stage it is looking at. */
+export type CameraInfo = CamState & { stageWidth: number; stageHeight: number };
+
+const CameraContext = createContext<CameraInfo | null>(null);
 
 const resolve = (kfs: CamKeyframe[], frame: number): CamState => {
   const sorted = [...kfs].sort((a, b) => a.frame - b.frame);
@@ -65,6 +68,40 @@ const resolve = (kfs: CamKeyframe[], frame: number): CamState => {
 /** Where the camera is at `frame`, by the same interpolation CameraRig renders with. */
 export const resolveCamera = resolve;
 
+/** The rig's CSS perspective, in px. Layer's depth compensation and projectToScreen both use it. */
+export const CAMERA_PERSPECTIVE = 1400;
+
+/**
+ * Where a point on the stage lands on screen, through the same chain of transforms CameraRig
+ * applies (translate to the frame centre, rotateX/Y/Z, scale, translate by the focal point) and
+ * the same perspective. Pure, so overlays that must line up with the picture (a blur mask, a
+ * protected region) can place themselves without measuring the DOM.
+ */
+export const projectToScreen = (
+  cam: Pick<CamState, "x" | "y" | "scale" | "rotX" | "rotY" | "rotZ">,
+  viewportWidth: number,
+  viewportHeight: number,
+  px: number,
+  py: number,
+): { x: number; y: number } => {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  let x = (px - cam.x) * cam.scale;
+  let y = (py - cam.y) * cam.scale;
+  let z = 0;
+  // CSS applies the transform list right to left, so the point meets rotateZ, then rotateY, then rotateX.
+  const cz = Math.cos(rad(cam.rotZ));
+  const sz = Math.sin(rad(cam.rotZ));
+  [x, y] = [x * cz - y * sz, x * sz + y * cz];
+  const cy = Math.cos(rad(cam.rotY));
+  const sy = Math.sin(rad(cam.rotY));
+  [x, z] = [x * cy + z * sy, -x * sy + z * cy];
+  const cx = Math.cos(rad(cam.rotX));
+  const sx = Math.sin(rad(cam.rotX));
+  [y, z] = [y * cx - z * sx, y * sx + z * cx];
+  const k = CAMERA_PERSPECTIVE / Math.max(1, CAMERA_PERSPECTIVE - z);
+  return { x: viewportWidth / 2 + x * k, y: viewportHeight / 2 + y * k };
+};
+
 export const CameraRig: React.FC<{
   keyframes: CamKeyframe[];
   /** stage size in px; content is laid out at this size, camera crops into it */
@@ -85,13 +122,13 @@ export const CameraRig: React.FC<{
   const cam = resolve(keyframes, frame);
 
   return (
-    <CameraContext.Provider value={cam}>
+    <CameraContext.Provider value={{ ...cam, stageWidth, stageHeight }}>
       <div
         style={{
           width,
           height,
           overflow: "hidden",
-          perspective: 1400,
+          perspective: CAMERA_PERSPECTIVE,
           perspectiveOrigin: "50% 50%",
         }}
       >
@@ -121,9 +158,21 @@ export const CameraRig: React.FC<{
 
 export const useCamera = () => useContext(CameraContext);
 
+/** How far back (in px) one unit of Layer depth sits. Larger is a deeper scene and stronger parallax. */
+export const Z_STEP = 170;
+
 /**
- * Parallax + depth-of-field layer. depth 0 = focal plane (sharp, no parallax).
- * Positive depth = "behind" (moves less, blurred). Negative = foreground (moves more, blurred).
+ * A layer at a place in space: depth 0 is the focal plane, positive depth sits behind it, negative
+ * depth in front. Parallax comes from the rig's real CSS perspective, so a layer 1 unit back moves
+ * 1400 / (1400 + 170) = 0.89 as far as the focal plane when the camera pans, 2 units back 0.80, and
+ * a foreground layer moves more than 1.
+ *
+ * Each layer is scaled about the stage centre by the amount the perspective shrinks (or grows) it,
+ * so with the camera at rest on the stage centre every depth shows the same picture. Layers also
+ * blur with distance from the focal plane (`maxBlur` px per unit of depth; 0 turns it off).
+ *
+ * Layers have to be direct children of the rig's stage: a plain wrapper div in between flattens
+ * the depth. Depth orders layers in space, so a layer behind stays behind however the JSX is ordered.
  */
 export const Layer: React.FC<{
   depth?: number;
@@ -132,17 +181,16 @@ export const Layer: React.FC<{
   style?: React.CSSProperties;
   children: React.ReactNode;
 }> = ({ depth = 0, maxBlur = 10, style, children }) => {
-  const cam = useCamera();
-  const parallax = 0.06; // fraction of camera offset transferred per unit depth
-  const dx = cam ? (cam.x - 960) * depth * parallax : 0;
-  const dy = cam ? (cam.y - 540) * depth * parallax : 0;
   const blur = Math.abs(depth) * maxBlur;
+  const z = -depth * Z_STEP;
+  // Behind, the perspective divides by (P + |z|) / P; scaling by exactly that cancels it at rest.
+  const compensate = (CAMERA_PERSPECTIVE - z) / CAMERA_PERSPECTIVE;
   return (
     <div
       style={{
         position: "absolute",
         inset: 0,
-        transform: `translate(${dx}px, ${dy}px)`,
+        transform: depth === 0 ? undefined : `translateZ(${z}px) scale(${compensate})`,
         filter: blur > 0.2 ? `blur(${blur.toFixed(1)}px)` : undefined,
         ...style,
       }}

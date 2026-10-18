@@ -13,6 +13,7 @@ import {
   require,
   packageRoot,
   distDir,
+  monorepoRoot,
   monorepoTemplateDir,
   check,
   skip,
@@ -1065,6 +1066,36 @@ section(
   },
 );
 
+// ============================================================ 9. Docs
+
+section(
+  "9. docs: API.md, STYLE.md and CREATIVE.md describe the new behaviour",
+  [],
+  async () => {
+    const docs = (name) => fs.readFileSync(path.join(monorepoRoot, "packages", "docs", name), "utf8");
+    const api = docs("API.md");
+    const style = docs("STYLE.md");
+    const creative = docs("CREATIVE.md");
+    const core = fs.readFileSync(path.join(monorepoRoot, "packages", "core", "src", "index.ts"), "utf8");
+
+    const row = (doc, prop) => new RegExp("\\| `" + prop + "`").test(doc);
+    check(
+      "API.md has a row for every new DirectedShot prop (shot, protect, rackTo, blur, handheld, shake)",
+      ["shot", "protect", "rackTo", "blur", "handheld", "shake"].every((p) => row(api, p)),
+    );
+    check("API.md says depthOfField defaults to 0", /\| `depthOfField` \| `number` \| `0` \|/.test(api));
+    check("API.md has a row for Caption position and avoid", row(api, "position") && row(api, "avoid"));
+    check("API.md documents LayeredShot, MotionBlur, the handheld functions and the shot table", ["### `LayeredShot`", "### `MotionBlur`", "handheldOffset(", "impactShake(", "### Shots"].every((h) => api.includes(h)));
+    check("API.md lists every shot name", ["pushIn", "pullOut", "pan", "whip", "orbit", "dutch", "hold", "drift"].every((n) => api.includes("| `" + n + "` |")));
+    check("API.md documents E.sine and E.expo and the Layer depth rule", api.includes("E.sine") && api.includes("E.expo") && api.includes("`depth * 170`"));
+    check("every name API.md documents as new is exported from core", ["LayeredShot", "MotionBlur", "resolveShot", "SHOT_NAMES", "handheldOffset", "useHandheld", "impactShake", "useImpactShake", "captionLayout", "cursorPositionAt", "directedKeyframes", "projectToScreen"].every((n) => core.includes(n) && api.includes(n)));
+    check("STYLE.md no longer asks for blur on everything outside the focal point", !/carries gaussian blur/.test(style) && !/120-250%/.test(style));
+    check("STYLE.md says blur is opt-in and keeps captures with text at 105 to 160 percent", /opt-in/.test(style) && /105-160%/.test(style));
+    check("CREATIVE.md has the shot vocabulary with a line for every shot", ["pushIn", "pullOut", "pan", "whip", "orbit", "dutch", "hold", "drift"].every((n) => creative.includes("| `" + n + "` |")));
+    check("CREATIVE.md covers keeping text sharp, handheld and impact shake, and varying caption placement", /Keep text sharp/.test(creative) && /Handheld and impact shake/.test(creative) && /never the same spot twice in a row/.test(creative));
+  },
+);
+
 // ============================================================ run
 
 console.log("\n== cinematic camera: DirectedShot, Caption, shots, handheld, parallax, layered shots, cursor arcs ==");
@@ -1192,6 +1223,16 @@ if (!fs.existsSync(templateNodeModules)) {
 
     for (const s of sections) {
       console.log(`\n-- ${s.title}`);
+      if (s.scenes.length === 0) {
+        // Checks that read files, not a render.
+        try {
+          await s.run(null);
+        } catch (err) {
+          console.log(`  FAIL ${s.title}: ${String(err?.message ?? err).split("\n")[0]}`);
+          check(`${s.title}: the checks run`, false);
+        }
+        continue;
+      }
       const page = await browser.newPage({ viewport: { width: comp.width, height: comp.height }, deviceScaleFactor: 1 });
       const errors = [];
       page.on("pageerror", (e) => errors.push(String(e.message).split("\n")[0]));

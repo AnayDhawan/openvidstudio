@@ -4,7 +4,7 @@
 // generalized: colors come from this package's tokens by default, not one video's palette.
 
 import React from "react";
-import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { AbsoluteFill, useCurrentFrame, useVideoConfig } from "remotion";
 import { E, tween } from "./motion";
 import { color } from "./tokens";
 
@@ -43,27 +43,34 @@ export const Atmosphere: React.FC<{
   );
 };
 
-/** A faint dot grid on the stage, for a texture pass behind constructed (non-capture) panels. */
+/**
+ * A faint dot grid on the stage, for a texture pass behind constructed (non-capture) panels.
+ * Covers the composition by default (1920x1080 in 16:9, 1080x1920 in 9:16); w/h override it for
+ * a grid that fills a bigger stage than the frame.
+ */
 export const DotGrid: React.FC<{
   gap?: number;
   color?: string;
   opacity?: number;
   w?: number;
   h?: number;
-}> = ({ gap = 36, color: dotColor = "#ffffff", opacity = 0.05, w = 1920, h = 1080 }) => (
-  <div
-    style={{
-      position: "absolute",
-      left: 0,
-      top: 0,
-      width: w,
-      height: h,
-      opacity,
-      backgroundImage: `radial-gradient(${dotColor} 1.4px, transparent 1.6px)`,
-      backgroundSize: `${gap}px ${gap}px`,
-    }}
-  />
-);
+}> = ({ gap = 36, color: dotColor = "#ffffff", opacity = 0.05, w, h }) => {
+  const video = useVideoConfig();
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        width: w ?? video.width,
+        height: h ?? video.height,
+        opacity,
+        backgroundImage: `radial-gradient(${dotColor} 1.4px, transparent 1.6px)`,
+        backgroundSize: `${gap}px ${gap}px`,
+      }}
+    />
+  );
+};
 
 /** Brief exposure flash on a hard hit (a cut, a reveal landing). */
 export const Flash: React.FC<{
@@ -85,10 +92,18 @@ export const Black: React.FC<{ from: number; to?: number }> = ({ from, to }) => 
   return <AbsoluteFill style={{ background: "#000" }} />;
 };
 
-/** Letterbox bars for a cinematic moment. `amount` scales the bar height, 1 = full 64px. */
-export const Letterbox: React.FC<{ amount?: number }> = ({ amount = 1 }) => (
-  <>
-    <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: 64 * amount, background: "#000" }} />
-    <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 64 * amount, background: "#000" }} />
-  </>
-);
+/**
+ * Letterbox bars for a cinematic moment. `amount` scales the bar height, 1 = 64px on a 1080px
+ * tall frame. The bars are a share of the frame height (64/1080), so a 1920px tall 9:16 frame gets
+ * bars of about 114px and a 1080p frame gets exactly the 64px it always did.
+ */
+export const Letterbox: React.FC<{ amount?: number }> = ({ amount = 1 }) => {
+  const { height } = useVideoConfig();
+  const bar = 64 * amount * (height / 1080);
+  return (
+    <>
+      <div style={{ position: "absolute", left: 0, right: 0, top: 0, height: bar, background: "#000" }} />
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: bar, background: "#000" }} />
+    </>
+  );
+};

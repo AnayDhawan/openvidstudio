@@ -10,10 +10,9 @@ for-profit companies with up to 3 employees; a larger company needs a separate R
 License ([remotion.pro](https://www.remotion.pro/license)) to render with it. See the README's
 License section.
 
-Install from a clone (`pnpm install`, `pnpm build`, then point your MCP client at
-`packages/mcp-server/dist/stdio.js`). The npm package `@openvidstudio/mcp-server` is behind the
-repo (0.1.0, about 27 tools, no director mode) because publishing is blocked, so do not rely on
-`npx` for the current tool set.
+Install by adding `npx -y @openvidstudio/mcp-server` to your MCP client's config (command `npx`, args
+`-y` and `@openvidstudio/mcp-server`). To run from source instead, clone the repo, `pnpm install`, `pnpm build`,
+then point the client at `packages/mcp-server/dist/stdio.js`.
 
 This file follows the [llms.txt](https://llmstxt.org/) convention: a short, stable,
 plain-language map of the project for language models and the people using them. Keep it

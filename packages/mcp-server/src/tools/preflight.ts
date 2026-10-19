@@ -7,6 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { chromium, resolvedPlaywrightVersion } from "@openvidstudio/capture";
 import { resolveProjectRoot, spawnCapture } from "../util";
 import { loadConfig } from "../config";
+import { probeEdgeTts } from "./generateNarration";
 import { PREFLIGHT_BENCHMARK_COMPOSITION_ID } from "./stitchComposition";
 import { runTool } from "./mcp";
 
@@ -321,6 +322,22 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
     blocking: false,
   });
 
+  // Having edge-tts installed does not mean it can synthesize: Microsoft's service refuses some client
+  // versions with a 403, and the first symptom is a narration run that fails on every beat. So speak one
+  // word. Skipped for any other engine, and when the command is missing (the narration check above says so).
+  if (config.narration.engine === "edge-tts" && narration) {
+    const probe = probeEdgeTts();
+    checks.push({
+      name: "edge-tts",
+      ok: probe.ok,
+      detail: probe.ok
+        ? `edge-tts ${probe.version ?? "(version unknown)"} synthesized a test word`
+        : `edge-tts ${probe.version ?? "(version unknown)"} could not synthesize: ${probe.error}`,
+      fix: probe.ok ? undefined : "pip install -U edge-tts (Microsoft refuses some older versions with a 403; 7.3 or newer works)",
+      blocking: false,
+    });
+  }
+
   // compose_score needs a real python with its DSP stack importable, not just a python on
   // PATH, so this checks the same import line the tool itself depends on rather than
   // guessing from the interpreter's presence alone. Same python-then-python3 fallback order
@@ -368,7 +385,10 @@ export function registerPreflight(server: McpServer): void {
         "so a render reuses that browser instead of downloading its own, which fails with no network). " +
         "Every failure names the fix with the command for this platform, rather than describing a symptom. " +
         "Run it before init_project on a new machine: without it a missing dependency surfaces several " +
-        "steps later, often after a long render has already started. Narration is reported as non blocking, " +
+        "steps later, often after a long render has already started. When the narration engine is edge-tts, it " +
+        "also speaks one short word to a temp file (the edge-tts check), because Microsoft refuses some client " +
+        "versions with a 403 and the command existing proves nothing; a failure shows the installed version, " +
+        "the error line and pip install -U edge-tts. Narration is reported as non blocking, " +
         "since a silent video still renders. Pass benchmark: true to also render ~60 frames of a fixed " +
         "benchmark composition (init_project seeds it, so this works even before any real video is planned) " +
         "and report real frames/sec plus CPU count in benchmarkResult -- off by default since it costs a " +

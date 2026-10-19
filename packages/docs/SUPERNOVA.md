@@ -104,7 +104,7 @@ One fixed voice for the handle, so a viewer knows it by ear and lessons can be m
 
 | | |
 |---|---|
-| Engine | `edge-tts` 7.3 or newer (fast, and it gives word timings). It sends the script text to Microsoft, which is fine for public lesson scripts. Version 7.2.8 was refused with a 403 in October 2026: `pip install -U edge-tts` fixes it |
+| Engine | `edge-tts` (fast, and it gives word timings). It sends the script text to Microsoft, which is fine for public lesson scripts. `preflight` speaks one word to check it works: Microsoft refused 7.2.8 with a 403 in October 2026, and `pip install -U edge-tts` fixes it |
 | Voice | `en-US-AndrewNeural` |
 | Rate | the engine's default, `+0%`. Pace comes from the script (2.3 to 2.9 words per second); the stretch is clamped to 0.9 to 1.12 so it never sounds processed |
 | Final pass | `omnivoice` gives better control but runs about 40 times slower than real time on a CPU: use it for a last pass, never to iterate |

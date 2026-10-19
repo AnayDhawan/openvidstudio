@@ -28,7 +28,7 @@ Hook, picture, set up, derive, use it, aha, close. In that order, every lesson. 
 
 - `init_project` with `mode: "supernova"` (and the lesson's `name`). It stores `production.mode`, makes the frame
   1080x1920, and installs `@openvidstudio/stem` with its fonts and the maths renderer.
-- `preflight` once. `edge-tts` must be 7.3 or newer (`pip install -U edge-tts`; 7.2.8 gets a 403).
+- `preflight` once. Its `edge-tts` check speaks one word, so a refused connection (7.2.8 gets a 403) shows up here with the fix, `pip install -U edge-tts`.
 - `plan_production` with a time budget (a lesson has no creative level). Show the plan.
 
 ## 2. The concept card

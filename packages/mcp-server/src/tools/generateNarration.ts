@@ -1,5 +1,6 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -223,6 +224,48 @@ function readWords(file: string): NarrationWord[] | null {
   }
 }
 
+/** The last non-empty line of a process's stderr, trimmed to something a warning can carry. */
+export function lastErrorLine(stderr: string | undefined | null): string {
+  const lines = (stderr ?? "").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const line = lines[lines.length - 1] ?? "";
+  return line.length > 300 ? `${line.slice(0, 297)}...` : line;
+}
+
+/** Runs the edge-tts command, or its Python module when the command is not on PATH. */
+function runEdgeTts(args: string[]): SpawnSyncReturns<string> {
+  const r = spawnSync("edge-tts", args, { encoding: "utf8" });
+  return r.error ? spawnSync("python", ["-m", "edge_tts", ...args], { encoding: "utf8" }) : r;
+}
+
+export interface EdgeTtsProbe {
+  ok: boolean;
+  /** The installed version, when it could be read. */
+  version?: string;
+  /** Present when ok is false: the last stderr line from edge-tts. */
+  error?: string;
+}
+
+/**
+ * Asks edge-tts to speak one short word to a temp file. Microsoft's service refuses connections from
+ * some versions of the client (a 403 from speech.platform.bing.com), and the only symptom otherwise is a
+ * narration run that fails on every beat.
+ */
+export function probeEdgeTts(): EdgeTtsProbe {
+  const versionRun = runEdgeTts(["--version"]);
+  const version = versionRun.error || versionRun.status !== 0 ? undefined : (versionRun.stdout ?? "").trim().split(/\r?\n/)[0] || undefined;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-edge-probe-"));
+  const out = path.join(dir, "probe.mp3");
+  try {
+    const r = runEdgeTts(["--voice", "en-US-AndrewNeural", "--text", "Hello", "--write-media", out]);
+    const produced = fs.existsSync(out) && fs.statSync(out).size > 0;
+    if (!r.error && r.status === 0 && produced) return { ok: true, version };
+    const error = r.error ? r.error.message : lastErrorLine(r.stderr) || `edge-tts exited with status ${r.status} and wrote no audio`;
+    return { ok: false, version, error };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 function synthesize(
   engine: NarrationEngine,
   voice: string,
@@ -231,6 +274,7 @@ function synthesize(
   omni: OmnivoiceOptions = {},
   wordsOut?: string,
 ): { ok: boolean; error?: string; words?: NarrationWord[] } {
+  let lastError = "";
   for (let attempt = 0; attempt < 3; attempt++) {
     fs.rmSync(out, { force: true });
     let r;
@@ -244,6 +288,7 @@ function synthesize(
       if (!r.error && r.status === 0 && fs.existsSync(out) && probeDuration(out) > 0.3) {
         return { ok: true, words: readWords(wordsOut) ?? undefined };
       }
+      lastError = lastErrorLine(r.stderr) || lastError;
       // fall through to the plain command line, which gives audio and no timings
     }
     if (engine === "edge-tts") {
@@ -280,8 +325,11 @@ function synthesize(
     // A size check alone is not enough: a truncated download can clear it and still
     // be undecodable, so this validates by actually probing the file.
     if (!r.error && fs.existsSync(out) && probeDuration(out) > 0.3) return { ok: true };
+    lastError = (r.error ? r.error.message : lastErrorLine(r.stderr)) || lastError;
   }
-  return { ok: false, error: `no usable audio after 3 attempts` };
+  const cause = lastError ? ` (${lastError})` : "";
+  const hint = engine === "edge-tts" && lastError ? " Run preflight to check edge-tts; pip install -U edge-tts often fixes a refused connection." : "";
+  return { ok: false, error: `no usable audio after 3 attempts${cause}.${hint}` };
 }
 
 export function runGenerateNarration(input: GenerateNarrationInput): GenerateNarrationResult {

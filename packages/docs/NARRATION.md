@@ -51,11 +51,11 @@ Then regenerate with `overwrite: true`.
 
 | Engine | Quality | Speed | Runs locally |
 |---|---|---|---|
-| `edge-tts` (default, 7.3 or newer: 7.2.8 got a 403 from Microsoft in October 2026, `pip install -U edge-tts` fixes it) | good | about a minute for five minutes of speech | no, sends text to Microsoft |
+| `edge-tts` (default; `preflight` synthesizes one word to check it, because Microsoft refused 7.2.8 with a 403 in October 2026 and `pip install -U edge-tts` fixes it) | good | about a minute for five minutes of speech | no, sends text to Microsoft |
 | `say` (macOS) | fair | instant | yes |
 | `espeak` | poor | instant | yes |
 
-`edge-tts` needs `pip install edge-tts`.
+`edge-tts` needs `pip install edge-tts`. When a line comes back with "no usable audio", the warning ends with the last error line edge-tts printed.
 
 **If the text must not leave the machine**, use `say` on macOS, or wire up a local
 neural model. A local model on CPU is slow: one measured at a real time factor of

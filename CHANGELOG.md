@@ -13,6 +13,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`render_video` no longer blocks every Supernova project at the brand-lock gate (#136).** A project with `production.mode: "supernova"` skips the gate and reports `brandLocked: false` with a `brandLockSkipReason`; a standard project without `src/brand.ts` still gets the gate. The `skipBrandLock: true` workaround is gone from SUPERNOVA.md and the supernova skill.
 - **`validate_scenes` no longer warns about camera keyframes on every Supernova scene (#137).** In a lesson the camera checks (fewer than two keyframes, a camera that never moves) are dropped; a standard project keeps both. The "ignore it" lines are gone from SUPERNOVA.md and the skill.
 
+### Added
+
+- **`preflight` checks that edge-tts can synthesize, and a refusal is reported with its cause (#140).** With the edge-tts engine, `preflight` shows the installed version and speaks one word to a temp file; on failure it shows the error line and `pip install -U edge-tts`. `generate_narration`'s "no usable audio" warning now ends with edge-tts's last stderr line. The version notes in NARRATION.md, SUPERNOVA.md and the skill now point at `preflight`.
+
 ## [1.3.1] - 2026-10-19
 
 The packages are ready for npm: each now ships a README, and `@openvidstudio/mcp-server` and `@openvidstudio/stem`

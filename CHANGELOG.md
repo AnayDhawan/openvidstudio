@@ -23,6 +23,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Supernova primitives, round 2: `Wave`, `Orbit`, `VectorField` (#141).** `Wave` is a travelling or standing sine wave with wavelength, amplitude and phase labelled, exact crest spacing and speed, and an optional Spark on a crest. `Orbit` is a body on a circular or elliptical orbit (Kepler's equation) with velocity and force arrows exactly `magnitude * scale` px long and scale bars. `VectorField` is arrows on a grid for `(x, y) => [fx, fy]`, each exactly `|f| * scale` px, with optional deterministic field lines. Each has real-frame tests at both frame sizes, an API.md entry with a still, and a sample scene.
 - **Supernova primitives, round 3: `MatrixGrid`, `GraphViz`, `TreeViz`, `ComplexityCurve` (#142).** `MatrixGrid` shows a 2x2 matrix acting on a grid, the unit square and i-hat and j-hat. `GraphViz` colours nodes by search role with a Spark walking them, plus `bfsOrder`, `shortestPath` and `bfsSteps`. `TreeViz` builds a binary search tree by insert with a Spark walking to each new node and in, pre, post and level order highlighting. `ComplexityCurve` plots n, n log2 n and n squared on shared axes with a marker at a chosen n. Each has real-frame tests at both frame sizes, an API.md entry with a still, and a sample scene.
 
+### Changed
+
+- **The install is `npx -y @openvidstudio/mcp-server`.** All four packages are on npm at 1.3.1 (`@openvidstudio/capture`, `core`, `stem` and `mcp-server`), so the README, `llms.txt` and the package READMEs lead with the `npx` config and keep the clone as the way to run from source. The note saying the npm package was stale is gone. `@openvidstudio/capture` can be installed alone with `npm install @openvidstudio/capture`.
+
+### Docs
+
+- **The README's status list still said lesson videos "do not work today".** It now says Supernova is built and tested and no lesson has been published yet.
+
 ## [1.3.1] - 2026-10-19
 
 The packages are ready for npm: each now ships a README, and `@openvidstudio/mcp-server` and `@openvidstudio/stem`

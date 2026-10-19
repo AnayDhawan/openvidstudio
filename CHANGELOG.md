@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-19
+
+Director mode, a cinematic camera, native 9:16, and a score that does not tick. Lesson videos
+(Supernova, tracked in #107) are not in this release. Install from a clone: the npm package is
+still 0.1.0 while publishing is blocked.
+
 ### Docs
 
 - **README and CONTRIBUTING rewritten to be plainer and more welcoming.** The README now explains

@@ -1,6 +1,6 @@
 {
   "name": "@openvidstudio/stem",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Supernova mode: the Void + Spark design system and the STEM lesson primitives for openvidstudio.",
   "license": "Apache-2.0",
   "engines": {
@@ -14,7 +14,7 @@
     "public"
   ],
   "peerDependencies": {
-    "@openvidstudio/core": "^1.1.0",
+    "@openvidstudio/core": "^1.2.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "remotion": "4.0.534"

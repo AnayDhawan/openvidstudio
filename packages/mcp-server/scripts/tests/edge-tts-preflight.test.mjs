@@ -15,6 +15,7 @@ import { distDir, check, skip, finish } from "./_harness.mjs";
 if (process.platform === "win32") {
   skip("edge-tts 403 handling", "the fake edge-tts is a shell script");
   finish();
+  process.exit(process.exitCode ?? 0);
 }
 
 const ERROR_LINE = "aiohttp.client_exceptions.WSServerHandshakeError: 403, message='Invalid response status'";

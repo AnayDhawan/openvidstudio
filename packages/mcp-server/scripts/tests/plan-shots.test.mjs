@@ -112,12 +112,14 @@ console.log("\n== Part 26: plan_shots ranks from real repo signal ==");
   check("a real repo produces a ranked list", real.candidates.length === 5);
   check("...in descending order", real.candidates.every((c, i) => i === 0 || real.candidates[i - 1].score >= c.score));
   check("...every candidate carries its evidence", real.candidates.every((c) => c.evidence.length > 0));
-  // Compare the two features' own scores rather than asserting who is on top: what leads depends on
-  // the changelog's current entries, which change with every release, and this repo's does. Ask for
-  // every candidate: with only five, a long [Unreleased] pushes the README's fourth feature off the list.
+  // Do not assert who outscores whom on this repo's own README. A candidate that a changelog entry also
+  // names merges with it and gains +18, so any pair of README features can swap places depending on what
+  // [Unreleased] says that week (the first feature tied the fourth once a release added entries). What
+  // does not change is that every feature the README lists is a candidate and says where it was listed,
+  // so check that, over every candidate rather than the top five (a long [Unreleased] pushes some off).
   const all = await runPlanShots({ repoRoot: path.join(packageRoot, "..", ".."), maxShots: 200 });
-  const scoreOf = (position) => all.candidates.find((c) => c.evidence.join(" ").includes(`lists this ${position} under`))?.score;
-  check("...the README's first feature outranks its fourth", scoreOf("first") !== undefined && scoreOf("fourth") !== undefined && scoreOf("first") > scoreOf("fourth"));
+  const listed = (position) => all.candidates.some((c) => c.evidence.join(" ").includes(`lists this ${position} under`));
+  check("...the README's first four features are all candidates, each saying where it was listed", ["first", "second", "third", "fourth"].every(listed));
   // A thin result should be explained rather than mysterious.
   check("...and missing signals are named", real.signalsMissing.some((m) => m.includes("routes")));
   // This repo has no routes and does ship a command, so recommending a reconstructed panel

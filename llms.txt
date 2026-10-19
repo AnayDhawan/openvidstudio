@@ -45,7 +45,7 @@ current when the links below move, and keep it short: it is an index, not docume
 ## Supernova mode
 
 - [SUPERNOVA.md](https://github.com/AnayDhawan/openvidstudio/blob/main/packages/docs/SUPERNOVA.md): short animated
-  STEM lessons (one concept, 60 to 90 seconds, 1080x1920, narrated). Made with `init_project` `mode: "supernova"`, the
+  STEM lessons (one concept, up to two minutes, 1080x1920, narrated, the same seven-beat arc every time). Made with `init_project` `mode: "supernova"`, the
   `@openvidstudio/stem` primitives, `check_script` and word-timed narration. The pieces work and are tested; no finished
   lesson has been published yet.
 

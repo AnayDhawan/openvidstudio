@@ -135,6 +135,35 @@ console.log("\n== the tool reads beats.json, concept.json and the scene from dis
   check("a beat's own `scene` path is read instead of scenes/<BeatId>.tsx", viaScenePath.findings.every((f) => f.check !== "spoken"));
 }
 
+console.log("\n== the length budget and the reference (a lesson fits two minutes and says where it sits) ==");
+{
+  // Ten seconds a beat: twelve beats is exactly 120 seconds, thirteen goes over.
+  const tenSeconds = (id, vo) => beat(id, vo, 300);
+  const filler = (n) => Array.from({ length: n }, (_, i) => tenSeconds(`b${i}`, "A slope tells us how steep a line is, and a steep line rises fast over a short run."));
+  const lesson = (n) => [tenSeconds("hook", "How steep is a hill at one exact point? A slope can tell us."), ...filler(n - 2), tenSeconds("check", "Can you say what a slope is in one sentence?")];
+  const card = { goal: "g", terms: [], example: "e" };
+  const atBudget = checkScriptLogic(file(lesson(12)), card);
+  const over = checkScriptLogic(file(lesson(13)), card);
+  const lengthFinding = over.findings.find((f) => f.check === "length");
+  check("exactly 120 seconds is inside the default budget", count(atBudget, "length") === 0);
+  check("130 seconds draws one length error that names the budget", count(over, "length") === 1 && lengthFinding.severity === "error" && /130\.0 seconds.*120 second budget/.test(lengthFinding.message));
+  check("...and ok is false because of it", over.ok === false);
+  check("control: the same script with maxSeconds 150 draws none", count(checkScriptLogic(file(lesson(13)), { ...card, maxSeconds: 150 }), "length") === 0);
+  check("a script with no durations has no length to measure", count(checkScriptLogic({ fps: 30, beats: [{ id: "a", vo: "How steep is a hill? A slope tells us." }] }, card), "length") === 0);
+
+  const REF = { ...card, reference: "IB Physics A.1 Kinematics", referenceSpoken: "I B Physics, topic A one, kinematics" };
+  const closing = beat("end", "Can you say what a slope is in one sentence?");
+  const said = checkScriptLogic(file([beat("hook", "This is I B Physics, topic A one, kinematics. How steep is a hill at one point?"), closing]), REF);
+  const missed = checkScriptLogic(file([beat("hook", "How steep is a hill at one point? A slope can tell us."), closing]), REF);
+  const unsaid = checkScriptLogic(file([beat("hook", "How steep is a hill at one point? A slope can tell us."), closing]), { ...card, reference: "IB Physics A.1 Kinematics" });
+  check("an opening beat that says the reference draws no reference finding", count(said, "reference") === 0);
+  check("an opening beat that does not say it draws one reference error", count(missed, "reference") === 1 && missed.findings.find((f) => f.check === "reference").severity === "error");
+  check("a reference with no referenceSpoken draws a warning, not an error", count(unsaid, "reference") === 1 && unsaid.findings.find((f) => f.check === "reference").severity === "warning" && unsaid.ok === true);
+  check("a card with no reference is not asked for one", count(checkScriptLogic(file([beat("hook", "How steep is a hill at one point? A slope can tell us."), closing]), card), "reference") === 0);
+  const late = checkScriptLogic(file([beat("hook", "How steep is a hill at one point? A slope can tell us."), beat("mid", "This is I B Physics, topic A one, kinematics. A slope is a steepness."), closing]), REF);
+  check("the reference is only looked for in the first beat", count(late, "reference") === 1);
+}
+
 console.log("\n== registered like the other tools ==");
 {
   const tools = createMcpServer()._registeredTools;

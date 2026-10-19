@@ -38,8 +38,8 @@ const jsonBlocks = [...doc.matchAll(/```json\n([\s\S]*?)\n```/g)].map((m) => JSO
 const cards = jsonBlocks.filter((j) => typeof j.goal === "string" && Array.isArray(j.terms) && typeof j.example === "string");
 check("the doc carries two concept cards that parse, a template and the projectile example", cards.length === 2);
 const projectile = cards.find((c) => /projectile/.test(c.terms.join(" ")));
-const rows = [...doc.matchAll(/^\| (hook|picture|split|numbers|aha|check) \| (.+) \|$/gm)].map((m) => ({ id: m[1], vo: m[2] }));
-check("the example script has its six beats", rows.length === 6);
+const rows = [...doc.matchAll(/^\| (hook|picture|set-up|derive|use-it|aha|close) \| (.+) \|$/gm)].map((m) => ({ id: m[1], vo: m[2] }));
+check("the example script has the seven beats of the arc, in order", rows.length === 7 && rows.map((r) => r.id).join(",") === "hook,picture,set-up,derive,use-it,aha,close");
 const { checkScriptLogic } = require(path.join(distDir, "tools", "checkScript.js"));
 const { validateBeatsLogic } = require(path.join(distDir, "tools", "validateBeats.js"));
 const FPS = 30;
@@ -59,7 +59,8 @@ const beatsFile = { fps: FPS, narration: "voice", production: { mode: "supernova
   check("...and with no warnings either", script.findings.filter((f) => f.severity === "warning").length === 0);
   const valid = validateBeatsLogic(beatsFile);
   check("the example script's beats pass validate_beats at 2.6 words a second", valid.valid === true);
-  check("its numbers are the card's worked example (20, 45, 10, 40)", ["20", "45", "10", "40"].every((n) => rows.map((r) => r.vo).join(" ").includes(n)) && ["20", "45", "10", "40"].every((n) => projectile.example.includes(n)));
+  check("its numbers are the card's worked example (20, 30, 2.04, 35.3)", ["twenty", "thirty", "two point oh four", "thirty-five point three"].every((n) => rows.map((r) => r.vo).join(" ").includes(n)) && ["20", "30", "2.04", "35.3"].every((n) => projectile.example.includes(n)));
+  check("the card carries a reference that its first beat says, and a length budget", typeof projectile.reference === "string" && typeof projectile.referenceSpoken === "string" && script.findings.every((f) => f.check !== "reference" && f.check !== "length"));
 }
 
 console.log("\n== the steps work in order on a real project ==");
@@ -100,10 +101,11 @@ ${body}
   const w = {
     Hook: `      <Spark subject="physics" path={fall(0.9, { x: width * 0.15, y: height * 0.55, vx: 9, vy: -24 })} />`,
     Picture: `      <Spark subject="physics" path={fall(0.9, { x: width * 0.15, y: height * 0.55, vx: 9, vy: -24 })} />`,
-    Split: `      <Axes box={{ x: 130, y: 700, width: 820, height: 500 }} xRange={[0, 48]} yRange={[0, 14]} subject="physics"><Plot fn={(x) => x - (x * x) / 40} domain={[0, 40]} /></Axes>`,
-    Numbers: `      <Equation tex={String.raw\`v = 20\\ \\mathrm{m/s}\`} spoken="v equals twenty metres a second" size={90} />`,
+    SetUp: `      <Axes box={{ x: 130, y: 700, width: 820, height: 500 }} xRange={[0, 48]} yRange={[0, 14]} subject="physics"><Plot fn={(x) => x - (x * x) / 40} domain={[0, 40]} /></Axes>`,
+    Derive: `      <Equation tex={String.raw\`x = v\\cos\\theta\\,t\`} spoken="x equals v cosine theta times t, and then some" size={90} />`,
+    UseIt: `      <Equation tex={String.raw\`v = 20\\ \\mathrm{m/s}\`} spoken="twenty metres a second" size={90} />`,
     Aha: `      <Nova at={10} duration={40} subject="physics"><div style={{ position: "absolute", left: 140, top: 900, width: 800, height: 120, background: "#FFB347" }} /></Nova>`,
-    Check: `      <Spark subject="physics" path={fall(0.9, { x: width * 0.15, y: height * 0.55, vx: 9, vy: -24 })} />`,
+    Close: `      <Spark subject="physics" path={fall(0.9, { x: width * 0.15, y: height * 0.55, vx: 9, vy: -24 })} />`,
   };
   for (const [name, body] of Object.entries(w)) fs.writeFileSync(path.join(dir, `${name}.tsx`), scene(name, body));
   const stitched = runStitchComposition({ projectRoot: root, videoName: "projectile" });
@@ -111,18 +113,14 @@ ${body}
   const script = runCheckScript({ projectRoot: root, videoName: "projectile" });
   const spoken = script.findings.filter((f) => f.check === "spoken");
   console.log(`  check_script with scenes on disk: ${JSON.stringify(script.findings.map((f) => `${f.check}@${f.beatId}`))}`);
-  check("step 6: check_script reads the Equation's spoken string from its scene and compares it with the narration (this one is not in the narration: caught)", spoken.length === 1 && spoken[0].beatId === "numbers");
-  fs.writeFileSync(path.join(dir, "Numbers.tsx"), scene("Numbers", w.Numbers.replace("v equals twenty metres a second", "leaves at 20 metres a second, at 45 degrees")));
-  const fixedBeats = JSON.parse(fs.readFileSync(path.join(videoDir, "beats.json"), "utf8"));
+  check("step 6: check_script reads the Equation's spoken string from its scene and compares it with the narration (this one is not in the narration: caught)", spoken.length === 1 && spoken[0].beatId === "derive");
   check("step 6: with the spoken string matching the narration the script passes", (() => {
-    const numbersBeat = fixedBeats.beats.find((b) => b.id === "numbers");
-    numbersBeat.vo = numbersBeat.vo.replace("Say it leaves at 20 metres a second, at 45 degrees.", "Say it leaves at 20 metres a second, at 45 degrees.");
-    fs.writeFileSync(path.join(dir, "Numbers.tsx"), scene("Numbers", `      <Equation tex={String.raw\`v = 20\\ \\mathrm{m/s}\`} spoken="it leaves at 20 metres a second" size={90} />`));
+    fs.writeFileSync(path.join(dir, "Derive.tsx"), scene("Derive", w.Derive.replace(", and then some", "")));
     return runCheckScript({ projectRoot: root, videoName: "projectile" }).findings.every((f) => f.check !== "spoken");
   })());
   const rendered = await runValidateScenesFull({ projectRoot: root, videoName: "projectile", render: true });
   console.log(`  validate_scenes: ${JSON.stringify(rendered.findings.filter((f) => f.severity === "error").map((f) => [f.beatId, f.check, f.message.slice(0, 400)]))}`);
-  check("step 6: validate_scenes with render measured all six beats", rendered.render?.beatsMeasured === 6 && rendered.render.beatsSkipped.length === 0 && rendered.mode === "supernova");
+  check("step 6: validate_scenes with render measured all seven beats", rendered.render?.beatsMeasured === 7 && rendered.render.beatsSkipped.length === 0 && rendered.mode === "supernova");
   check("step 6: ...and reports no errors (no crop, no glow-budget error)", rendered.findings.filter((f) => f.severity === "error").length === 0);
   const desc = runWriteDescription({ projectRoot: root, videoName: "projectile" });
   check("step 7: write_description says the video is a constructed explanation", fs.readFileSync(desc.path, "utf8").includes("This video is a constructed explanation, not footage."));

@@ -94,31 +94,89 @@ A lesson video (production mode `"supernova"`, see PIPELINE.md) is won or lost o
 visuals illustrate it. These rules are for a lesson, in addition to the pacing above (which still
 applies: 2.3 to 2.9 words per second, checked by `validate_beats`). `check_script` lints them.
 
-Start from a **concept card**, `src/videos/<name>/concept.json`: `{ "goal": "tell why a derivative is a
-slope", "terms": ["slope", "derivative"], "example": "a ball rolling down a hill" }`. The goal is what
-the viewer can do afterwards, the terms are the two or three that need defining, and the example is the
-one thing the whole lesson keeps coming back to. Get the script approved before any scene is built.
+A lesson explains **one concept in up to two minutes**, and every lesson has the same shape so a viewer
+knows what is coming. A series (a channel, a course) keeps that shape constant; only the content changes.
+
+Start from a **concept card**, `src/videos/<name>/concept.json`:
+
+```json
+{
+  "goal": "explain why a projectile is two independent motions, and use that to find its range",
+  "terms": ["projectile", "components"],
+  "example": "a ball launched at 20 m/s at 30 degrees, with g = 9.81 m/s squared: it lands 35.3 m away",
+  "reference": "Physics A.1 Kinematics",
+  "referenceSpoken": "physics, topic A one, kinematics",
+  "maxSeconds": 120
+}
+```
+
+The goal is what the viewer can do afterwards, the terms are the two or three that need defining, and the
+example is the one thing the whole lesson keeps coming back to, with its real numbers. `reference` is
+where the lesson sits (a syllabus chapter code, "Part 2 of 4"), as it is written on screen, and
+`referenceSpoken` is how it is said; both are optional, and when they are set the opening beat has to say
+it. `maxSeconds` is the length budget and defaults to 120. Get the script approved before any scene is built.
+
+### The arc
+
+Seven beats, in this order. A beat can take more than one scene, and a lesson that has nothing to derive
+(a definition, a classification) replaces the derive beat with a second picture, but never reorders
+the others. The times are for a 120 second lesson; shrink them in proportion for a shorter one.
+
+| # | Beat | What it does | About |
+|---|---|---|---|
+| 1 | Hook | A question or a surprising fact a beginner can feel, in the first sentence. Then say where the lesson sits: the `referenceSpoken` | 10 s |
+| 2 | Picture | The diagram starts here, before any formula. Say what the viewer is looking at in everyday words, and define each new term at first use | 20 s |
+| 3 | Set up | Name the quantities with their symbols and units, and state the assumptions ("no air resistance", "level ground"). Label them on the diagram | 15 s |
+| 4 | Derive | Build the formula line by line from things the viewer has already accepted. One `Equation` per line, each with its `spoken` form, and say why each step is allowed | 35 s |
+| 5 | Use it | One worked example with the real numbers and their units | 20 s |
+| 6 | Aha | The result that generalises or surprises, and where it stops being true (the assumption that breaks) | 10 s |
+| 7 | Close | A one-line recap, then the check question. End on the question and let the last frame hold | 10 s |
+
+About 270 to 330 words fit (2.3 to 2.9 words per second on plain prose; maths-heavy lines are read slower,
+nearer 2.2). The viewer should never wait more than about 8 seconds without something on screen changing,
+and the diagram's first element is on screen inside the first 15 seconds.
+
+### Rules
 
 1. **Hook in the first sentence**: a question or a surprising fact, with a number if there is one. Never
    "in this video".
-2. **Intuition and a concrete example before any formula.** The formula arrives as a shortcut for
+2. **Say where it sits** in the first beat, if the card has a `reference`.
+3. **Intuition and a concrete example before any formula.** The formula arrives as a shortcut for
    something the viewer already sees.
-3. **Define every term in plain words at first use** ("a slope is how steep a line is"), at most two new
+4. **Define every term in plain words at first use** ("a slope is how steep a line is"), at most two new
    terms in a beat.
-4. **One idea per beat. Sentences of about 14 words or fewer**, in spoken English, at about grade 8 or
+5. **One idea per beat. Sentences of about 14 words or fewer**, in spoken English, at about grade 8 or
    below. A lesson is heard once.
-5. **Write maths as it is spoken.** Each `Equation` carries a `spoken` string ("x squared plus one") that
+6. **Write maths as it is spoken.** Each `Equation` carries a `spoken` string ("x squared plus one") that
    must appear in the narration of its beat.
-6. **End with a one-line recap, then a check question** the viewer can answer in their head. The last
+7. **Derive, do not announce.** A derivation shows each step: what is assumed, what is substituted, what
+   cancels. "It can be shown that" is not a derivation. If a step cannot fit in the time, it is a
+   Part 2, not a faster voice.
+8. **End with a one-line recap, then a check question** the viewer can answer in their head. The last
    beat ends with a question mark.
 
-`check_script` reports each of these as a finding on a beat: average sentence length (warning above 16
-words), Flesch-Kincaid reading level (warning above grade 9), a term used with no definition beside it
-(note), more than two new terms in a beat (warning), an `Equation`'s `spoken` string missing from the
-narration (error), a hook that is not a question or does not hold a number (warning) or opens "in this
-video" (error), pace against the beat length (error, the same budget as `validate_beats`), and a last
-beat that does not end with a question (error). It counts and matches; it cannot tell you the
-explanation is good, so listen to it.
+### Correctness
+
+The linter counts and matches; it cannot tell that a formula is right. Before a script is approved:
+
+- Write the derivation in a file next to the script (`derivation.md`), one line per step with its reason.
+- Check every step and every number on screen with code (plain Python or sympy), not by hand: the
+  symbolic result, the worked example, and the units (does the result have the dimensions it should?).
+- Compute the numbers a scene shows from the same code that checked them, rather than typing them twice.
+- Name the assumptions and one place the result fails.
+- Have someone who knows the subject read the derivation and the script before a scene is built.
+
+### What `check_script` reports
+
+Each finding points at a beat: average sentence length (warning above 16 words), Flesch-Kincaid reading
+level (warning above grade 9), a term used with no definition beside it (note), more than two new terms in
+a beat (warning), an `Equation`'s `spoken` string missing from the narration (error), a hook that is not a
+question or does not hold a number (warning) or opens "in this video" (error), pace against the beat length
+(error, the same budget as `validate_beats`), a last beat that does not end with a question (error), the
+whole lesson running over `maxSeconds` (error), and a card `reference` that the first beat does not say
+(error; a warning when `referenceSpoken` is missing, because then it cannot be checked). It counts and
+matches; it cannot tell you the explanation is good or the derivation is correct, so listen to it, and
+check the maths as above.
 
 ## No em dashes
 

@@ -92,7 +92,13 @@ the goal is a video that shows what a real product actually looks like.
 | `STYLE.md` | Binding art-direction rules: camera, depth of field, lighting, cursor, motion, palette, type |
 | `CAPTURE.md` | The real-capture protocol for screenshots and screen recordings: the Playwright zoom-desync bug and its fix |
 | `PLANNING.md` | The guided intake to beats.json protocol, including the capture-method decision tree |
-| `SCRIPT.md` | VO pacing, duration math, and the claim-obligates-visual writing rule |
+| `SCRIPT.md` | VO pacing, duration math, the claim-obligates-visual writing rule, and the lesson script arc |
+| `CREATIVE.md` | How to make the video good: story, hooks, pacing to music, camera grammar, captions, the review rubric |
+| `PRESETS.md` | Five fixed recipes over the same tools: a silent README GIF, a fast screen-recording cut, pure motion graphics, a capped two-minute demo, a full walkthrough |
+| `NARRATION.md` | Voice-over: engines, pace, word timings, music and sound effects, the score |
+| `SUPERNOVA.md` | Lesson videos: the concept card, the design system, the primitives, the voice, captions, safe zones |
+| `API.md` | Every `@openvidstudio/core` and `@openvidstudio/stem` primitive, with a rendered still |
+| `TOOLS.md` | Every MCP tool the server registers, one line each. Generated from the server |
 | `HIGGSFIELD.md` | AI b-roll tier protocol: prerequisites, the `hasHiggsfield` config gate, provenance scope, prompt-writing guidance, and how `import_higgsfield_clip` ingests a clip the calling agent already generated |
 
 ## Two rules that changed on the way to being a public tool

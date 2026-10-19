@@ -1,72 +1,80 @@
 ---
 name: supernova
-description: Use when making a short animated STEM lesson video (a maths, physics or computer science concept explained in 60 to 90 seconds, vertical, narrated) with openvidstudio, or when the user says "Supernova", "lesson video", "explain this concept as a reel" or "teaching video". Script first: a concept card, an approved lesson script, then voice, scenes, review and finalize. Not for product demos (use openvidstudio or openvidstudio-director).
+description: Use when making a short animated STEM lesson video (a maths, physics or computer science concept explained in up to two minutes, vertical, narrated) with openvidstudio, or when the user says "Supernova", "lesson video", "explain this concept as a reel" or "teaching video". Script first, always the same seven-beat arc: a concept card, a derived-and-verified script, then voice, scenes, review and finalize. Not for product demos (use openvidstudio or openvidstudio-director).
 ---
 
 # supernova
 
-How to make a lesson video, in order. A lesson is one concept in 60 to 90 seconds at 1080x1920, narrated and
-captioned. **The script is the product; the visuals illustrate it.** Read `docs/SUPERNOVA.md` (the design
-system, the primitives, the voice) and `docs/SCRIPT.md` (the lesson script rules) before step 3.
+How to make a lesson video, in order. A lesson is **one concept in up to two minutes** at 1080x1920, narrated and
+captioned, and every lesson has the same shape. **The script is the product; the visuals illustrate it.** Read
+`docs/SUPERNOVA.md` (design system, primitives, voice, captions) and `docs/SCRIPT.md` (the arc and the rules) before step 3.
 
-Everything in a lesson is constructed on purpose, so nothing here is footage and nothing is captured. The
-numbers on screen come from the concept card's worked example or from an equation, never from memory.
+Everything in a lesson is constructed on purpose, so nothing here is footage and nothing is captured. The numbers
+on screen are computed by code from the concept card's worked example, never typed from memory.
+
+## The arc (constant)
+
+Hook, picture, set up, derive, use it, aha, close. In that order, every lesson. Times for 120 s are in SCRIPT.md.
+
+1. **Hook**: a beginner's question or a surprising fact in sentence one. Then say where the lesson sits (the card's `referenceSpoken`: a chapter code or "Part 2 of 4").
+2. **Picture**: the diagram starts here, before any formula, inside the first 15 s. Everyday words; define each term at first use.
+3. **Set up**: symbols, units, assumptions, drawn on the diagram.
+4. **Derive**: the formula built line by line, one `Equation` per line with its `spoken` form, each step justified.
+5. **Use it**: one worked example with the real numbers and units.
+6. **Aha**: the result that generalises or surprises, and where it stops being true.
+7. **Close**: one-line recap, then the check question. End on the question; hold the last frame.
 
 ## 1. Set up
 
-- `init_project` with `mode: "supernova"` (and the lesson's `name`). It stores `production.mode`, makes the
-  frame 1080x1920, and installs `@openvidstudio/stem` with its fonts and the maths renderer.
-- `preflight` once. Done when it passes.
-- `plan_production` with a time budget (a lesson has no creative level; it is never asked for one). Show the plan.
+- `init_project` with `mode: "supernova"` (and the lesson's `name`). It stores `production.mode`, makes the frame
+  1080x1920, and installs `@openvidstudio/stem` with its fonts and the maths renderer.
+- `preflight` once. `edge-tts` must be 7.3 or newer (`pip install -U edge-tts`; 7.2.8 gets a 403).
+- `plan_production` with a time budget (a lesson has no creative level). Show the plan.
 
 ## 2. The concept card
 
-Write `src/videos/<name>/concept.json` (template and a worked example in `docs/SUPERNOVA.md`): `goal` (what the viewer can
-do afterwards: "tell why a derivative is a slope"), `terms` (the two or three that need defining) and `example`
-(the one worked example the lesson keeps returning to, with its real numbers).
+Write `src/videos/<name>/concept.json`: `goal`, `terms` (the two or three that need defining), `example` (the one
+worked example, with its real numbers), plus `reference` and `referenceSpoken` (where the lesson sits) and
+`maxSeconds` (default 120). Decide the subject (`math`, `physics`, `cs`, `chemistry`, `biology`: it sets the accent).
+A big topic is a series; each part ends on the next question.
 
-Also decide the subject (`math`, `physics`, `cs`, `chemistry`, `biology`: it sets the accent) and the syllabus
-code it maps to. A big topic is a series ("Part 2 of 4") and each part ends on the next question.
+## 3. The script, derived and verified
 
-## 3. The lesson script
-
-Draft the narration beat by beat to the rules in `SCRIPT.md`: a hook in the first sentence (a question or a
-surprising fact, never "in this video"), intuition and a concrete example before any formula, every term defined
-at first use with at most two new terms a beat, one idea per beat, sentences of about 14 words or fewer, maths
-written as it is spoken, a one-line recap and then a check question at the end.
-
-- `plan_beats` for the word budget per beat. Scenes are sized to the sentence, not the other way round.
-- `validate_beats` (pace is 2.3 to 2.9 words per second) and `check_script` (pass the draft as `beatsJson` and the
-  card as `conceptCard`). Fix every error and read every warning.
-- **Show the user the whole script and get an explicit yes before any scene is built.** Then `write_beats_file`.
+- Write `derivation.md` first: one line per step with its reason, the assumptions, one place the result fails.
+- **Check the maths with code** (plain Python or sympy): the symbolic result, the worked example, the units. Generate the
+  numbers the scenes show from that code. Do not type a number twice.
+- Draft the narration beat by beat to the arc and the rules in `SCRIPT.md`. Sentences of about 14 words or fewer,
+  maths written as it is spoken, at most two new terms a beat, about 270 to 330 words in all.
+- `plan_beats` for provisional lengths; `validate_beats` (2.3 to 2.9 words per second) and `check_script` (pass
+  `beatsJson` and `conceptCard`). Fix every error, read every warning.
+- **Show the user the whole script and the derivation and get an explicit yes before any scene is built.** Then `write_beats_file`.
 
 ## 4. Voice
 
-- `generate_narration` with the fixed lesson voice from `SUPERNOVA.md` (edge-tts). It also writes word timings
-  for each beat, so a scene can point at the word being said. Do not change the voice between lessons.
-- If a beat does not fit, shorten the line or lengthen the beat. Do not stretch it: the clamp is 0.9 to 1.12.
-- Done when every beat has a clip and the result reports no overruns.
+- `generate_narration` with the fixed lesson voice from `SUPERNOVA.md` (edge-tts). It writes word timings per beat.
+- **Fit the beats to the voice**: read each clip's `spokenSeconds`, set each beat to about that plus half a second
+  (a very short line needs about 1.7 s to pass the pace check), rewrite the beats, run it again with `overwrite: true`.
+  Do not stretch outside 0.9 to 1.12.
+- Done when every beat has a clip, the result reports no overrun, and the lesson is at most `maxSeconds`.
 
 ## 5. Scenes
 
-- `scaffold_scene` in `"starter"` mode per beat, or write the file by hand. Build each one from
-  `@openvidstudio/stem` (`Spark`, `Nova`, `Axes`, `Plot`, `NumberLine`, `Equation`, `FreeBody`, `ArrayViz`) against
-  the video's `design.ts`: `export const design = supernovaDesignSystem("<subject>")`.
+- `scaffold_scene` in `"starter"` mode per beat, or write the file by hand. Build each from `@openvidstudio/stem`
+  (`Spark`, `Nova`, `Axes`, `Plot`, `NumberLine`, `Equation`, `FreeBody`, `ArrayViz`) against the video's `design.ts`:
+  `export const design = supernovaDesignSystem("<subject>")`.
 - One idea on screen at a time, at most two things moving, **one glowing element at a time**. The Nova is used once,
-  on the aha sentence. Every `Equation` carries a `spoken` string that appears in its beat's narration.
-- Keep key content inside the Reels safe zones (`SUPERNOVA.md`). Sizes come from `useVideoConfig()`.
+  on the aha. Every `Equation` carries a `spoken` string that appears in its beat's narration, in the order spoken.
+- Key content stays inside the Reels safe zones. Sizes come from `useVideoConfig()`. Captions come from the beat's `vo`
+  text (see "Captions" in `SUPERNOVA.md`), so they break at sentence ends.
 - `compose_score` with `percussion: "none"` for a quiet pad under the voice. `stitch_composition`.
 
 ## 6. Review
 
-- `check_script` again, now that the scenes exist: it compares each `Equation`'s `spoken` string with the narration.
-- `validate_scenes` with `render: true`: crop, text size, contrast, the glow budget, numbers.
-- `render_stills` and `contact_sheet`: look at the frames. Then `render_video` with `draft: true`, and **listen**.
-- Done when there are no errors, the Nova lands on the aha sentence, and every beat sounds like one person.
+- `check_script` again with the scenes present, then `validate_scenes` with `render: true`. Ignore "fewer than two camera keyframes".
+- `render_stills` and `contact_sheet`: look at the frames, then `render_video` with `skipBrandLock: true`, and **listen**.
+- Done when there are no errors, the diagram starts early, the Nova lands on the aha, and every beat sounds like one person.
 
 ## 7. Finalize
 
-- `render_video`, then `finalize_video` (it must report no `audio-tick`).
-- `write_brief` with `mode: "supernova"` if you want one, then `write_description`: it says in one line that the
-  video is a constructed explanation, not footage.
+- `finalize_video` (it must report no `audio-tick`). `write_description`: one line saying the video is a constructed explanation, not footage.
 - Done when the final file and the description are in `output/`.

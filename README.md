@@ -199,8 +199,9 @@ process is the `openvidstudio-director` skill, and the craft is written down in
 
 ## Supernova mode (STEM lessons)
 
-A separate kind of production for short animated lessons: one maths, physics or computer science concept in 60 to 90
-seconds, vertical, narrated, with the script written and approved first. `init_project` with `mode: "supernova"` makes a
+A separate kind of production for short animated lessons: one maths, physics or computer science concept in up to
+two minutes, vertical, narrated, always in the same seven beats (hook, picture, set up, derive, use it, aha, close), with the
+script written and approved first. `init_project` with `mode: "supernova"` makes a
 project with the `@openvidstudio/stem` primitives (a glowing Spark and a one-per-video Nova, graphs, sans-serif equations
 with a spoken form, force diagrams, array pictures), `check_script` lints the lesson script, and `generate_narration`
 gives word timings so a scene can point at the word being said. The pieces are built and tested one by one; the voice

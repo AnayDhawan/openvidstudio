@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-19
+
+Lessons get one shape. A Supernova lesson is now one concept in up to two minutes, in seven fixed beats,
+and `check_script` checks the length and the chapter reference. No lesson has been published yet. Install
+from a clone: the npm package is still 0.1.0 while publishing is blocked.
+
 ### Added
 
 - **Every lesson has the same shape, and `check_script` holds two more lines of it.** A Supernova lesson is now one concept in up to two minutes, always in seven beats: hook, picture, set up, derive, use it, aha, close. SCRIPT.md gives the arc with times for a 120 second lesson, the rules (start the diagram inside 15 seconds, derive each formula line by line with a spoken form per line, say where the lesson sits, end on the check question) and a correctness routine (write `derivation.md`, check the symbolic result, the worked example and the units with code, name the assumptions, have someone who knows the subject read it). The concept card takes three optional fields: `reference` (a chapter code or "Part 2 of 4", as shown on screen), `referenceSpoken` (as said aloud) and `maxSeconds` (default 120). `check_script` now reports a `length` error when the beats add up to more than the budget, and a `reference` error when the first beat does not say `referenceSpoken` (a warning when it is missing, because then it cannot be checked). Ten new checks in `check-script.test.mjs`; the example script in SUPERNOVA.md is now the seven-beat arc and draws no finding.

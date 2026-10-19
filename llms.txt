@@ -1,6 +1,6 @@
 # openvidstudio
 
-> An open-source video pipeline for AI coding agents. A real browser captures your real product, and the agent plans, narrates, scores and renders the video locally, through MCP tools.
+> Code-based video generation. An open-source video pipeline for AI coding agents: a real browser captures your real product, and the agent plans, narrates, scores and renders the video locally, through MCP tools. Every frame of your product is a real capture, never a generated mockup.
 
 openvidstudio is a Node project maintained at
 [github.com/AnayDhawan/openvidstudio](https://github.com/AnayDhawan/openvidstudio) under the

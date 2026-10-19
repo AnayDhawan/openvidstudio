@@ -113,8 +113,10 @@ console.log("\n== Part 26: plan_shots ranks from real repo signal ==");
   check("...in descending order", real.candidates.every((c, i) => i === 0 || real.candidates[i - 1].score >= c.score));
   check("...every candidate carries its evidence", real.candidates.every((c) => c.evidence.length > 0));
   // Compare the two features' own scores rather than asserting who is on top: what leads depends on
-  // the changelog's current entries, which change with every release, and this repo's does.
-  const scoreOf = (position) => real.candidates.find((c) => c.evidence.join(" ").includes(`lists this ${position} under`))?.score;
+  // the changelog's current entries, which change with every release, and this repo's does. Ask for
+  // every candidate: with only five, a long [Unreleased] pushes the README's fourth feature off the list.
+  const all = await runPlanShots({ repoRoot: path.join(packageRoot, "..", ".."), maxShots: 200 });
+  const scoreOf = (position) => all.candidates.find((c) => c.evidence.join(" ").includes(`lists this ${position} under`))?.score;
   check("...the README's first feature outranks its fourth", scoreOf("first") !== undefined && scoreOf("fourth") !== undefined && scoreOf("first") > scoreOf("fourth"));
   // A thin result should be explained rather than mysterious.
   check("...and missing signals are named", real.signalsMissing.some((m) => m.includes("routes")));

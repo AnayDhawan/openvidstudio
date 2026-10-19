@@ -49,7 +49,7 @@ shows a product that is not yours, and an AI video generator invents a product t
 openvidstudio sits in between. Nothing on screen is generated. It is your app, captured live,
 then directed.
 
-### What makes it different
+### What it does differently
 
 - **Real product, real pixels.** The UI, the text and the layout are ground truth, not a mockup.
 - **Your agent drives.** No separate app and no keyframing by hand.

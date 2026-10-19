@@ -61,6 +61,21 @@ console.log("\n== Part 26: plan_shots ranks from real repo signal ==");
   // "We fixed a crash" is not a demo beat.
   check("...and fixes are not candidate shots", entries[0].title === "Real-time collaboration");
 
+  // Cutting a release leaves an empty [Unreleased] heading on top. It must not hide the release below it.
+  const afterCut = parseChangelogFeatures(
+    ["# Changelog", "", "## [Unreleased]", "", "## [2.0.0] - 2026-01-01", "", "### Added", "", "- **Dark mode.** A dark theme.", "- Offline sync", "", "## [1.9.0] - 2025-12-01", "", "### Added", "", "- Old thing", ""].join("\n"),
+  );
+  check("an empty [Unreleased] above a release does not hide that release's features", afterCut.length === 2 && afterCut.every((e) => e.version === "2.0.0"));
+  check("...and the older release below it is still not ranked", !afterCut.some((e) => e.title === "Old thing"));
+  const fullUnreleased = parseChangelogFeatures(
+    ["## [Unreleased]", "", "### Added", "", "- Brand new", "", "## [2.0.0] - 2026-01-01", "", "### Added", "", "- Older", ""].join("\n"),
+  );
+  check("control: a non-empty [Unreleased] is still the newest section", fullUnreleased.length === 1 && fullUnreleased[0].version === "Unreleased");
+  const onlyFixes = parseChangelogFeatures(
+    ["## [Unreleased]", "", "### Fixed", "", "- fix a crash", "", "## [2.0.0] - 2026-01-01", "", "### Added", "", "- Real feature", ""].join("\n"),
+  );
+  check("an [Unreleased] with nothing to film is skipped in favour of the release below", onlyFixes.length === 1 && onlyFixes[0].title === "Real feature");
+
   const routes = discoverRoutes([
     "src/app/page.tsx",
     "src/app/(marketing)/pricing/page.tsx",

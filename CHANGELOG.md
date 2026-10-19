@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The install is `npx -y @openvidstudio/mcp-server`.** All four packages are on npm at 1.3.1 (`@openvidstudio/capture`, `core`, `stem` and `mcp-server`), so the README, `llms.txt` and the package READMEs lead with the `npx` config and keep the clone as the way to run from source. The note saying the npm package was stale is gone. `@openvidstudio/capture` can be installed alone with `npm install @openvidstudio/capture`.
+
+### Docs
+
+- **The README's status list still said lesson videos "do not work today".** It now says Supernova is built and tested and no lesson has been published yet.
+
 ## [1.3.1] - 2026-10-19
 
 The packages are ready for npm: each now ships a README, and `@openvidstudio/mcp-server` and `@openvidstudio/stem`

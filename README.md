@@ -71,7 +71,28 @@ then directed.
 
 ## Quick start
 
-openvidstudio runs as an MCP server. Today the dependable way to run it is from a clone:
+openvidstudio runs as an MCP server. Add it to your MCP client's config (for Claude Code that is
+`.mcp.json`) and restart the client:
+
+```json
+{
+  "mcpServers": {
+    "openvidstudio": {
+      "command": "npx",
+      "args": ["-y", "@openvidstudio/mcp-server"]
+    }
+  }
+}
+```
+
+On native Windows some clients need the command wrapped: `"command": "cmd"` with
+`"args": ["/c", "npx", "-y", "@openvidstudio/mcp-server"]`.
+
+<!-- tools:Base -->Forty-one<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
+names the fix for your platform.
+
+To run from source instead (to contribute, or to try what has not been released), clone the repo and
+build it, then point `args` at `packages/mcp-server/dist/stdio.js` with `"command": "node"`:
 
 ```bash
 git clone https://github.com/AnayDhawan/openvidstudio.git
@@ -79,27 +100,6 @@ cd openvidstudio
 pnpm install
 pnpm build
 ```
-
-Then add it to your MCP client's config (for Claude Code that is `.mcp.json`), using the path to
-your clone, and restart the client:
-
-```json
-{
-  "mcpServers": {
-    "openvidstudio": {
-      "command": "node",
-      "args": ["/path/to/openvidstudio/packages/mcp-server/dist/stdio.js"]
-    }
-  }
-}
-```
-
-<!-- tools:Base -->Forty-one<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
-names the fix for your platform.
-
-> **About npm.** `npx -y @openvidstudio/mcp-server` installs version 0.1.0 from September, which
-> has about 27 tools and none of director mode. Publishing the current version is blocked for
-> now, so use the clone above. This note goes away when the package is current.
 
 Then paste this to your agent, from inside the repo you want a video of:
 
@@ -236,7 +236,7 @@ server's own registry.
 [`packages/capture`](./packages/capture) is zoom-compensated browser capture, interaction replay
 and the desktop, mobile and terminal backends, with no dependency on Remotion, React or the video
 pipeline. It is built to be used alone, if you want trustworthy captures of your app and are not
-making a video. It is not on npm yet.
+making a video. Install it alone with `npm install @openvidstudio/capture`.
 
 ## Status
 
@@ -248,10 +248,8 @@ where it is still rough:
   rather than good. Director mode is how you get past that, and the independent review of our
   own sample video scored its craft 2 out of 5 before the cinematic camera work. That work has
   landed; we have not yet measured it the same way.
-- **npm is behind.** See the note under Quick start.
-- **Lesson videos are not built yet.** We are working on a mode for short STEM explainers
-  (script first, voiceover led, vertical). It is tracked in
-  [#107](https://github.com/AnayDhawan/openvidstudio/issues/107) and does not work today.
+- **No lesson has been published yet.** Supernova, the mode for short STEM explainers, is built and
+  tested (see above), and none is out. The follow-up work is tracked in [#107](https://github.com/AnayDhawan/openvidstudio/issues/107).
 
 ## Docs
 

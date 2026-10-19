@@ -122,8 +122,10 @@ export function parseChangelogFeatures(markdown: string): { title: string; versi
     if (heading) {
       const text = heading[2];
       if (/^\[?v?\d+\.\d+/.test(text) || /unreleased/i.test(text)) {
-        // Only the newest section is worth ranking; anything older has had its moment.
-        if (version) break;
+        // Only the newest section worth filming is ranked; anything older has had its moment. A
+        // section with nothing to film does not count as the newest: cutting a release leaves an
+        // empty [Unreleased] on top, and stopping at it would hide the release just below.
+        if (version && out.length > 0) break;
         version = text.replace(/[[\]]/g, "").split(/\s+/)[0];
         underAdded = true;
       } else {

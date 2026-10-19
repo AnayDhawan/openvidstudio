@@ -7,6 +7,20 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Every lesson has the same shape, and `check_script` holds two more lines of it.** A Supernova lesson is now one concept in up to two minutes, always in seven beats: hook, picture, set up, derive, use it, aha, close. SCRIPT.md gives the arc with times for a 120 second lesson, the rules (start the diagram inside 15 seconds, derive each formula line by line with a spoken form per line, say where the lesson sits, end on the check question) and a correctness routine (write `derivation.md`, check the symbolic result, the worked example and the units with code, name the assumptions, have someone who knows the subject read it). The concept card takes three optional fields: `reference` (a chapter code or "Part 2 of 4", as shown on screen), `referenceSpoken` (as said aloud) and `maxSeconds` (default 120). `check_script` now reports a `length` error when the beats add up to more than the budget, and a `reference` error when the first beat does not say `referenceSpoken` (a warning when it is missing, because then it cannot be checked). Ten new checks in `check-script.test.mjs`; the example script in SUPERNOVA.md is now the seven-beat arc and draws no finding.
+- **SUPERNOVA.md says how to fit beats to the voice and how to caption them.** The voice reads plain prose at about 3 words per second and number-heavy lines at about 2.2, so beats are sized from each clip's `spokenSeconds`, then regenerated. Word timings carry no punctuation, so captions take their text from the beat's `vo` and break at sentence ends (a snippet is included). It also notes that `render_video` needs `skipBrandLock: true` for a lesson, and that `edge-tts` 7.2.8 gets a 403 from Microsoft: use 7.3 or newer.
+
+### Changed
+
+- **The lesson length is up to two minutes, not 60 to 90 seconds**, in the `supernova` skill (now the arc and a derive-and-verify step), SUPERNOVA.md, README and `llms.txt`.
+- **`click.wav` is now a recorded double click (Mixkit, "Fast double click on mouse") instead of a 30 ms synthesized tick.** Trimmed so the first click lands on the cue frame, mono 48 kHz like the rest of the pack, peak -1.5 dBFS. `gen-sfx.sh` no longer generates it, `public/sfx/CREDITS.md` records the source and the Mixkit licence, and the docs no longer say the whole pack is licence-free: a rendered video still needs no credit. The licence text could not be read when this was added, so confirm its terms on redistribution before republishing the pack on its own.
+
+### Docs
+
+- **OVERVIEW.md's doc map listed six of the thirteen docs.** It now lists them all (CREATIVE, PRESETS, NARRATION, SUPERNOVA, API and TOOLS were missing), which is also where the site takes its index descriptions from.
+
 ## [1.2.0] - 2026-10-19
 
 Supernova mode, the engine for short animated STEM lessons (built by @yakew7), a new tagline, and tools that

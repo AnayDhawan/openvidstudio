@@ -1014,6 +1014,55 @@ width }`). `useNumberLine().toScreen(value)` lets a Spark ride the line.
 Strokes are never thinner than `lineWeight(width, height)`, 3px at 1080 on the shorter side (the plot
 line is about 1.7 times that). None of these glow: the Spark is the one element that does.
 
+### `Derivation`
+
+![A projectile's range derived in steps: three lines of algebra stacked, the newest in the accent and white, the two before it dimmed, with a reason under one step](img/api/stem-derivation.png)
+
+A formula built line by line, each line spoken: the derive beat of a lesson. The newest line sits at the bottom;
+the one before it moves up and dims, up to a stack of three, so the viewer reads the algebra top to bottom. The
+lines share a left edge and sit on a baseline, as algebra on paper does, so between two lines the terms they
+share (matched by their TeX, top level terms) stay exactly where they are, and slide only if the terms before them
+changed width. Terms that are new fade in and rise in the accent and settle to white; terms that are gone fade out where
+they were. Term level, not per glyph. The range of a projectile, `R = u^2 sin(2 theta) / g`, in seven steps, is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `steps` | `{ tex, spoken, because? }[]` | required | `tex` is the line. `spoken` is **required**, exactly as on `Equation`: it must appear in the beat's narration, in the order the steps are given, and `check_script` fails a step that does not. `because` is a short reason in plain words ("no horizontal force") shown under the step |
+| `beatId` | `string` | | Reveal each step at the word its `spoken` starts at, found in `useNarrationWords(beatId)` after the previous step's words |
+| `at` | `number[]` | | Explicit frames, one per step, which win over the narration |
+| `from`, `stagger` | `number` | `0`, `60` | When there is neither narration nor `at`: the first step's frame and the gap between steps |
+| `size` | `number` | 7% of the shorter side, smaller if the widest line would not fit | Font size in px |
+| `color`, `subject` | | the Void's warm white, `"math"` | `subject` picks the colour new terms arrive in |
+| `center` | `{ x, y }` | the horizontal centre, 60% down a tall frame | `y` is the baseline of the current line, `x` the middle of the block |
+
+The stack is three lines: opacity 1, about a half, about a quarter; a fourth line is gone. `revealFrames`,
+`matchTerms` and `slotOpacity` are the pure functions behind it.
+
+### `LessonCaptions`
+
+![A lesson caption block above the bottom safe zone over a projectile path: five words in warm white with the word being said in the accent](img/api/stem-lessoncaptions.png)
+
+Burned-in captions timed to the narration, in one line: `<LessonCaptions beatId="hook" text={vo} />`. The word
+timings (`<beat>.words.json`) carry bare words with no punctuation, so chunking on them runs one sentence into
+the next. The text comes from the beat's `vo`: split on spaces, and when that gives as many words as the timings it is
+shown with its punctuation, otherwise the timings' bare words are. A caption breaks at a sentence end, at a comma
+after at least three words, and at `maxWords`; a one word sentence is a caption on its own. The word being said is
+picked out in the subject's accent. A pure function of the frame.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `beatId` | `string` | required | Read with `useNarrationWords(beatId)` |
+| `text` | `string` | required | The beat's `vo` |
+| `position` | `"bottom" \| "top"` | `"bottom"` | Above the bottom 22% or below the top 14% of a tall frame (8% either way on a wide one) |
+| `maxWords` | `number` | `6` | Most words in one caption |
+| `left`, `width` | `number` | 10% of the width, the rest | The block's box |
+| `subject`, `fontSize` | | `"math"`, 4.8% of the shorter side | |
+
+With no timings at all (an engine that gives none) the words are spread evenly over the scene, and the block says so in
+`data-ovs-captions-timing="estimated"`. The block is tagged `data-ovs-captions`, which `validate_scenes` ignores when it
+looks for the first drawn element and for a static stretch. `captionChunks(words, maxWords)` and `captionInsets(width, height)`
+are the pure functions.
+
 ### `FreeBody`
 
 ![A block on a slope at rest: weight, the normal force and friction as labelled arrows from its centre, with a 10 N scale bar](img/api/stem-freebody.png)

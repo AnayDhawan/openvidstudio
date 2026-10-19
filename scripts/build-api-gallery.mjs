@@ -500,6 +500,42 @@ stemScene(
 );
 stemAdd("stem-arrayviz", 30, { 10: "stem-arrayviz" });
 
+// Derivation: the range of a projectile, seven steps; part-way through, with the newest line in and a reason under one step.
+const RANGE_STEPS = [
+  { tex: String.raw`y = u \sin\theta \, t - \frac{1}{2} g t^{2}`, spoken: "y equals u sine theta t minus a half g t squared" },
+  { tex: String.raw`0 = t \left( u \sin\theta - \frac{1}{2} g t \right)`, spoken: "at the landing y is zero, so factor out t", because: "it lands when y is zero" },
+  { tex: String.raw`t = \frac{2 u \sin\theta}{g}`, spoken: "so the time of flight is two u sine theta over g" },
+  { tex: String.raw`R = u \cos\theta \, t`, spoken: "the range is the sideways speed times that time", because: "no horizontal force" },
+  { tex: String.raw`R = u \cos\theta \cdot \frac{2 u \sin\theta}{g}`, spoken: "put the time in" },
+  { tex: String.raw`R = \frac{2 u^{2} \sin\theta \cos\theta}{g}`, spoken: "tidy it up" },
+  { tex: String.raw`R = \frac{u^{2} \sin 2\theta}{g}`, spoken: "and two sine cos is sine two theta" },
+];
+stemScene(
+  "stem-derivation",
+  "Derivation",
+  `      <Derivation subject="physics" steps={${JSON.stringify(RANGE_STEPS)}} at={[0, 30, 60, 90, 120, 150, 180]} />`,
+  "physics",
+);
+stemAdd("stem-derivation", 220, { 138: "stem-derivation" });
+
+// LessonCaptions: the caption block over a plain graph, the word being said in the accent.
+const CAPTION_TEXT = "Why does the ball keep moving sideways? Because nothing pushes it back.";
+fs.mkdirSync(path.join(stemProject, "public", "audio", "vo"), { recursive: true });
+fs.writeFileSync(
+  path.join(stemProject, "public", "audio", "vo", "stem-lessoncaptions.words.json"),
+  JSON.stringify(CAPTION_TEXT.split(" ").map((word, i) => ({ word: word.replace(/[?.,]/g, ""), startMs: i * 400, endMs: i * 400 + 300 }))),
+);
+stemScene(
+  "stem-lessoncaptions",
+  "Axes, Plot, LessonCaptions",
+  `      <Axes box={{ x: 130, y: 420, width: 820, height: 640 }} xRange={[0, 48]} yRange={[0, 14]} xStep={10} yStep={2} xLabel="distance (m)" yLabel="height (m)" subject="physics">
+        <Plot fn={(x) => x - (x * x) / 40} domain={[0, 40]} />
+      </Axes>
+      <LessonCaptions beatId="stem-lessoncaptions" text={${JSON.stringify(CAPTION_TEXT)}} subject="physics" />`,
+  "physics",
+);
+stemAdd("stem-lessoncaptions", 150, { 42: "stem-lessoncaptions" });
+
 let stemStart = 0;
 const stemFinal = stemBeats.map((b) => {
   const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");

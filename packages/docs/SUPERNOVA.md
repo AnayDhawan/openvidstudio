@@ -92,6 +92,8 @@ All in `@openvidstudio/stem`, documented with stills in [API.md](API.md#supernov
   condenses from particles.
 - `Axes`, `Plot`, `NumberLine`: graphs, tangents, shaded area, intervals.
 - `Equation`: sans-serif maths revealed term by term, with a required `spoken` form that must match the narration.
+- `Derivation`: the derive beat. A formula built line by line, each step with its `spoken` form and an optional `because`; the line before moves up and dims (a stack of three), terms that carry over stay put, new ones arrive in the accent, gone ones fade. Each step is revealed at the word it is spoken at, so `check_script` also reads its `spoken` strings and checks they are in the narration in order.
+- `LessonCaptions`: word-timed captions that break at sentence ends, in the Reels safe zone.
 - `FreeBody`: forces as arrows whose length is exactly magnitude times the scale shown.
 - `ArrayViz`: cells, named pointers, a lit range and a dimmed one, a Spark-driven pointer.
 - `useNarrationWords(beatId)` (in core): when each word of the narration is said, so the Spark can point at it.
@@ -125,15 +127,20 @@ NARRATION.md has the clamp.
 
 ## Captions
 
-Burn captions in for silent autoplay. The word timings carry bare words with no punctuation, so take the text from
-the beat's `vo`: split it on spaces (it matches the timings one to one) and break the caption at sentence ends, so a
-caption never runs one sentence into the next. Keep them inside the safe zone below.
+Burn captions in for silent autoplay with `LessonCaptions`, one line in a scene:
 
 ```tsx
-const tokens = vo.split(/\s+/).filter(Boolean);           // the beat's narration text
-const shown = tokens.length === narr.words.length ? tokens : narr.words.map((w) => w.word);
-const breakAfter = (i, size) => /[.?!:]$/.test(shown[i]) || (/[,;]$/.test(shown[i]) && size >= 3) || size >= 6;
+<LessonCaptions beatId="hook" text={vo} />   // vo is the beat's narration text
 ```
+
+The word timings carry bare words with no punctuation, so the component takes the text from the beat's `vo` (split on
+spaces, it matches the timings one to one) and breaks a caption at a sentence end, at a comma after at least three
+words, and at `maxWords` (default 6), so a caption never runs one sentence into the next. The word being said is
+picked out in the subject's accent. If the text and the timings differ in length it falls back to the timings' bare
+words, and with no timings at all (an engine that gives none) it spreads the words evenly over the scene and says so
+in `data-ovs-captions-timing="estimated"`. It stays out of the Reels safe zones by default (above the bottom 22
+percent of a tall frame, below the top 14), works at 1920x1080, and its box is tagged `data-ovs-captions`, which
+`validate_scenes` ignores when it looks for a diagram or a static stretch. See API.md for the props.
 
 ## Reels safe zones
 

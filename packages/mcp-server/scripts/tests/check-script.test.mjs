@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { require, distDir, check, finish } from "./_harness.mjs";
 
-const { checkScriptLogic, runCheckScript, spokenStrings, splitSentences, fleschKincaidGrade, syllables } = require(path.join(distDir, "tools", "checkScript.js"));
+const { checkScriptLogic, runCheckScript, spokenStrings, derivationSpoken, splitSentences, fleschKincaidGrade, syllables } = require(path.join(distDir, "tools", "checkScript.js"));
 const { createMcpServer } = require(path.join(distDir, "server.js"));
 const FPS = 30;
 const words = (s) => s.trim().split(/\s+/).length;
@@ -162,6 +162,28 @@ console.log("\n== the length budget and the reference (a lesson fits two minutes
   check("a card with no reference is not asked for one", count(checkScriptLogic(file([beat("hook", "How steep is a hill at one point? A slope can tell us."), closing]), card), "reference") === 0);
   const late = checkScriptLogic(file([beat("hook", "How steep is a hill at one point? A slope can tell us."), beat("mid", "This is I B Physics, topic A one, kinematics. A slope is a steepness."), closing]), REF);
   check("the reference is only looked for in the first beat", count(late, "reference") === 1);
+}
+
+console.log("\n== a Derivation's steps are in the narration, in order ==");
+{
+  const card = { goal: "g", terms: [], example: "e" };
+  const vo = "How far does a ball go? First we set y to zero. So the time of flight is two u sine theta over g. Then the range is the sideways speed times that time.";
+  const derivation = (steps) => `export const Derive = () => <Derivation steps={[${steps.map((t) => `{ tex: "x", spoken: ${JSON.stringify(t)} }`).join(", ")}]} />;`;
+  const run = (src) => checkScriptLogic(file([beat("derive", vo)]), card, () => src);
+  const messages = (r) => r.findings.filter((f) => f.check === "spoken").map((f) => f.message);
+
+  check("a Derivation whose steps are all said, in order, draws no spoken finding", messages(run(derivation(["set y to zero", "the time of flight is two u sine theta over g", "the range is the sideways speed times that time"]))).length === 0);
+  const missing = messages(run(derivation(["set y to zero", "so the answer is forty metres"])));
+  check("a step that is not in the narration is an error naming the step", missing.length === 1 && /step 2/.test(missing[0]) && /forty metres/.test(missing[0]) && run(derivation(["set y to zero", "so the answer is forty metres"])).ok === false);
+  const swapped = messages(run(derivation(["the time of flight is two u sine theta over g", "set y to zero"])));
+  check("steps said in a different order than they are revealed are an error", swapped.length === 1 && /before the step above/.test(swapped[0]) && /step 2/.test(swapped[0]));
+  check("control: the same two steps in the order they are said are fine", messages(run(derivation(["set y to zero", "the time of flight is two u sine theta over g"]))).length === 0);
+
+  check("derivationSpoken reads inline steps in order", JSON.stringify(derivationSpoken(derivation(["a", "b", "c"]))) === JSON.stringify([["a", "b", "c"]]));
+  const constant = `const STEPS: Step[] = [{ tex: String.raw\`x^{2}\`, spoken: "x squared" }, { tex: "y", spoken: 'y' }];\nexport const D = () => <Derivation steps={STEPS} beatId="derive" />;`;
+  check("it reads steps held in a constant of the same file, with TeX that has braces and quotes", JSON.stringify(derivationSpoken(constant)) === JSON.stringify([["x squared", "y"]]));
+  check("a scene with two Derivations gives two lists", derivationSpoken(`${derivation(["a"])}\n${derivation(["b", "c"])}`).length === 2);
+  check("a scene with no Derivation gives none, and an Equation's spoken is not counted as a step", derivationSpoken(`<Equation tex="x" spoken="x" />`).length === 0);
 }
 
 console.log("\n== registered like the other tools ==");

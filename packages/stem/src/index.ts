@@ -38,3 +38,9 @@ export { FreeBody, ARROW_GROW_FRAMES } from "./FreeBody";
 export type { FreeBodyProps, Force } from "./FreeBody";
 export { ArrayViz, useArrayViz } from "./ArrayViz";
 export type { ArrayVizProps, ArrayPointer, ArrayGeometry } from "./ArrayViz";
+
+export { LessonCaptions, captionChunks, captionInsets } from "./LessonCaptions";
+export type { LessonCaptionsProps } from "./LessonCaptions";
+
+export { Derivation, revealFrames, matchTerms, slotOpacity, DERIVATION_MOVE_FRAMES, DERIVATION_TERM_STAGGER, DERIVATION_STACK } from "./Derivation";
+export type { DerivationProps, DerivationStep } from "./Derivation";

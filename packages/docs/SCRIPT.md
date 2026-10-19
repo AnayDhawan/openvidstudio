@@ -127,7 +127,7 @@ the others. The times are for a 120 second lesson; shrink them in proportion for
 | 1 | Hook | A question or a surprising fact a beginner can feel, in the first sentence. Then say where the lesson sits: the `referenceSpoken` | 10 s |
 | 2 | Picture | The diagram starts here, before any formula. Say what the viewer is looking at in everyday words, and define each new term at first use | 20 s |
 | 3 | Set up | Name the quantities with their symbols and units, and state the assumptions ("no air resistance", "level ground"). Label them on the diagram | 15 s |
-| 4 | Derive | Build the formula line by line from things the viewer has already accepted. One `Equation` per line, each with its `spoken` form, and say why each step is allowed | 35 s |
+| 4 | Derive | Build the formula line by line from things the viewer has already accepted. One `Derivation` with a step per line, each with its `spoken` form (and a `because`), and say why each step is allowed | 35 s |
 | 5 | Use it | One worked example with the real numbers and their units | 20 s |
 | 6 | Aha | The result that generalises or surprises, and where it stops being true (the assumption that breaks) | 10 s |
 | 7 | Close | A one-line recap, then the check question. End on the question and let the last frame hold | 10 s |

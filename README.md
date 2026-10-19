@@ -40,7 +40,7 @@ You ask your agent for a video. openvidstudio gives it the tools to actually mak
 
 Claude Code, Cursor, or any other client that speaks the
 [Model Context Protocol](https://modelcontextprotocol.io) can drive it, through
-<!-- tools:base -->forty-one<!-- /tools --> tools (<!-- tools:higgsfield -->forty-two<!-- /tools --> with the optional Higgsfield tier).
+<!-- tools:base -->forty-two<!-- /tools --> tools (<!-- tools:higgsfield -->forty-three<!-- /tools --> with the optional Higgsfield tier).
 
 ### Why not just record the screen?
 
@@ -94,7 +94,7 @@ your clone, and restart the client:
 }
 ```
 
-<!-- tools:Base -->Forty-one<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
+<!-- tools:Base -->Forty-two<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
 names the fix for your platform.
 
 > **About npm.** `npx -y @openvidstudio/mcp-server` installs version 0.1.0 from September, which
@@ -287,7 +287,7 @@ openvidstudio/
 ├── packages/
 │   ├── capture/        # browser, desktop, mobile and terminal capture, no Remotion needed
 │   ├── core/           # Remotion building blocks: camera, scenes, transitions, sound
-│   ├── mcp-server/     # @openvidstudio/mcp-server: the <!-- tools:base:digits -->41<!-- /tools -->-<!-- tools:higgsfield:digits -->42<!-- /tools --> MCP tools an agent calls
+│   ├── mcp-server/     # @openvidstudio/mcp-server: the <!-- tools:base:digits -->42<!-- /tools -->-<!-- tools:higgsfield:digits -->43<!-- /tools --> MCP tools an agent calls
 │   ├── stem/           # @openvidstudio/stem: Supernova lesson primitives
 │   └── docs/           # PLANNING · OVERVIEW · PIPELINE · STYLE · CREATIVE · CAPTURE · SCRIPT · API · NARRATION · TOOLS
 ├── templates/

@@ -40,6 +40,7 @@ import { registerRenderStills } from "./renderStills";
 import { registerCollectFacts } from "./collectFacts";
 import { registerFinalizeVideo } from "./finalizeVideo";
 import { registerCheckScript } from "./checkScript";
+import { registerFitBeats } from "./fitBeats";
 
 /**
  * Registers all of this package's tools. All but one need no server-startup config: each
@@ -92,6 +93,7 @@ export function registerTools(server: McpServer, config?: OpenvidstudioConfig): 
   registerCollectFacts(server);
   registerFinalizeVideo(server);
   registerCheckScript(server);
+  registerFitBeats(server);
   if (config?.hasHiggsfield === true) {
     registerImportHiggsfieldClip(server);
   }

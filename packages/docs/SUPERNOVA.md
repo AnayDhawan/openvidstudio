@@ -115,11 +115,13 @@ owner, made once and for every lesson: pass the same `voice` to `generate_narrat
 ### Fit the beats to the voice
 
 The voice reads plain prose at about 3 words per second and number-heavy lines at about 2.2, so a word count
-alone mis-sizes a beat. Write the beats with provisional lengths, run `generate_narration`, read each clip's
-`spokenSeconds`, and set each beat to about the spoken length plus half a second. `validate_beats` still wants
-2.3 to 2.9 words per second on the beat length, so a very short line ("Now the honest part.") needs a beat of about
-1.7 seconds, and a long maths line needs more words or a longer beat. Rewrite the beats and run `generate_narration`
-again with `overwrite: true`. NARRATION.md has the clamp.
+alone mis-sizes a beat. Write the beats with provisional lengths, run `generate_narration`, then run `fit_beats`.
+It sets each beat to the measured spoken length plus half a second (`padSeconds`), clamps it into the 2.3 to 2.9
+words per second window `validate_beats` wants, rounds to whole frames, moves the later beats' starts, and never
+touches `vo`. A very short line ("Now the honest part.") ends up near 1.7 seconds. A beat it cannot fit, because the
+voice needs more than the window allows, is listed in `unfittable` with the words to cut or the frames to lengthen it to.
+Pass `dryRun: true` to see the lengths first, then run `generate_narration` again with `overwrite: true`.
+NARRATION.md has the clamp.
 
 ## Captions
 

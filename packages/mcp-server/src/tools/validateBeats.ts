@@ -20,8 +20,8 @@ const EM_DASH = "—";
 const RHYTHM_MIN_BEATS = 4;
 /** The longest beat should be at least this many times the shortest, or the shots read as evenly spaced ticks. */
 const RHYTHM_MIN_SPREAD = 2.5;
-const MIN_PACE = 2.3;
-const MAX_PACE = 2.9;
+export const MIN_PACE = 2.3;
+export const MAX_PACE = 2.9;
 /** SCRIPT.md's reading-time budget for onScreenText on a narration:"none" beat. */
 export const MAX_READING_WORDS_PER_SEC = 3.5;
 export const READING_OVERHEAD_SEC = 0.8;

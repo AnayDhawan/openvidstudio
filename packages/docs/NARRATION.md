@@ -43,9 +43,9 @@ being too sparse, which is not the failure most people expect.
 a number instead of guessed and revised.
 
 The word budget is an estimate. A real voice reads plain prose at about 3 words per
-second and number-heavy lines nearer 2.2, so after `generate_narration` read each clip's
-`spokenSeconds` and size the beat from that (SUPERNOVA.md, "Fit the beats to the voice").
-Then regenerate with `overwrite: true`.
+second and number-heavy lines nearer 2.2, so after `generate_narration` run `fit_beats`: it
+sizes each beat from the clips' measured `spokenSeconds` (plus a half second pad, clamped into the pace window) and
+lists any line that cannot fit. Use `dryRun: true` to see the lengths first. Then regenerate with `overwrite: true`.
 
 ## Engines
 

@@ -134,8 +134,8 @@ export interface GenerateNarrationResult {
 }
 
 /** Beyond this, a pitch-preserving stretch starts to sound processed. */
-const TEMPO_FLOOR = 0.9;
-const TEMPO_CEIL = 1.12;
+export const TEMPO_FLOOR = 0.9;
+export const TEMPO_CEIL = 1.12;
 
 const DEFAULT_VOICE: Record<NarrationEngine, string> = {
   "edge-tts": "en-US-AndrewNeural",
@@ -173,7 +173,7 @@ export function lineFor(beat: BeatLike, language: string, baseLanguage: string):
   return beat.voTranslations?.[language];
 }
 
-function probeDuration(file: string): number {
+export function probeDuration(file: string): number {
   const r = spawnSync(
     "ffprobe",
     ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file],
@@ -465,7 +465,7 @@ export function runGenerateNarration(input: GenerateNarrationInput): GenerateNar
         // is a shorter translation, not a faster one.
         clip.note =
           `Runs ${(finalSeconds - beatSeconds).toFixed(2)}s past the beat. Shorten the line or ` +
-          `lengthen the beat; stretching further would sound processed.`;
+          `lengthen the beat (fit_beats sizes every beat from the measured voice); stretching further would sound processed.`;
         warnings.push(`${beat.id}: narration overruns its beat by ${(finalSeconds - beatSeconds).toFixed(2)}s`);
       } else if (clip.needsAttention) {
         const slack = (target - finalSeconds).toFixed(2);

@@ -52,9 +52,9 @@ A big topic is a series; each part ends on the next question.
 ## 4. Voice
 
 - `generate_narration` with the fixed lesson voice from `SUPERNOVA.md` (edge-tts). It writes word timings per beat.
-- **Fit the beats to the voice**: read each clip's `spokenSeconds`, set each beat to about that plus half a second
-  (a very short line needs about 1.7 s to pass the pace check), rewrite the beats, run it again with `overwrite: true`.
-  Do not stretch outside 0.9 to 1.12.
+- **Fit the beats to the voice**: run `fit_beats` (`dryRun: true` first if you want to see the lengths). It sets each beat
+  to the measured `spokenSeconds` plus half a second inside the pace window, and lists in `unfittable` any line to shorten.
+  Then run `generate_narration` again with `overwrite: true`. Do not stretch outside 0.9 to 1.12.
 - Done when every beat has a clip, the result reports no overrun, and the lesson is at most `maxSeconds`.
 
 ## 5. Scenes

@@ -24,6 +24,15 @@ export interface ConceptCard {
   terms: string[];
   /** The running example. */
   example: string;
+  /**
+   * Where the lesson sits in a syllabus or a series, as it is shown on screen: "IB Physics A.1 Kinematics",
+   * "Part 2 of 4". When set, the opening beat has to say it (see `referenceSpoken`).
+   */
+  reference?: string;
+  /** The reference as it is said aloud: "I B Physics, topic A one, kinematics". The first beat's narration must contain it. */
+  referenceSpoken?: string;
+  /** The longest the lesson may run, in seconds. Default 120. */
+  maxSeconds?: number;
 }
 
 export type ScriptFindingSeverity = "error" | "warning" | "note";
@@ -31,7 +40,7 @@ export type ScriptFindingSeverity = "error" | "warning" | "note";
 export interface ScriptFinding {
   severity: ScriptFindingSeverity;
   /** Which check produced it. */
-  check: "sentence-length" | "reading-level" | "glossary" | "new-terms" | "spoken" | "hook" | "pace" | "closing-question";
+  check: "sentence-length" | "reading-level" | "glossary" | "new-terms" | "spoken" | "hook" | "pace" | "closing-question" | "length" | "reference";
   beatId: string;
   message: string;
 }
@@ -54,6 +63,8 @@ export interface CheckScriptResult {
 
 /** Sentences longer than this on average draw a warning (the target is about 14). */
 export const MAX_AVG_SENTENCE_WORDS = 16;
+/** The longest a lesson may run, in seconds, unless its concept card says otherwise. */
+export const DEFAULT_MAX_LESSON_SECONDS = 120;
 /** A beat reading above this Flesch-Kincaid grade draws a warning. */
 export const MAX_READING_GRADE = 9;
 /** More new terms than this in one beat draws a warning. */
@@ -193,6 +204,23 @@ export function checkScriptLogic(
     }
   }
 
+  // the length: a lesson explains one concept inside its budget (two minutes unless the card says otherwise)
+  const budget = typeof card.maxSeconds === "number" && card.maxSeconds > 0 ? card.maxSeconds : DEFAULT_MAX_LESSON_SECONDS;
+  const total = beats.reduce((n, b) => n + (typeof b.duration === "number" && b.duration > 0 ? b.duration : 0), 0) / fps;
+  if (total > budget + 0.5) {
+    add("error", "length", String(beats[beats.length - 1]?.id ?? "last beat"), `The lesson runs ${total.toFixed(1)} seconds, over its ${budget} second budget. Cut a beat, tighten the derivation, or move the second half to Part 2.`);
+  }
+
+  // the reference: the opening beat says where this lesson sits (a chapter code, a part number)
+  if (typeof card.reference === "string" && card.reference.trim().length > 0 && spoken.length > 0) {
+    const id = String(spoken[0].id ?? "beat 1");
+    if (typeof card.referenceSpoken !== "string" || card.referenceSpoken.trim().length === 0) {
+      add("warning", "reference", id, `The card gives the reference "${card.reference}" but not how it is said. Add referenceSpoken (for example "I B Physics, topic A one") so the script can be checked for it.`);
+    } else if (!normalise(spoken[0].vo as string).includes(normalise(card.referenceSpoken))) {
+      add("error", "reference", id, `The opening beat does not say the reference "${card.referenceSpoken}". Tell the viewer where this lesson sits in the first beat.`);
+    }
+  }
+
   // the hook: the first beat's first sentence
   if (spoken.length > 0) {
     const first = spoken[0];
@@ -237,7 +265,7 @@ export function runCheckScript(input: CheckScriptInput): CheckScriptResult {
     card = JSON.parse(fs.readFileSync(file, "utf8")) as ConceptCard;
   }
   if (typeof card !== "object" || card === null || typeof card.goal !== "string" || !Array.isArray(card.terms) || typeof card.example !== "string") {
-    throw new Error("The concept card must be { goal: string, terms: string[], example: string }.");
+    throw new Error("The concept card must be { goal: string, terms: string[], example: string } with the optional reference, referenceSpoken and maxSeconds.");
   }
 
   const readScene = (beat: BeatLike, id: string): string | null => {
@@ -261,7 +289,7 @@ export function registerCheckScript(server: McpServer): void {
       description:
         "Mechanical lint for a Supernova lesson script, no model call: it counts and matches patterns, so it can " +
         "say a sentence is long or a term was never defined, not that the explanation is good. Reads " +
-        "src/videos/<videoName>/beats.json and concept.json ({ goal, terms: string[], example }, next to it), or the " +
+        "src/videos/<videoName>/beats.json and concept.json ({ goal, terms: string[], example, reference?, referenceSpoken?, maxSeconds? }, next to it), or the " +
         "beatsJson and conceptCard inputs. Returns { ok, beatsChecked, findings } where each finding has a severity " +
         "(error, warning or note), the check, and the beat it points at. Checks: average sentence length per beat " +
         "(warning above 16 words), Flesch-Kincaid reading level per beat (warning above grade 9), each concept-card " +
@@ -269,14 +297,23 @@ export function registerCheckScript(server: McpServer): void {
         "every Equation's `spoken` string present in its beat's narration (error; the scene is read from the beat's " +
         "scene path or scenes/<BeatId>.tsx), a hook in the first sentence that is a question or holds a number and " +
         "does not open \"in this video\" (error for that opener, warning otherwise), words per second against the " +
-        "beat length using validate_beats' own budget (error), and a last beat that ends with a question (error). " +
+        "beat length using validate_beats' own budget (error), a last beat that ends with a question (error), the " +
+        "total length against the card's maxSeconds (default 120, error), and, when the card has a reference such as a " +
+        "chapter code, that the first beat's narration says its referenceSpoken (error; warning if referenceSpoken is missing). " +
         "ok is false only when a finding is an error. See SCRIPT.md's lesson script rules.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
         beatsJson: z.unknown().optional().describe("The beats file as an object, instead of reading beats.json."),
         conceptCard: z
-          .object({ goal: z.string(), terms: z.array(z.string()), example: z.string() })
+          .object({
+            goal: z.string(),
+            terms: z.array(z.string()),
+            example: z.string(),
+            reference: z.string().optional(),
+            referenceSpoken: z.string().optional(),
+            maxSeconds: z.number().positive().optional(),
+          })
           .optional()
           .describe("The concept card, instead of reading concept.json."),
       },

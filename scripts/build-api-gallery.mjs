@@ -64,6 +64,8 @@ const dashboard = `<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="
   <text x="740" y="262" font-family="Arial" font-size="28" fill="#e2e8f0">Review the design</text>
 </svg>`;
 await sharp(Buffer.from(dashboard)).png().toFile(path.join(project, "public", "images", "dashboard.png"));
+// LayeredShot: the same dashboard split into a flat background and one card that floats in front of it.
+await sharp(Buffer.from(dashboard)).extract({ left: 1350, top: 210, width: 500, height: 120 }).png().toFile(path.join(project, "public", "images", "dash-card.png"));
 
 // Silence plus a cue grid, so useMusicClock has a real bed to read (120 bpm: 15 frames a beat).
 spawnSync("ffmpeg", ["-nostdin", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-t", "30", "-q:a", "9", path.join(project, "public", "audio", "music-bed.mp3")]);
@@ -194,6 +196,117 @@ scene(
 );
 add("g-directedshot", "GDirected", { 0: "directedshot-start", 80: "directedshot-end" });
 
+// TransitionOverlay: one still per type, at the cut. Each scene is two flat colours with the cut between them
+// at frame 10 and the overlay peaking there, the way stitch_composition mounts it over a beat boundary.
+for (const type of ["fade", "whip", "push", "wipe", "light-leak"]) {
+  const name = "GTrans" + type.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+  fs.writeFileSync(
+    path.join(scenesDir, name + ".tsx"),
+    `import React from "react";
+import { AbsoluteFill, Sequence, useCurrentFrame } from "remotion";
+import { TransitionOverlay, color } from "@openvidstudio/core";
+
+export const ${name}: React.FC = () => {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ background: frame < 10 ? "#2B4C8C" : "#0B0E14" }}>
+      <AbsoluteFill style={{ alignItems: "center", justifyContent: "center", fontFamily: "monospace", fontSize: 120, color: frame < 10 ? "#E6EAF2" : color.success }}>
+        {frame < 10 ? "BEFORE" : "AFTER"}
+      </AbsoluteFill>
+      <Sequence from={0} durationInFrames={20} layout="none">
+        <TransitionOverlay type="${type}" length={20} />
+      </Sequence>
+    </AbsoluteFill>
+  );
+};
+`,
+  );
+  // The overlay peaks on the cut (frame 10), where a fade, a wipe or a push covers the whole frame, so those are
+  // caught a few frames in; the light leak reads best at its peak.
+  add("g-transitionoverlay-" + type, name, { [type === "light-leak" ? 10 : 7]: "transitionoverlay-" + type });
+}
+
+// LayeredShot: a push and a tilt make the front card slide against the background.
+scene(
+  "GLayered",
+  'import { LayeredShot } from "@openvidstudio/core";\nimport { staticFile } from "remotion";',
+  '    <LayeredShot captureWidth={1920} captureHeight={1080} background={staticFile("images/dashboard.png")} layers={[{ src: staticFile("images/dash-card.png"), x: 1350, y: 210, width: 500, height: 120, depth: -1.2 }]} focus={{ x: 1560, y: 280 }} push={1.7} tilt={{ y: -9, x: 3 }} move={{ from: 0, to: 70 }} />',
+  { cam: "camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 90, x: 960, y: 540, scale: 1.0 }]}" },
+);
+add("g-layeredshot", "GLayered", { 80: "layeredshot" });
+
+// MotionBlur: a fast move, caught half way through its window.
+fs.writeFileSync(
+  path.join(scenesDir, "GMotionBlur.tsx"),
+  `import React from "react";
+import { AbsoluteFill, useCurrentFrame } from "remotion";
+import { MotionBlur, color } from "@openvidstudio/core";
+
+// The moving thing reads the frame itself, inside MotionBlur: the wrapper blends renders of its children at
+// sub-frame times, so children that take their motion from a prop passed in would not blur.
+const Mover: React.FC = () => {
+  const x = -300 + useCurrentFrame() * 70;
+  return (
+    <>
+      <div style={{ position: "absolute", left: x, top: 380, width: 280, height: 280, borderRadius: 40, background: color.accent }} />
+      <div style={{ position: "absolute", left: x + 60, top: 450, width: 160, height: 12, background: color.bg0 }} />
+      <div style={{ position: "absolute", left: x + 60, top: 500, width: 100, height: 12, background: color.bg0 }} />
+    </>
+  );
+};
+
+export const GMotionBlur: React.FC = () => (
+  <AbsoluteFill style={{ background: color.bg0 }}>
+    <MotionBlur from={0} to={40} shutterAngle={270} samples={10}>
+      <Mover />
+    </MotionBlur>
+  </AbsoluteFill>
+);
+`,
+);
+add("g-motionblur", "GMotionBlur", { 14: "motionblur" });
+
+// The shot vocabulary: each named move, caught half way through.
+for (const [shot, frame] of [["pushIn", 45], ["pullOut", 45], ["pan", 38], ["whip", 9], ["orbit", 60], ["dutch", 45]]) {
+  const name = "GShot" + shot[0].toUpperCase() + shot.slice(1);
+  scene(
+    name,
+    'import { DirectedShot } from "@openvidstudio/core";\nimport { staticFile } from "remotion";',
+    `    <DirectedShot src={staticFile("images/dashboard.png")} shot="${shot}" focus={{ x: 1560, y: 300 }} />`,
+    { cam: "camera={[{ frame: 0, x: 960, y: 540, scale: 1.0 }, { frame: 90, x: 960, y: 540, scale: 1.0 }]}" },
+  );
+  add("g-shot-" + shot.toLowerCase(), name, { [frame]: "shot-" + shot.toLowerCase() });
+}
+
+// CollageBroll comes from the motion primitives catalog: installed into the project with add_motion_primitive,
+// exactly as an agent would, then used in a scene.
+{
+  const { runAddMotionPrimitive } = require(path.join(dist, "tools", "motionPrimitives.js"));
+  runAddMotionPrimitive({ projectRoot: project, videoName: "gallery", name: "collage-broll" });
+  fs.writeFileSync(
+    path.join(scenesDir, "GCollage.tsx"),
+    `import React from "react";
+import { CollageBroll } from "../primitives/CollageBroll";
+
+export const GCollage: React.FC = () => (
+  <CollageBroll
+    at={0}
+    stagger={5}
+    pieces={[
+      { shape: "card", tone: "blue", x: 0.28, y: 0.46, width: 0.24, aspect: 0.72, rotation: -3, role: "structure" },
+      { shape: "card", tone: "cream", x: 0.72, y: 0.46, width: 0.24, aspect: 0.72, rotation: 2, role: "structure" },
+      { shape: "person", tone: "halftone", x: 0.28, y: 0.52, width: 0.1, aspect: 1.2, role: "people" },
+      { shape: "person", tone: "halftone", x: 0.72, y: 0.52, width: 0.1, aspect: 1.2, role: "people" },
+      { shape: "arrow", tone: "green", x: 0.5, y: 0.46, width: 0.13, aspect: 0.5, role: "connector" },
+      { shape: "circle", tone: "yellow", x: 0.5, y: 0.17, width: 0.12, role: "result" },
+    ]}
+  />
+);
+`,
+  );
+  add("g-collage", "GCollage", { 85: "collagebroll" });
+}
+
 fs.writeFileSync(
   path.join(scenesDir, "GClock.tsx"),
   [
@@ -273,3 +386,147 @@ for (const still of result.stills) {
 }
 console.log(`\n${result.stills.length} stills in ${outDir}`);
 fs.rmSync(project, { recursive: true, force: true });
+
+// ---------------------------------------------------------------------------------------------
+// @openvidstudio/stem (Supernova): its own project, because a lesson is 1080x1920 and uses the Void
+// palette. Stills are written as img/api/stem-<name>.png at 540x960. Each entry is one small scene
+// and the local frames that show it best; add the next primitive here.
+
+const stemProject = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-stem-gallery-"));
+runInitProject({ name: "stemgallery", projectRoot: stemProject, mode: "supernova" });
+fs.symlinkSync(templateModules, path.join(stemProject, "node_modules"), "junction");
+const stemVideoDir = path.join(stemProject, "src", "videos", "stemgallery");
+const stemScenesDir = path.join(stemVideoDir, "custom-scenes");
+fs.mkdirSync(stemScenesDir, { recursive: true });
+
+const STEM_HEAD = `import React from "react";
+import { AbsoluteFill, useVideoConfig } from "remotion";
+import { supernovaDesignSystem, displayStack } from "@openvidstudio/stem";
+`;
+/** One stem scene: `body` is JSX inside a Void-coloured AbsoluteFill, `extraImports` adds to the stem import. */
+function stemScene(id, extraImports, body, subject = "physics") {
+  const component = id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+  fs.writeFileSync(
+    path.join(stemScenesDir, `${component}.tsx`),
+    `${STEM_HEAD}import { ${extraImports} } from "@openvidstudio/stem";
+
+export const ${component}: React.FC = () => {
+  const { width, height } = useVideoConfig();
+  const design = supernovaDesignSystem("${subject}");
+  return (
+    <AbsoluteFill style={{ background: design.color.bg0 }}>
+${body}
+    </AbsoluteFill>
+  );
+};
+`,
+  );
+}
+const stemBeats = [];
+function stemAdd(id, duration, frames) {
+  stemBeats.push({ id, duration, frames });
+}
+
+// Spark: a launch arc with the trail behind the head, partway along.
+stemScene(
+  "stem-spark",
+  "Spark, fall",
+  `      <Spark subject="physics" trail={26} path={fall(0.9, { x: width * 0.12, y: height * 0.62, vx: 9, vy: -26 })} />`,
+);
+stemAdd("stem-spark", 90, { 30: "stem-spark" });
+
+// Nova: the ring part-way out, the payoff condensing at the centre.
+stemScene(
+  "stem-nova",
+  "Nova",
+  `      <Nova at={10} duration={50} subject="physics">
+        <div style={{ position: "absolute", left: 0, right: 0, top: height / 2 - 70, textAlign: "center", fontFamily: displayStack(), fontWeight: 700, fontSize: 120, color: design.color.textPrimary }}>
+          It is a slope.
+        </div>
+      </Nova>`,
+);
+stemAdd("stem-nova", 90, { 24: "stem-nova" });
+
+// Axes, Plot, tangent, area, marked points: projectile motion, the first lesson that uses them.
+stemScene(
+  "stem-plot",
+  "Axes, Plot",
+  `      <Axes box={{ x: 130, y: 520, width: 820, height: 640 }} xRange={[0, 48]} yRange={[0, 14]} xStep={10} yStep={2} xLabel="distance (m)" yLabel="height (m)" subject="physics">
+        <Plot fn={(x) => x - (x * x) / 40} domain={[0, 40]} area={{ from: 0, to: 20 }} tangent={{ at: 8, span: 6 }} points={[{ x: 20, label: "peak 10 m" }, { x: 40, label: "range 40 m" }]} />
+      </Axes>`,
+);
+stemAdd("stem-plot", 30, { 10: "stem-plot" });
+
+stemScene(
+  "stem-numberline",
+  "NumberLine",
+  `      <NumberLine box={{ x: 108, y: 960, width: 864 }} range={[-5, 5]} step={1} subject="math" points={[{ value: 2, label: "2" }]} intervals={[{ from: -3, to: 1, openFrom: true }]} arrow={{ value: -4, label: "start" }} />`,
+  "math",
+);
+stemAdd("stem-numberline", 30, { 10: "stem-numberline" });
+
+// Equation: revealed term by term, here fully in, sans-serif maths on the Void.
+stemScene(
+  "stem-equation",
+  "Equation",
+  `      <Equation tex={String.raw\`x=\\frac{-b\\pm\\sqrt{b^{2}-4ac}}{2a}\`} spoken="x equals minus b plus or minus the square root of b squared minus four a c, all over two a" size={110} at={0} />`,
+  "math",
+);
+stemAdd("stem-equation", 90, { 70: "stem-equation" });
+
+// FreeBody: a block on a slope at rest, three forces that sum to zero, with the scale bar that keeps it honest.
+stemScene(
+  "stem-freebody",
+  "FreeBody",
+  `      <svg width={width} height={height} style={{ position: "absolute", left: 0, top: 0 }}>
+        <line x1={width * 0.05} y1={height / 2 + 190} x2={width * 0.95} y2={height / 2 - 400} stroke={design.color.textSecondary} strokeWidth={4} />
+      </svg>
+      <FreeBody scale={Math.min(width, height) * 0.006} scaleValue={10} at={0} stagger={10} net objectRotation={-30} objectLabel="m"
+        forces={[
+          { label: "W", magnitude: 50, angle: 270, color: "#FF4D5E" },
+          { label: "N", magnitude: 43.3, angle: 120, color: "#5CC8FF" },
+          { label: "f", magnitude: 25, angle: 30, color: "#FFB347" },
+        ]} />`,
+);
+stemAdd("stem-freebody", 60, { 50: "stem-freebody" });
+
+// ArrayViz: binary search part-way through, the live range lit and the rest dimmed.
+stemScene(
+  "stem-arrayviz",
+  "ArrayViz",
+  `      <ArrayViz values={[2, 5, 8, 12, 16, 23, 38, 56, 72, 91]} highlights={[{ from: 5, to: 9 }]} dimmed={[{ from: 0, to: 4 }]}
+        pointers={[{ name: "low", index: 5 }, { name: "high", index: 9, color: "#FFB347" }, { name: "mid", index: 7, color: "#FF4D5E" }]} />`,
+  "cs",
+);
+stemAdd("stem-arrayviz", 30, { 10: "stem-arrayviz" });
+
+let stemStart = 0;
+const stemFinal = stemBeats.map((b) => {
+  const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");
+  const beat = { id: b.id, start: stemStart, duration: b.duration, scene: `./custom-scenes/${component}.tsx` };
+  stemStart += b.duration;
+  return beat;
+});
+fs.writeFileSync(path.join(stemVideoDir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", production: { mode: "supernova" }, beats: stemFinal }));
+runStitchComposition({ projectRoot: stemProject, videoName: "stemgallery" });
+const stemFrames = [];
+const stemNames = new Map();
+for (const fb of stemFinal) {
+  const src = stemBeats.find((b) => b.id === fb.id);
+  for (const [local, name] of Object.entries(src.frames)) {
+    const f = fb.start + Number(local);
+    stemFrames.push(f);
+    stemNames.set(f, name);
+  }
+}
+const stemResult = await runRenderStills({ projectRoot: stemProject, videoName: "stemgallery", frames: stemFrames, findings: false, contactGrid: false });
+for (const still of stemResult.stills) {
+  const name = stemNames.get(still.frame);
+  await sharp(still.path)
+    .resize(540, 960)
+    .png({ palette: true, quality: 85, compressionLevel: 9 })
+    .toFile(path.join(outDir, `${name}.png`));
+  console.log(`wrote img/api/${name}.png  (${fs.statSync(path.join(outDir, `${name}.png`)).size} bytes)`);
+}
+console.log(`\n${stemResult.stills.length} stem stills in ${outDir}`);
+fs.rmSync(stemProject, { recursive: true, force: true });

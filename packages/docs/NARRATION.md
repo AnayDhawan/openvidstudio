@@ -60,6 +60,43 @@ a half hours for a five minute video. Fine overnight, not fine in a loop.
 **If you want it to sound genuinely good**, record it yourself. A real voice beats
 every engine here, and for a launch video it is worth the hour.
 
+## Word timings
+
+A scene that points at the word being spoken (a Supernova lesson's Spark landing on "slope" as the voice
+says it) needs to know when each word starts. With the `edge-tts` engine, `generate_narration` also writes
+`public/audio/vo/<beatId>.words.json` next to each clip (`public/audio/vo/<lang>/<beatId>.words.json` for
+another language):
+
+```json
+[{ "word": "A", "startMs": 100, "endMs": 137 }, { "word": "slope", "startMs": 150, "endMs": 475 }]
+```
+
+- The times are in the clip **as written**. The clip is fitted to its beat with a stretch of 0.9 to 1.12, and
+  every time is divided by the same factor, so the words stay on the audio.
+- They come from the service's own word-boundary events, read through the `edge_tts` Python module (the
+  `edge-tts` command only writes sentence-level subtitles). `pip install edge-tts` into the interpreter
+  `python3` points at, or the one the `edge-tts` command was installed into, is enough. If neither can
+  import it, the clips are still made from the command line and the result's `wordTimings.note` says no
+  timings were written.
+- The first word starts a little after 0 and the clip carries a short tail of silence after the last word
+  (about 0.4 seconds), so the last `endMs` is within that tail of the clip's length, not exactly at it.
+- **Other engines** (`say`, `espeak`, `omnivoice`) give no word boundaries. Nothing is written and nothing is
+  invented; `wordTimings` says so.
+- A clip that already exists is skipped unless `overwrite` is set, and so is its words file.
+
+`stitch_composition` copies the files into `src/videos/<video>/narration.words.json` (a scene bundle can import
+JSON from `src/` but not from `public/`) and mounts them, per language, the way it mounts the music cues. A
+composition with no word timings is exactly what it was. In a scene:
+
+```tsx
+const narration = useNarrationWords("hook");   // inside the "hook" beat's scene
+const said = narration.wordAt(frame);          // { index, word: { word, startMs, endMs }, speaking } or null
+const at = narration.frameOfWord(3);           // scene-local frame the fourth word starts on
+```
+
+`wordAt` gives the word being said, or in a pause the last one said (`speaking` is then false), and `null` before
+the first word. `available` is false for a beat with no timings.
+
 ## Silence is silent
 
 `stitch_composition` skips a missing `public/audio/vo/<beatId>.mp3` with no error and

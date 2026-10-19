@@ -157,7 +157,7 @@ camera at any frame without mounting the component.
 
 | Start of the move | End of the move |
 |---|---|
-| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end: pushed in, tilted, cursor on the target (this still was rendered with depthOfField 6, which is no longer the default)](img/api/directedshot-end.png) |
+| ![DirectedShot at frame 0: the whole capture](img/api/directedshot-start.png) | ![DirectedShot at the end of the move: pushed in on the Done column and tilted, with its text sharp and the cursor on the target](img/api/directedshot-end.png) |
 
 ### Shots: `resolveShot`, `SHOT_NAMES`
 
@@ -178,7 +178,16 @@ scene can read it too: `resolveShot(name, { focus?, push?, captureWidth?, captur
 | `hold` | The whole capture with a 2% creep so it is never dead. For action inside the frame: a cursor, typing | 1 to 1.02 | 60 |
 | `drift` | Ambient: a long, small move toward the focus with a sub-degree wander in the tilt | 1 to 1.06 | 150 |
 
+Each move, caught half way through (the dashboard capture, focus on the Done column):
+
+| | | |
+|---|---|---|
+| ![pushIn half way: the board partly zoomed toward the Done column](img/api/shot-pushin.png) `pushIn` | ![pullOut half way: backing away from the Done column to reveal the board](img/api/shot-pullout.png) `pullOut` | ![pan half way: the camera sliding sideways onto the Done column with a slight yaw](img/api/shot-pan.png) `pan` |
+| ![whip mid move: the board streaked sideways by motion blur](img/api/shot-whip.png) `whip` | ![orbit half way: the board seen from a slight angle, swinging around the Done column](img/api/shot-orbit.png) `orbit` | ![dutch half way: a push in with the horizon rolled off level](img/api/shot-dutch.png) `dutch` |
+
 ### `LayeredShot`
+
+![LayeredShot mid push and tilt: the Done column's first card floats in front of the board and has slid against it](img/api/layeredshot.png)
 
 A `DirectedShot` whose picture is a stack of layers instead of one flat image: a background plus
 the elements that float above it, each at its own depth, so a push and a tilt make them slide
@@ -198,6 +207,8 @@ type ShotLayer = { src: string; x: number; y: number; width: number; height: num
 ```
 
 ### `MotionBlur`
+
+![A rounded blue card with two text lines, moving fast to the right, smeared into a streak at its leading and trailing edges](img/api/motionblur.png)
 
 Wraps children in Remotion's `CameraMotionBlur`, but only for the frames of a window. Outside it the
 children render directly, as if the wrapper were not there.
@@ -483,6 +494,27 @@ scene, because the pulse helpers read the scene's current frame.
 
 ---
 
+## Narration words
+
+When each word of a beat's narration is said, for a scene that points at the word being spoken.
+`generate_narration` (edge-tts engine) writes `public/audio/vo/<beatId>.words.json`, `stitch_composition`
+copies it next to the composition and mounts it with `NarrationWordsProvider`. See NARRATION.md.
+
+### `useNarrationWords(beatId)`
+
+Call it inside the scene of beat `beatId`.
+
+| Member | Type | Notes |
+|---|---|---|
+| `available` | `boolean` | False when the beat has no timings (another engine, or none generated) |
+| `words` | `{ word, startMs, endMs }[]` | In the clip as written |
+| `wordAt(frame?)` | `{ index, word, speaking } \| null` | The word being said at a scene-local frame (default: the current one), or in a pause the last one said (`speaking: false`). `null` before the first word |
+| `frameOfWord(index)` | `number \| null` | The scene-local frame word `index` starts on, rounded to the nearest frame |
+
+`createNarrationWords(words, fps, frame?)` is the same thing without Remotion, for tests.
+
+---
+
 ## Look pass
 
 `FilmGrain`, `Vignette`, `ColorGrade`, `LookPass`. `CinematicScene` applies these, so
@@ -539,7 +571,7 @@ later `applyBrand` call never reaches into an already-built `DesignSystem`.
 | `typeScale` | `{ display, headline, body, mono: [min, max] }` | px |
 | `grid` | `{ marginX, marginTop, marginBottom }` | px. Default 150 / 130 / 110 at 1920x1080; scaled to `stage` when one is passed (84 / 231 / 196 at 1080x1920). An explicit `grid` wins |
 | `stage` (input only) | `{ width, height }` | The frame the video renders at, default 1920x1080. Pass `{ width: 1080, height: 1920 }` in a native vertical project. Not stored on the result |
-| `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial"` | Default `"rounded-soft"` |
+| `motif` | `"pixel-grid" \| "rounded-soft" \| "geometric" \| "editorial" \| "void-spark"` | Default `"rounded-soft"`. `"void-spark"` is Supernova mode's |
 | `motion` | `{ easing, staggerMs, cameraEnergy, cutRhythmSeconds }` | `easing` names an `E.*` preset by string, not a function reference, so the system stays JSON-serializable |
 | `transitions` | `string[]` | Preference order, default `["cut", "whip", "fade", "push", "wipe", "light-leak"]` |
 | `texture` | `{ grainOpacity, vignetteStrength }` | STYLE.md's default ranges |
@@ -678,6 +710,14 @@ as one continuous move across the cut.
 | ![Flash: the frame during an exposure flash](img/api/flash.png) `Flash` | ![Letterbox: cinematic bars](img/api/letterbox.png) `Letterbox` |
 | ![Black: a solid black frame, with the scene held under it](img/api/black.png) `Black` | |
 
+`TransitionOverlay`, one still per type, a few frames into the cut (a blue "before" scene turning into a dark "after" one;
+the light leak is at its peak on the cut itself):
+
+| | | |
+|---|---|---|
+| ![fade: the blue scene dimming toward the dark one](img/api/transitionoverlay-fade.png) `fade` | ![whip: a streaked, blurred sweep across the frame as one scene is thrown aside](img/api/transitionoverlay-whip.png) `whip` | ![push: a thin blue strip of the old scene left on the left as the dark scene pushes in](img/api/transitionoverlay-push.png) `push` |
+| ![wipe: an angled edge with a bright line sweeping across, dark scene on the left and blue scene on the right](img/api/transitionoverlay-wipe.png) `wipe` | ![light-leak: a warm wash of light bleeding across the cut](img/api/transitionoverlay-light-leak.png) `light-leak` | |
+
 ---
 
 ## UI chrome
@@ -806,3 +846,215 @@ export const Install: React.FC = () => (
 
 Two keyframes so it moves, content centred inside the safe area, caption in the
 overlay, tokens instead of hex.
+
+---
+
+## Catalog primitives
+
+Small components that are not in `@openvidstudio/core` but are in the motion primitives catalog:
+`catalog_motion_primitives` finds one and `add_motion_primitive` copies its source into the video's
+`primitives/` folder, where it is yours to edit. Each imports only `react`, `remotion` and core.
+
+### `CollageBroll`
+
+![A red paper field with two cardstock cards, halftone figures on them, a green arrow between and a yellow disc above](img/api/collagebroll.png)
+
+A halftone paper-collage b-roll beat for an abstract idea between screen captures, made in code: free, and
+nothing in it is invented footage. A flat colour field, black and white halftone cut-outs, a few cardstock accents,
+thin cream keylines, soft low-opacity shadows and fine paper grain. Pieces assemble structure first (structure,
+then people or key cards, then connectors, then the result): each enters from empty space on a spring, in a set
+order, with no fade and no zoom. It is inspired by the look of the MIT-licensed `gbro-collage-broll` skill, which
+generates it with a paid model API; this is written from scratch and calls no model.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `pieces` | `CollagePiece[]` | required | See below |
+| `background` | `string` | `#D9503F` | The flat colour field |
+| `order` | `("structure" \| "people" \| "connector" \| "result")[]` | that order | The order the roles arrive in; within a role, as listed |
+| `at` | `number` | `0` | Composition frame the first piece starts to move. Before it the frame is the empty field |
+| `stagger` | `number` | `10` | Frames between one piece starting and the next |
+
+A piece is `{ src | shape, x, y, width, aspect?, rotation?, tone?, role? }`: `x`, `y` and `width` are fractions of the
+frame (so it follows the frame size); `src` is an image (`staticFile(...)`) cut out in halftone; `shape` is
+`"card"`, `"circle"`, `"person"` or `"arrow"`; `tone` is `"halftone"` (default), `"red"`, `"blue"`, `"yellow"`,
+`"green"` or `"cream"`; `role` says when it arrives (default `"structure"`).
+
+## Supernova: `@openvidstudio/stem`
+
+The primitives for STEM lesson videos (production mode `"supernova"`, 1080x1920). A project made
+with `init_project` `mode: "supernova"` can import them; a standard project cannot. Everything here is
+a pure function of the frame, takes its sizes from `useVideoConfig()` and uses no random numbers.
+Stills are 540x960, rendered for real by `scripts/build-api-gallery.mjs`.
+
+```tsx
+import { Spark, Nova, supernovaDesignSystem } from "@openvidstudio/stem";
+```
+
+### `supernovaDesignSystem(subject)`
+
+The Void + Spark design system for one subject (`"math" | "physics" | "cs" | "chemistry" | "biology"`):
+a flat dark Void (`#07060B`, panels `#0E0C16`, hairline at 5% white), warm white text (`#F3EFE6`, never
+pure white, dim `#8C8799`), one accent per subject (math `#5CC8FF`, physics `#FFB347` with ember
+`#FF7A3D`, cs `#B58CFF`, chemistry `#FF4D5E`, biology `#7CFFB2`), the `"void-spark"` motif, and a layout
+grid that keeps key content clear of the Reels interface (108 / 270 / 420). `design.display` is the
+display face, Space Grotesk; the body face is Inter. Both load from local files.
+
+### `Spark`
+
+![A glowing amber point at the head of a fading arc, a launch trail on the Void](img/api/stem-spark.png)
+
+A luminous point: a bright core, a soft bloom and a fading trail. The pen, the pointer and the particle
+of a lesson, with one on screen at a time.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `path` | `Path \| Keyframe[]` | required | `(t) => ({ x, y })` with `t` in frames since `at`, or keyframes `{ frame, x, y, easing? }` (held at the ends, eased between) |
+| `at` | `number` | `0` | Composition frame it appears. Nothing is drawn before it |
+| `trail` | `number` | `18` | Frames of tail. Brighter near the head |
+| `color` | `string` | the subject's accent | |
+| `subject` | `Subject` | `"math"` | Picks the default colour |
+| `size` | `number` | 1.4% of the shorter side | Radius of the core, px |
+
+Behaviours are helpers that return a `Path`, so they compose: `trace(curve | points, { duration })`,
+`carry(fn, from, to, { duration, map? })` (the Spark rides `y = fn(x)`; `map` is a graph-to-screen
+mapping), `orbit(target, radius, { period })`, `split(parent, n, { at, spread })` (n paths),
+`fall(g, { x, y, vx, vy }, { floorY? })` and `walk(points, { hop, hold })`.
+
+### `Nova`
+
+![A thin shockwave ring part-way out, particles converging on a blurred line of text that is still condensing](img/api/stem-nova.png)
+
+The payoff, once per video, on the aha sentence. Nothing before `at`; then a three-frame flash, a thin
+shockwave ring that decelerates and fades, and the `children` condense from particles. Leave a beat of
+silence in the narration before it.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `at` | `number` | | Composition frame of the flash. Or: |
+| `beatId`, `impact` | `string` | | Take the frame from `useMusicClock(beatId).impact(impact)`, the score's named impact |
+| `origin` | `{ x, y }` | frame centre | |
+| `color`, `subject` | | the subject's accent | |
+| `duration` | `number` | `60` | Frames from the flash until the content is fully formed |
+| `children` | node | | The payoff. Fully formed by `at + duration` |
+
+### `Equation`
+
+![The quadratic formula in sans-serif maths on the Void, at 1080x1920](img/api/stem-equation.png)
+
+An equation typeset in sans-serif maths and revealed term by term: each top-level term fades in and rises
+a little, one after the next, as a pure function of the frame (never a fade of the whole thing).
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `tex` | `string` | required | The equation as TeX |
+| `spoken` | `string` | **required** | The equation as it is said, in plain words: "x squared plus one". Required by the types (and at runtime), and exposed on the element as `data-spoken`, so `check_script` can compare it with the narration of the beat |
+| `at` | `number` | `0` | Composition frame the first term appears |
+| `stagger` | `number` | `7` | Frames between one term and the next |
+| `size` | `number` | 8.5% of the shorter side | Font size in px |
+| `color` | `string` | the Void's warm white | |
+| `center` | `{ x, y }` | frame centre | |
+
+Terms are the children of the equation's top-level row, so `\frac{d}{dx}\left(x^{2}+1\right)=2x` reveals as
+the fraction, `(`, `x²`, `+`, `1`, `)`, `=`, `2`, `x`. A fully revealed equation is pixel for pixel the same as
+the unrevealed one. `texToSvg(tex)` gives the SVG markup directly.
+
+**Why MathJax 4 with the Fira font, not KaTeX.** The visible goal is sans-serif maths, which is the biggest
+break from the usual serif look. Measured on the same three equations at 1080 wide (MathJax and Fira first,
+then KaTeX with `\mathsf`, the closest it gets):
+
+![Three equations in sans-serif maths, MathJax with the Fira font: a derivative of x squared plus one, the quadratic formula and an integral](img/supernova/maths-mathjax-fira.png)
+
+| | MathJax 4 + Fira (SVG) | KaTeX 0.19 |
+|---|---|---|
+| Look | Sans throughout: math italics, Greek, `sin` and `cos` in one family | Hybrid: `\mathsf` makes Latin letters upright sans, but `sin`, `cos`, `theta` and every operator stay serif, and variables lose their italics |
+| Offline | Runs from the project's `public/mathjax/` (copied by `init_project`), no font files, glyphs are vector paths | Needs its CSS and about six font files shipped and loaded |
+| Size | about 1.3MB of scripts, plus 2.2MB of Fira glyph ranges loaded on demand | about 360KB |
+| Time | 3 equations typeset in about 140ms after a one-off start-up of about 0.5s | 3 equations in 6ms |
+| Determinism | Same TeX, same markup, so a frame is a pure function of the frame | Same |
+
+![The same equations in KaTeX with \mathsf: serif sin, cos and theta, upright variables](img/supernova/maths-katex.png)
+
+MathJax costs more to load and to typeset, once per document, and that is paid for a look that KaTeX cannot
+produce. Its speech and braille workers are switched off (they would fetch 800KB of rule files).
+
+### `Axes`, `Plot`, `NumberLine`
+
+![Projectile motion: a parabola in physics amber on dim axes, the area under its first half shaded, a tangent line, and the peak and range marked](img/api/stem-plot.png)
+
+`Axes` draws labelled axes with ticks and owns the graph-to-screen mapping. Its children are placed in
+graph coordinates: `useAxes()` returns `{ toScreen(x, y), toWorld(px, py), box, xRange, yRange, weight }`,
+so a `Plot`, a label or a Spark's path (`carry(fn, a, b, { duration, map: toScreen })`) can use it.
+
+| `Axes` prop | Type | Default | Notes |
+|---|---|---|---|
+| `xRange`, `yRange` | `[min, max]` | required | Graph units |
+| `box` | `{ x, y, width, height }` | sized to the frame | The plot area, composition px |
+| `xStep`, `yStep` | `number` | a round step, about five ticks | |
+| `xLabel`, `yLabel` | `string` | | |
+| `grid` | `boolean` | `true` | Gridlines at the ticks in the dim token, fainter than the axes |
+| `subject` | `Subject` | `"math"` | Picks the accent children use |
+
+| `Plot` prop | Type | Default | Notes |
+|---|---|---|---|
+| `fn` | `(x) => number` | required | A value that is not finite breaks the line |
+| `domain` | `[a, b]` | the axes' x range | |
+| `samples` | `number` | `240` | Across the domain |
+| `progress` | `0..1` | `1` | How much is drawn. Or `at` and `duration` for a draw-on that eases from 0 to 1 |
+| `color` | `string` | the accent | |
+| `tangent` | `{ at, span?, color? }` | | A tangent at x, once the curve has reached it. `span` is its half-length in x units |
+| `area` | `{ from, to, color? }` | | Shades between the curve and the x axis, as far as the curve has been drawn |
+| `points` | `{ x, label? }[]` | | Dots on the curve, appearing as it reaches them |
+
+`NumberLine` takes `range`, `step`, `points` (`{ value, label? }`), `intervals` (`{ from, to, openFrom?,
+openTo? }`, open ends are hollow) and `arrow` (`{ value, label? }`), plus an optional `box` (`{ x, y,
+width }`). `useNumberLine().toScreen(value)` lets a Spark ride the line.
+
+![A number line from -5 to 5 with an open-ended interval from -3 to 1 in the accent, a labelled point at 2 and an arrow at -4](img/api/stem-numberline.png)
+
+Strokes are never thinner than `lineWeight(width, height)`, 3px at 1080 on the shorter side (the plot
+line is about 1.7 times that). None of these glow: the Spark is the one element that does.
+
+### `FreeBody`
+
+![A block on a slope at rest: weight, the normal force and friction as labelled arrows from its centre, with a 10 N scale bar](img/api/stem-freebody.png)
+
+An object with labelled force arrows, for a physics lesson. The picture is honest: every arrow is exactly
+`magnitude * scale` px from tail to tip and a scale bar says how much that is, so two forces compared by
+eye are compared correctly. Arrows arrive one at a time. A block on a slope at rest (three forces that sum
+to zero) is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `forces` | `{ label, magnitude, angle, color? }[]` | required | `angle` in degrees counter-clockwise from the right (0 right, 90 up, 270 down) |
+| `scale` | `number` | required | Pixels per unit of magnitude |
+| `unit`, `scaleValue` | `string`, `number` | `"N"`, a round value near half the largest force | The scale bar's unit and the length it stands for |
+| `scaleAt` | `{ x, y }` | lower left | Left end of the scale bar |
+| `origin` | `{ x, y }` | frame centre | Where the object is; arrows start at its centre |
+| `objectSize`, `objectRotation`, `objectLabel` | | 9% of the shorter side, 0, none | Rotation in degrees clockwise: -30 puts a block flat on a 30 degree slope that rises to the right |
+| `at`, `stagger`, `order` | | `0`, `18`, as given | When the first arrow starts, frames between arrows, and the order as indices into `forces` |
+| `net` | `boolean` | `false` | Also draw the net force as a dashed arrow once the others are in. Left out when the net is zero |
+
+### `ArrayViz`
+
+![A row of ten sorted numbers with cells 5 to 9 lit and the rest dimmed, pointers low, mid and high under cells 5, 7 and 9](img/api/stem-arrayviz.png)
+
+A row of cells holding values, with named pointers, a highlighted range and a dimmed one: enough to teach
+binary search and a sorting pass. Binary search over a sorted array is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `values` | `(number \| string)[]` | required | One cell each, numbered above |
+| `pointers` | `{ name, index, color?, spark? }[]` | | `index` is a cell, or keyframes `{ frame, index }` that move the pointer (eased, fractional between cells). With `spark: true` the pointer's tip is the Spark, so its move leaves a trail. At most one pointer may (one glowing element at a time) |
+| `highlights` | `{ from, to, color? }[]` | | Cells to fill with the accent, inclusive: the range still in play |
+| `dimmed` | `{ from, to }[]` | | Cells ruled out, inclusive |
+| `origin`, `cellSize` | | centred, fits 84% of the width | |
+| `subject` | `Subject` | `"cs"` | Picks the accent |
+
+`useArrayViz()` returns `{ cellSize, left, top, cellCenter(i) }` so a Spark's path (`walk`) can be built from
+the cells' own positions.
+
+### The glow budget
+
+One glowing element at a time. Spark and Nova draw their glow through `Glow`, which tags its element
+with `data-ovs-glow` and `data-ovs-glow-level`; `countGlowing(root)` counts the elements above
+`GLOW_VISIBLE_LEVEL`. A Spark is one, a Nova's flash is one (the ring and particles do not glow).

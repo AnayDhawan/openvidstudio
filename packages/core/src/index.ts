@@ -32,6 +32,8 @@ export type { ShakeOffset } from "./handheld";
 
 // Music-first timing: the score's grid as scene-local frames (C3)
 export { MusicClockProvider, useMusicClock, createMusicClock } from "./musicClock";
+export { NarrationWordsProvider, useNarrationWords, createNarrationWords } from "./narrationWords";
+export type { NarrationWord, NarrationWords, WordAt } from "./narrationWords";
 export type { MusicCues, MusicClock } from "./musicClock";
 
 // Motion helpers

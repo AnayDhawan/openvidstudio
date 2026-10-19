@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerTools } from "./tools";
+import { rejectUnknownInputs } from "./tools/mcp";
 import type { OpenvidstudioConfig } from "./config";
 
 // The non-MCP entry points, for callers with no agent in the loop (CI, cron).
@@ -38,6 +39,7 @@ export function createMcpServer(config?: OpenvidstudioConfig): McpServer {
     },
   );
 
+  rejectUnknownInputs(server);
   registerTools(server, config);
 
   return server;

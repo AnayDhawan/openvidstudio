@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { PrimitiveSchemaDefinition } from "@modelcontextprotocol/sdk/types.js";
 import { resolveProjectRoot } from "../util";
-import { loadConfig, type CreativeLevel } from "../config";
+import { loadConfig, productionMode, type CreativeLevel, type ProductionMode } from "../config";
 import { runPreflight } from "./preflight";
 import { runTool } from "./mcp";
 
@@ -14,8 +14,11 @@ import { runTool } from "./mcp";
  *
  * The estimate has two kinds of number in it, and they are not equally solid:
  *  - Render time (draft pass, stills, final pass) is derived from preflight's real
- *    `remotion benchmark` measurement on this machine. This is the part the ±30% accuracy
- *    bar is actually about, and it's real because it's measured, not guessed.
+ *    `remotion benchmark` measurement on this machine, divided by a per-level scene weight
+ *    (a finished video renders slower than the flat benchmark composition). The bundle time per
+ *    review round is measured by the same benchmark. This is the part the ±30% accuracy
+ *    bar is actually about, and it's real because it's measured, not guessed. The scene
+ *    weights are calibrated against recorded runs (see LevelProfile.renderWeight).
  *  - Authoring time (how long writing N bespoke scenes or filling N templates actually
  *    takes) has no machine to benchmark -- it's a per-beat constant, tuned per level
  *    (AUTHORING_SECONDS_PER_BEAT below), and it is the part of this estimate most likely
@@ -26,7 +29,10 @@ import { runTool } from "./mcp";
 
 export interface PlanProductionInput {
   projectRoot?: string;
-  creativeLevel: CreativeLevel;
+  /** "standard" (default) or "supernova", a STEM lesson, which has no creative level. */
+  mode?: ProductionMode;
+  /** Required for a standard video; a supernova lesson ignores it. */
+  creativeLevel?: CreativeLevel;
   timeBudgetMinutes: number;
   targetDurationSeconds?: number;
 }
@@ -38,7 +44,9 @@ export interface PhaseEstimate {
 }
 
 export interface PlanProductionResult {
-  creativeLevel: CreativeLevel;
+  mode: ProductionMode;
+  /** null for a supernova lesson, which is not planned on the peak/mid/literal scale. */
+  creativeLevel: CreativeLevel | null;
   timeBudgetMinutes: number;
   targetDurationSeconds: number;
   beatCountEstimate: number;
@@ -58,7 +66,7 @@ export interface PlanProductionResult {
   /** Present when even the unavoidable minimum (one final render) doesn't fit the budget. */
   infeasibleWarning?: string;
   /** How the render-time portion was derived: a real measurement, or an unmeasured fallback. */
-  measurement: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback" };
+  measurement: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback"; bundleSeconds?: number | null };
   warnings: string[];
 }
 
@@ -75,6 +83,12 @@ const STILL_FRAMES_PER_BEAT = 4;
 // to a conservative, clearly-labeled placeholder rather than refusing to plan at all.
 // Matches renderVideo.ts's own async-estimate fallback order of magnitude.
 const FALLBACK_FPS = 2;
+// One bundle of the project costs about this much when preflight could not time one.
+const FALLBACK_BUNDLE_SECONDS = 30;
+// Capturing a beat's real footage (open the page, settle, interact, record) and how many of those
+// captures get repeated once because a selector moved or a frame came out wrong.
+const CAPTURE_SECONDS_PER_BEAT = 45;
+const CAPTURE_RETRY_FRACTION = 0.5;
 
 interface LevelProfile {
   qcRounds: number;
@@ -83,6 +97,13 @@ interface LevelProfile {
   scoreStrategy: string;
   authoringSecondsPerBeat: number;
   scoreSeconds: number;
+  /**
+   * How much slower a finished video of this level renders than preflight's flat benchmark
+   * composition. literal is 1: a real 6-beat literal render matched the benchmark within 5%. peak is
+   * 3.7, from the recorded Acme run: 1800 frames took 15 minutes (2 fps) where the benchmark ran at
+   * 7.3 fps. mid sits between the two and is an engineering estimate until a mid run is timed.
+   */
+  renderWeight: number;
 }
 
 // Authoring-time constants (see the module doc comment): an engineering estimate, most
@@ -97,6 +118,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     scoreStrategy: "compose_score: an original, arc-matched score (Phase C)",
     authoringSecondsPerBeat: 90,
     scoreSeconds: 90,
+    renderWeight: 3.7,
   },
   mid: {
     qcRounds: 2,
@@ -105,6 +127,7 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     scoreStrategy: "the built-in ambient music-bed.mp3 or a CC0 track via find_music_bed",
     authoringSecondsPerBeat: 35,
     scoreSeconds: 20,
+    renderWeight: 2,
   },
   literal: {
     qcRounds: 1,
@@ -113,7 +136,24 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     scoreStrategy: "whatever beats.json/the brief specifies; the built-in music-bed.mp3 if unstated",
     authoringSecondsPerBeat: 10,
     scoreSeconds: 0,
+    renderWeight: 1,
   },
+};
+
+/**
+ * A Supernova lesson: script-first, narrated, built from stem primitives with nothing captured.
+ * Authoring and the render weight are engineering estimates (no lesson has been timed yet): a
+ * lesson scene is a few primitives rather than a bespoke layout, but Spark trails and the Nova's
+ * particles make a frame heavier than the flat benchmark composition.
+ */
+const SUPERNOVA_PROFILE: LevelProfile = {
+  qcRounds: 2,
+  customFraction: 1,
+  arc: "hook question, a concrete example, terms defined at first use, the formula as a shortcut, the aha on a Nova, a recap, a check question",
+  scoreStrategy: "compose_score with no percussion: a quiet pad under the voice",
+  authoringSecondsPerBeat: 60,
+  scoreSeconds: 20,
+  renderWeight: 2,
 };
 
 // ~10s/beat average across PIPELINE.md's Simple demo arc (60-75s over hook+problem+2-3
@@ -122,10 +162,15 @@ const SECONDS_PER_BEAT_ESTIMATE = 10;
 
 export function runPlanProductionLogic(
   input: PlanProductionInput,
-  benchmark: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback" },
+  benchmark: { fps: number | null; cpuCount: number | null; source: "benchmark" | "fallback"; bundleSeconds?: number | null },
   projectConfig: { fps: number },
 ): PlanProductionResult {
-  const profile = LEVEL_PROFILES[input.creativeLevel];
+  const mode: ProductionMode = input.mode ?? "standard";
+  if (mode === "standard" && input.creativeLevel === undefined) {
+    throw new Error("creativeLevel is required for a standard video (peak, mid or literal).");
+  }
+  const profile = mode === "supernova" ? SUPERNOVA_PROFILE : LEVEL_PROFILES[input.creativeLevel as CreativeLevel];
+  const levelLabel = mode === "supernova" ? "supernova" : (input.creativeLevel as CreativeLevel);
   const targetDurationSeconds = input.targetDurationSeconds ?? 60;
   const beatCountEstimate = Math.max(3, Math.round(targetDurationSeconds / SECONDS_PER_BEAT_ESTIMATE));
   const customScenes = Math.round(beatCountEstimate * profile.customFraction);
@@ -133,17 +178,25 @@ export function runPlanProductionLogic(
 
   const fps = benchmark.fps ?? FALLBACK_FPS;
   const totalFrames = targetDurationSeconds * projectConfig.fps;
-  const finalRenderSeconds = totalFrames / fps;
-  const draftRenderSeconds = totalFrames / (fps * DRAFT_SPEEDUP);
+  // fps is the flat benchmark composition's speed; a finished video renders at fps / renderWeight.
+  const sceneFps = fps / profile.renderWeight;
+  const finalRenderSeconds = totalFrames / sceneFps;
+  const draftRenderSeconds = totalFrames / (sceneFps * DRAFT_SPEEDUP);
   const stillsFramesTotal = beatCountEstimate * STILL_FRAMES_PER_BEAT;
-  const stillsPassSeconds = stillsFramesTotal / fps;
+  const stillsPassSeconds = stillsFramesTotal / sceneFps;
+  const bundleMeasured = typeof benchmark.bundleSeconds === "number";
+  const bundleSeconds = bundleMeasured ? (benchmark.bundleSeconds as number) : FALLBACK_BUNDLE_SECONDS;
+  // One bundle per review round, one for the draft pass and one for the final render.
+  const bundleCount = profile.qcRounds + 2;
+  // A lesson captures nothing: every scene is constructed from primitives.
+  const captureSeconds = mode === "supernova" ? 0 : beatCountEstimate * CAPTURE_SECONDS_PER_BEAT * (1 + CAPTURE_RETRY_FRACTION);
   const authoringSeconds = beatCountEstimate * profile.authoringSecondsPerBeat;
 
   const phases: PhaseEstimate[] = [
     {
       phase: "brief + beats",
       seconds: Math.round(beatCountEstimate * 8),
-      note: `${beatCountEstimate} beats, ${input.creativeLevel} arc: ${profile.arc}`,
+      note: `${beatCountEstimate} beats, ${levelLabel} arc: ${profile.arc}`,
     },
     {
       phase: "score",
@@ -157,19 +210,33 @@ export function runPlanProductionLogic(
         `(engineering estimate, not yet calibrated against real telemetry for peak/mid -- see this tool's module doc comment)`,
     },
     {
+      phase: "capture",
+      seconds: Math.round(captureSeconds),
+      note:
+        mode === "supernova"
+          ? "no real captures: a lesson is constructed from primitives"
+          : `${beatCountEstimate} beats x ${CAPTURE_SECONDS_PER_BEAT}s, plus an allowance for ${Math.round(CAPTURE_RETRY_FRACTION * 100)}% of them to be captured twice (engineering estimate)`,
+    },
+    {
+      phase: "review bundles",
+      seconds: Math.round(bundleSeconds * bundleCount),
+      note: `${bundleCount} bundles (${profile.qcRounds} review round${profile.qcRounds === 1 ? "" : "s"}, the draft pass, the final render) x ${bundleSeconds}s` +
+        (bundleMeasured ? " measured by preflight's benchmark" : " (unmeasured fallback, run preflight with benchmark: true for a real number)"),
+    },
+    {
       phase: "stills QC",
       seconds: Math.round(stillsPassSeconds * profile.qcRounds),
-      note: `${profile.qcRounds} round${profile.qcRounds === 1 ? "" : "s"} x ${stillsFramesTotal} frames at ${fps.toFixed(2)}fps`,
+      note: `${profile.qcRounds} round${profile.qcRounds === 1 ? "" : "s"} x ${stillsFramesTotal} frames at ${sceneFps.toFixed(2)}fps (${fps.toFixed(2)}fps benchmark / ${profile.renderWeight}x ${levelLabel} scene weight)`,
     },
     {
       phase: "draft render",
       seconds: Math.round(draftRenderSeconds),
-      note: `${totalFrames} frames at ~${(fps * DRAFT_SPEEDUP).toFixed(2)}fps (draft: half-res, veryfast preset)`,
+      note: `${totalFrames} frames at ~${(sceneFps * DRAFT_SPEEDUP).toFixed(2)}fps (draft: half-res, veryfast preset)`,
     },
     {
       phase: "final render",
       seconds: Math.round(finalRenderSeconds),
-      note: `${totalFrames} frames at ${fps.toFixed(2)}fps measured${benchmark.source === "fallback" ? " (unmeasured fallback, run preflight with benchmark: true for a real number)" : ""}`,
+      note: `${totalFrames} frames at ${sceneFps.toFixed(2)}fps: the measured ${fps.toFixed(2)}fps benchmark divided by a ${profile.renderWeight}x ${levelLabel} scene weight${benchmark.source === "fallback" ? " (unmeasured fallback, run preflight with benchmark: true for a real number)" : ""}`,
     },
   ];
 
@@ -193,7 +260,7 @@ export function runPlanProductionLogic(
     cutFirst.push(`render draft-only and skip the final pass for review, then render final once approved`);
 
     if (finalRenderSeconds > budgetSeconds) {
-      const feasibleSeconds = Math.floor((budgetSeconds * fps) / projectConfig.fps);
+      const feasibleSeconds = Math.floor((budgetSeconds * sceneFps) / projectConfig.fps);
       infeasibleWarning =
         `Even the unavoidable minimum, one final render (${Math.round(finalRenderSeconds)}s), does not fit the ` +
         `${input.timeBudgetMinutes}min budget at this machine's measured ${fps.toFixed(2)}fps. Feasible alternatives: ` +
@@ -210,7 +277,8 @@ export function runPlanProductionLogic(
   }
 
   return {
-    creativeLevel: input.creativeLevel,
+    mode,
+    creativeLevel: mode === "supernova" ? null : (input.creativeLevel as CreativeLevel),
     timeBudgetMinutes: input.timeBudgetMinutes,
     targetDurationSeconds,
     beatCountEstimate,
@@ -236,10 +304,16 @@ export async function runPlanProduction(input: PlanProductionInput): Promise<Pla
   const preflight = await runPreflight({ projectRoot, benchmark: true });
   const benchmark: PlanProductionResult["measurement"] =
     preflight.benchmarkResult?.ok === true
-      ? { fps: preflight.benchmarkResult.fps, cpuCount: preflight.benchmarkResult.cpuCount, source: "benchmark" }
+      ? {
+          fps: preflight.benchmarkResult.fps,
+          cpuCount: preflight.benchmarkResult.cpuCount,
+          source: "benchmark",
+          bundleSeconds: preflight.benchmarkResult.bundleSeconds ?? null,
+        }
       : { fps: null, cpuCount: null, source: "fallback" };
 
-  const result = runPlanProductionLogic(input, benchmark, { fps: config.videoConfig.fps });
+  const mode = input.mode ?? productionMode(config);
+  const result = runPlanProductionLogic({ ...input, mode }, benchmark, { fps: config.videoConfig.fps });
   if (!preflight.ok) {
     result.warnings.push(
       `preflight reports this machine isn't fully ready: ${preflight.blockers.join("; ")}. The estimate above assumes those get fixed first.`,
@@ -289,9 +363,14 @@ export function registerPlanProduction(server: McpServer): void {
         "missing one(s) itself (a structured form, not drafted content). If the client doesn't support " +
         "elicitation and either is still missing, it fails with an explicit instruction for the calling agent " +
         "to ask the dev directly (PLANNING.md §0) and call this again with both set -- it never guesses a " +
-        "level or a budget.",
+        "level or a budget. In supernova mode (a STEM lesson, from the project's production.mode or the mode " +
+        "input) only the budget is asked for: a lesson has no creative level, and its plan has no capture term.",
       inputSchema: {
         projectRoot: z.string().optional(),
+        mode: z
+          .enum(["standard", "supernova"])
+          .optional()
+          .describe("Defaults to the project's production.mode. A supernova lesson needs no creativeLevel."),
         creativeLevel: z.enum(["peak", "mid", "literal"]).optional(),
         timeBudgetMinutes: z.number().positive().optional(),
         targetDurationSeconds: z.number().positive().optional(),
@@ -300,12 +379,15 @@ export function registerPlanProduction(server: McpServer): void {
     async (input) =>
       runTool("plan_production", async () => {
         let { creativeLevel, timeBudgetMinutes } = input;
+        const mode = input.mode ?? productionMode(loadConfig(resolveProjectRoot(input.projectRoot)));
+        // A lesson is not planned on the peak/mid/literal scale, so it is never asked for one.
+        const needsLevel = mode === "standard";
 
-        if (creativeLevel === undefined || timeBudgetMinutes === undefined) {
+        if ((needsLevel && creativeLevel === undefined) || timeBudgetMinutes === undefined) {
           const caps = server.server.getClientCapabilities();
           if (caps?.elicitation) {
             const properties: Record<string, PrimitiveSchemaDefinition> = {};
-            if (creativeLevel === undefined) properties.creativeLevel = CREATIVE_LEVEL_SCHEMA;
+            if (needsLevel && creativeLevel === undefined) properties.creativeLevel = CREATIVE_LEVEL_SCHEMA;
             if (timeBudgetMinutes === undefined) properties.timeBudgetMinutes = TIME_BUDGET_SCHEMA;
 
             const elicited = await server.server.elicitInput({
@@ -322,8 +404,8 @@ export function registerPlanProduction(server: McpServer): void {
           }
         }
 
-        if (creativeLevel === undefined || timeBudgetMinutes === undefined) {
-          const missing = [creativeLevel === undefined && "creativeLevel", timeBudgetMinutes === undefined && "timeBudgetMinutes"]
+        if ((needsLevel && creativeLevel === undefined) || timeBudgetMinutes === undefined) {
+          const missing = [needsLevel && creativeLevel === undefined && "creativeLevel", timeBudgetMinutes === undefined && "timeBudgetMinutes"]
             .filter(Boolean)
             .join(" and ");
           throw new Error(
@@ -333,7 +415,7 @@ export function registerPlanProduction(server: McpServer): void {
           );
         }
 
-        return runPlanProduction({ ...input, creativeLevel, timeBudgetMinutes });
+        return runPlanProduction({ ...input, mode, creativeLevel, timeBudgetMinutes });
       }),
   );
 }

@@ -89,10 +89,15 @@ check("openvidstudio.config.json written with merged fields", (() => {
 // benchmark composition into the registry and immediately regenerates Root.tsx from it
 // (see initProject.ts), so the scaffolded copy is bigger than the bundled template's bare
 // `return null;` starting point by design, not a copy failure.
-const EXPECTED_TO_DIFFER = new Set([path.join("src", "Root.tsx")]);
+//
+// The other two exceptions are Supernova's: the vendored openvidstudio-stem/ belongs only to a
+// project made with mode "supernova", and a standard project's package.json is the bundled one
+// without the dependency on it (checked below). supernova-mode.test.mjs covers both in depth.
+const EXPECTED_TO_DIFFER = new Set([path.join("src", "Root.tsx"), "package.json"]);
+const isStemFile = (rel) => rel.split(path.sep)[0] === "openvidstudio-stem";
 let allBundledFilesCopied = true;
 for (const rel of bundledFileList) {
-  if (EXPECTED_TO_DIFFER.has(rel)) continue;
+  if (EXPECTED_TO_DIFFER.has(rel) || isStemFile(rel)) continue;
   const src = path.join(bundledTemplateDir, rel);
   const dst = path.join(tmpRoot, rel);
   if (!fs.existsSync(dst) || fs.statSync(src).size !== fs.statSync(dst).size) {
@@ -104,6 +109,13 @@ check(
   `every file in packages/mcp-server/templates/default (${bundledFileList.length} files, Root.tsx excepted) was copied into the scaffolded project`,
   allBundledFilesCopied,
 );
+{
+  const bundledPkg = JSON.parse(fs.readFileSync(path.join(bundledTemplateDir, "package.json"), "utf8"));
+  delete bundledPkg.dependencies["@openvidstudio/stem"];
+  const scaffoldedPkg = JSON.parse(fs.readFileSync(path.join(tmpRoot, "package.json"), "utf8"));
+  check("a standard project's package.json is the bundled one minus the stem dependency", JSON.stringify(scaffoldedPkg) === JSON.stringify(bundledPkg));
+  check("a standard project has no vendored stem package", !fs.existsSync(path.join(tmpRoot, "openvidstudio-stem")));
+}
 check("src/videos/demo/scenes/ was created", fs.existsSync(path.join(tmpRoot, "src", "videos", "demo", "scenes")));
 check(
   "src/Root.tsx was regenerated to register the preflight benchmark composition (B)",

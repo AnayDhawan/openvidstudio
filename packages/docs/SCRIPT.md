@@ -88,6 +88,38 @@ is optional too: a beat can be pure visual-plus-music with nothing to read at al
 `stitch_composition`'s `musicBed` defaults its volume to 1.0 (full level) when narration is
 `"none"`, instead of the 0.18 tuned for sitting quietly under a voice.
 
+## Lesson scripts (Supernova mode)
+
+A lesson video (production mode `"supernova"`, see PIPELINE.md) is won or lost on its script, and the
+visuals illustrate it. These rules are for a lesson, in addition to the pacing above (which still
+applies: 2.3 to 2.9 words per second, checked by `validate_beats`). `check_script` lints them.
+
+Start from a **concept card**, `src/videos/<name>/concept.json`: `{ "goal": "tell why a derivative is a
+slope", "terms": ["slope", "derivative"], "example": "a ball rolling down a hill" }`. The goal is what
+the viewer can do afterwards, the terms are the two or three that need defining, and the example is the
+one thing the whole lesson keeps coming back to. Get the script approved before any scene is built.
+
+1. **Hook in the first sentence**: a question or a surprising fact, with a number if there is one. Never
+   "in this video".
+2. **Intuition and a concrete example before any formula.** The formula arrives as a shortcut for
+   something the viewer already sees.
+3. **Define every term in plain words at first use** ("a slope is how steep a line is"), at most two new
+   terms in a beat.
+4. **One idea per beat. Sentences of about 14 words or fewer**, in spoken English, at about grade 8 or
+   below. A lesson is heard once.
+5. **Write maths as it is spoken.** Each `Equation` carries a `spoken` string ("x squared plus one") that
+   must appear in the narration of its beat.
+6. **End with a one-line recap, then a check question** the viewer can answer in their head. The last
+   beat ends with a question mark.
+
+`check_script` reports each of these as a finding on a beat: average sentence length (warning above 16
+words), Flesch-Kincaid reading level (warning above grade 9), a term used with no definition beside it
+(note), more than two new terms in a beat (warning), an `Equation`'s `spoken` string missing from the
+narration (error), a hook that is not a question or does not hold a number (warning) or opens "in this
+video" (error), pace against the beat length (error, the same budget as `validate_beats`), and a last
+beat that does not end with a question (error). It counts and matches; it cannot tell you the
+explanation is good, so listen to it.
+
 ## No em dashes
 
 No em dashes in any VO line, ever, same writing rule as every other doc in

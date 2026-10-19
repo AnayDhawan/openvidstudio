@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment } from "../util";
+import { PY_DIR } from "../paths";
 import { runTool } from "./mcp";
 
 /**
@@ -81,6 +82,28 @@ export interface NarrationClip {
   /** True when the clip could not be fitted inside its beat without an audible stretch. */
   needsAttention: boolean;
   note?: string;
+  /** Where the word timings were written (public/audio/vo/<beatId>.words.json), when the engine gave any. */
+  wordsPath?: string;
+  wordCount?: number;
+}
+
+/** One spoken word and when it is said, in milliseconds from the start of the clip as written. */
+export interface NarrationWord {
+  word: string;
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * What happened about word timings, said plainly rather than left for the caller to discover: only
+ * edge-tts gives word boundaries, and nothing is invented for an engine that does not.
+ */
+export interface WordTimingsReport {
+  /** True when the engine produces word boundaries (edge-tts, through the edge_tts Python module). */
+  supported: boolean;
+  /** The .words.json files written. */
+  written: string[];
+  note?: string;
 }
 
 export interface LanguageReport {
@@ -105,6 +128,8 @@ export interface GenerateNarrationResult {
   warnings: string[];
   /** Every language produced, including the base. */
   languages: LanguageReport[];
+  /** Word timings for scenes that point at the word being spoken (useNarrationWords). See NARRATION.md. */
+  wordTimings: WordTimingsReport;
 }
 
 /** Beyond this, a pitch-preserving stretch starts to sound processed. */
@@ -163,16 +188,64 @@ interface OmnivoiceOptions {
   instruct?: string;
 }
 
+let edgePython: string | null | undefined;
+
+/**
+ * The interpreter that can import edge_tts: the one the `edge-tts` command was installed into (its
+ * shebang, which is how pipx and a venv install it), then python3, then python. null when none can,
+ * in which case audio still comes from the command line and no word timings are written.
+ */
+function edgePythonInterpreter(): string | null {
+  if (edgePython !== undefined) return edgePython;
+  const candidates: string[] = [];
+  const which = spawnSync(process.platform === "win32" ? "where" : "which", ["edge-tts"], { encoding: "utf8" });
+  const binary = which.status === 0 ? (which.stdout ?? "").split(/\r?\n/)[0]?.trim() : "";
+  if (binary) {
+    try {
+      const head = fs.readFileSync(binary, "utf8").slice(0, 200).split("\n")[0] ?? "";
+      const m = /^#!\s*(\S+)/.exec(head);
+      if (m && !m[1].endsWith("/env")) candidates.push(m[1]);
+    } catch {
+      // a binary launcher (Windows .exe) has no shebang to read
+    }
+  }
+  candidates.push("python3", "python");
+  edgePython = candidates.find((py) => spawnSync(py, ["-c", "import edge_tts"], { encoding: "utf8" }).status === 0) ?? null;
+  return edgePython;
+}
+
+function readWords(file: string): NarrationWord[] | null {
+  try {
+    const words = JSON.parse(fs.readFileSync(file, "utf8")) as NarrationWord[];
+    return Array.isArray(words) && words.length > 0 ? words : null;
+  } catch {
+    return null;
+  }
+}
+
 function synthesize(
   engine: NarrationEngine,
   voice: string,
   text: string,
   out: string,
   omni: OmnivoiceOptions = {},
-): { ok: boolean; error?: string } {
+  wordsOut?: string,
+): { ok: boolean; error?: string; words?: NarrationWord[] } {
   for (let attempt = 0; attempt < 3; attempt++) {
     fs.rmSync(out, { force: true });
     let r;
+    if (engine === "edge-tts" && wordsOut !== undefined && edgePythonInterpreter() !== null) {
+      fs.rmSync(wordsOut, { force: true });
+      r = spawnSync(
+        edgePythonInterpreter() as string,
+        [path.join(PY_DIR, "edge-words.py"), "--voice", voice, "--text", text, "--out", out, "--words", wordsOut],
+        { encoding: "utf8" },
+      );
+      if (!r.error && r.status === 0 && fs.existsSync(out) && probeDuration(out) > 0.3) {
+        return { ok: true, words: readWords(wordsOut) ?? undefined };
+      }
+      // fall through to the plain command line, which gives audio and no timings
+    }
     if (engine === "edge-tts") {
       r = spawnSync("edge-tts", ["--voice", voice, "--text", text, "--write-media", out], {
         encoding: "utf8",
@@ -253,6 +326,15 @@ export function runGenerateNarration(input: GenerateNarrationInput): GenerateNar
   }
 
   const reports: LanguageReport[] = [];
+  const wordTimings: WordTimingsReport = { supported: engine === "edge-tts", written: [] };
+  if (engine !== "edge-tts") {
+    wordTimings.note = `${engine} gives no word boundaries, so no .words.json files were written and none were invented. Only edge-tts does.`;
+  } else if (edgePythonInterpreter() === null) {
+    wordTimings.supported = false;
+    wordTimings.note =
+      "No Python interpreter that can import edge_tts was found, so the audio came from the edge-tts command line and no word timings " +
+      "were written. Install it with pip (pip install edge-tts) into the interpreter python3 points at, or into the one the edge-tts command uses.";
+  }
 
   for (const language of languages) {
     const isBase = language === baseLanguage;
@@ -291,7 +373,7 @@ export function runGenerateNarration(input: GenerateNarrationInput): GenerateNar
       }
 
       const raw = path.join(workDir, isBase ? `${beat.id}.raw` : `${language}-${beat.id}.raw`);
-      const res = synthesize(engine, voice, line, raw, omni);
+      const res = synthesize(engine, voice, line, raw, omni, `${raw}.words.json`);
       if (!res.ok) {
         missing.push(beat.id);
         warnings.push(`${beat.id}: ${res.error}`);
@@ -343,6 +425,18 @@ export function runGenerateNarration(input: GenerateNarrationInput): GenerateNar
           `Fits with ${slack}s of silence left over. Stretching was clamped to keep the voice ` +
           `natural; add a few words to the line if the gap is noticeable.`;
       }
+      // Word timings, in the clip as written: the stretch speeds the audio up by `tempo`, so every time
+      // is divided by it. The words file sits beside the clip so stitch_composition can find it.
+      if (res.words) {
+        const wordsPath = path.join(outDir, `${beat.id}.words.json`);
+        const scaled = res.words.map((w) => ({ word: w.word, startMs: Math.round(w.startMs / tempo), endMs: Math.round(w.endMs / tempo) }));
+        fs.writeFileSync(wordsPath, JSON.stringify(scaled, null, 2) + "\n", "utf8");
+        clip.wordsPath = wordsPath;
+        clip.wordCount = scaled.length;
+        wordTimings.written.push(wordsPath);
+      } else if (engine === "edge-tts" && wordTimings.supported) {
+        warnings.push(`${beat.id}: the service sent no word boundaries for this line, so no .words.json was written.`);
+      }
       written.push(clip);
     }
 
@@ -358,6 +452,7 @@ export function runGenerateNarration(input: GenerateNarrationInput): GenerateNar
     missing: base.missing,
     warnings: base.warnings,
     languages: reports,
+    wordTimings,
   };
 }
 
@@ -375,7 +470,7 @@ export function registerGenerateNarration(server: McpServer): void {
         "rather than stretching it into something processed, because the real fix is the script or the beat " +
         "duration. Reports which beats got audio, which were skipped as already present, and which are still " +
         "missing, so a partially generated narration cannot slip through and render silent. Resumable: pass " +
-        "overwrite to redo clips that already exist. Pass languages to ship the same manifest in several at once: the base language keeps writing to public/audio/vo/<beatId>.mp3 and every other language gets public/audio/vo/<lang>/<beatId>.mp3, read from each beat's voTranslations. Translated lines live in the manifest rather than being produced here, because a translation is content and goes through the same approval the original script did. The omnivoice engine covers 600+ languages zero-shot and, given a reference clip, uses one cloned voice across all of them, which is the difference between a translated video and a dubbed one. requireTranslations fails up front on a missing line rather than shipping a cut that is narrated in one language and silent in another.",
+        "overwrite to redo clips that already exist. With edge-tts it also writes public/audio/vo/<beatId>.words.json, [{ word, startMs, endMs }] per beat, timed to the clip as written (scaled by the same stretch), which stitch_composition copies next to the composition for useNarrationWords(beatId); other engines write no timings and the result says so (wordTimings). Pass languages to ship the same manifest in several at once: the base language keeps writing to public/audio/vo/<beatId>.mp3 and every other language gets public/audio/vo/<lang>/<beatId>.mp3, read from each beat's voTranslations. Translated lines live in the manifest rather than being produced here, because a translation is content and goes through the same approval the original script did. The omnivoice engine covers 600+ languages zero-shot and, given a reference clip, uses one cloned voice across all of them, which is the difference between a translated video and a dubbed one. requireTranslations fails up front on a missing line rather than shipping a cut that is narrated in one language and silent in another.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),

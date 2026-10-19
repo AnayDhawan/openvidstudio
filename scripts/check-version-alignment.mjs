@@ -19,6 +19,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const MANIFESTS = [
   "package.json",
   "packages/core/package.json",
+  "packages/stem/package.json",
   "packages/mcp-server/package.json",
   "templates/default/package.json",
 ];

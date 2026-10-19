@@ -67,7 +67,7 @@ export function sanitizeRelativeOutPath(root: string, relPath: string, label: st
  * clobbering anything the dev (or a prior init_project call, for a second video
  * in the same project) has already touched.
  */
-export function copyTemplateTree(src: string, dest: string): void {
+export function copyTemplateTree(src: string, dest: string, skip?: (relativePath: string) => boolean, base = src): void {
   if (!fs.existsSync(src)) {
     throw new Error(
       `Template directory not found at ${src}. This package's build step (scripts/copy-template.mjs) may not have run.`,
@@ -78,8 +78,9 @@ export function copyTemplateTree(src: string, dest: string): void {
     if (entry.name === "node_modules") continue;
     const s = path.join(src, entry.name);
     const d = path.join(dest, entry.name);
+    if (skip?.(path.relative(base, s).split(path.sep).join("/"))) continue;
     if (entry.isDirectory()) {
-      copyTemplateTree(s, d);
+      copyTemplateTree(s, d, skip, base);
     } else if (!fs.existsSync(d)) {
       fs.copyFileSync(s, d);
     }

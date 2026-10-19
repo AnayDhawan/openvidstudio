@@ -66,6 +66,53 @@ console.log("\n== Part 46: plan_production -- three levels produce visibly diffe
   // module doc comment and in its warnings when no benchmark is available.
 }
 
+console.log("\n== plan_production: the estimate has a render term, a bundle term per review round and a capture term (#120) ==");
+{
+  const { runPlanProductionLogic } = require(path.join(distDir, "tools", "planProduction.js"));
+  const videoConfig = { fps: 30 };
+  const measured = { fps: 7.32, cpuCount: 8, source: "benchmark", bundleSeconds: 7 };
+  const plan = (over = {}, bench = measured) =>
+    runPlanProductionLogic({ creativeLevel: "peak", timeBudgetMinutes: 90, targetDurationSeconds: 60, ...over }, bench, videoConfig);
+  const phase = (r, name) => r.phases.find((p) => p.phase === name);
+
+  const base = plan();
+  check("each term is reported on its own line: capture, review bundles, stills, draft, final",
+    ["capture", "review bundles", "stills QC", "draft render", "final render"].every((n) => phase(base, n) !== undefined));
+  check("the old fields are all still there", ["creativeLevel", "timeBudgetMinutes", "targetDurationSeconds", "beatCountEstimate", "arc", "customScenes", "templateScenes",
+    "scoreStrategy", "qcRounds", "renderPasses", "phases", "totalEstimateSeconds", "fitsBudget", "cutFirst", "measurement", "warnings"].every((k) => k in base));
+  check("...and the old phases keep their names", ["brief + beats", "score", "scene authoring"].every((n) => phase(base, n) !== undefined));
+  check("totalEstimateSeconds is still the sum of the phases", base.totalEstimateSeconds === Math.round(base.phases.reduce((a, p) => a + p.seconds, 0)));
+  check("the authoring note keeps its \"engineering estimate, not a measurement\" label", /engineering estimate, not/.test(phase(base, "scene authoring").note));
+
+  check("a longer video raises the estimate", plan({ targetDurationSeconds: 120 }).totalEstimateSeconds > base.totalEstimateSeconds);
+  check("...and the final render term in particular", phase(plan({ targetDurationSeconds: 120 }), "final render").seconds > phase(base, "final render").seconds);
+  check("more review rounds raise the estimate (peak 3 rounds vs mid 2 at the same length)", base.qcRounds === 3 &&
+    phase(base, "review bundles").seconds > phase(plan({ creativeLevel: "mid" }), "review bundles").seconds);
+  check("a slower measured render raises the estimate", plan({}, { ...measured, fps: 3.5 }).totalEstimateSeconds > base.totalEstimateSeconds);
+  check("a slower bundle raises the bundle term", phase(plan({}, { ...measured, bundleSeconds: 40 }), "review bundles").seconds > phase(base, "review bundles").seconds);
+  check("more beats raise the capture term", phase(plan({ targetDurationSeconds: 120 }), "capture").seconds > phase(base, "capture").seconds);
+  check("a bundle is counted for every review round plus the draft and the final render",
+    phase(base, "review bundles").seconds === (base.qcRounds + 2) * 7);
+  check("an unmeasured bundle time falls back and says so", /unmeasured/.test(phase(plan({}, { fps: 7.32, cpuCount: 8, source: "benchmark" }), "review bundles").note));
+
+  // The real flat benchmark composition renders much faster than a finished peak video; the weight
+  // is calibrated against the recorded Acme run (15 min for 1800 frames, 2 fps, against 7.3 fps).
+  check("a peak final render is weighted above the flat benchmark: 1800 frames at 7.32fps would be 246s", phase(base, "final render").seconds > 246 * 3);
+  const literal = plan({ creativeLevel: "literal" });
+  check("literal keeps its calibrated 1x: 1800 frames at 7.32fps is 246s", phase(literal, "final render").seconds === 246);
+
+  // The recorded Acme run: 60 s, peak, 3 review rounds, 56 minutes on the clock. W2 wants the
+  // estimate within 1.5x of that.
+  const acmeMinutes = base.totalEstimateSeconds / 60;
+  check(`the Acme estimate (${acmeMinutes.toFixed(1)} min) is within 1.5x of the 56 minutes the run took`, 56 <= acmeMinutes * 1.5 && acmeMinutes <= 56 * 1.5);
+  console.log(`  note: Acme estimate for score.mjs --estimate-minutes ${acmeMinutes.toFixed(1)}`);
+
+  const tight = plan({ timeBudgetMinutes: 5 });
+  check("an infeasible budget still names a feasible duration that fits the final render", /Feasible alternatives: a (\d+)s target/.test(tight.infeasibleWarning ?? ""));
+  const feasible = Number(/a (\d+)s target/.exec(tight.infeasibleWarning ?? "")?.[1]);
+  check("...and that duration's final render does fit in the budget (control)", plan({ timeBudgetMinutes: 5, targetDurationSeconds: feasible }).phases.find((p) => p.phase === "final render").seconds <= 5 * 60);
+}
+
 console.log("\n== Part 47: beats.json's production field mirrors config, shape-checked only (B) ==");
 {
   const { validateBeatsLogic } = require(path.join(distDir, "tools", "validateBeats.js"));

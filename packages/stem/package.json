@@ -1,0 +1,55 @@
+{
+  "name": "@openvidstudio/stem",
+  "version": "0.2.0",
+  "description": "Supernova mode: the Void + Spark design system and the STEM lesson primitives for openvidstudio.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "commonjs",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": [
+    "src",
+    "public"
+  ],
+  "peerDependencies": {
+    "@openvidstudio/core": "^0.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.534"
+  },
+  "devDependencies": {
+    "@fontsource/space-grotesk": "^5.2.0",
+    "@mathjax/mathjax-fira-font": "4.1.3",
+    "@openvidstudio/core": "workspace:*",
+    "@types/react": "19.3.0",
+    "mathjax": "4.1.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "remotion": "4.0.534",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AnayDhawan/openvidstudio.git",
+    "directory": "packages/stem"
+  },
+  "homepage": "https://github.com/AnayDhawan/openvidstudio#readme",
+  "bugs": {
+    "url": "https://github.com/AnayDhawan/openvidstudio/issues"
+  },
+  "keywords": [
+    "remotion",
+    "video",
+    "stem",
+    "education",
+    "mcp"
+  ]
+}

@@ -67,12 +67,49 @@ if (existsSync(coreSrc)) {
   process.stderr.write(`copy-template: packages/core not found at ${coreSrc}, skipping core vendoring\n`);
 }
 
+// Supernova mode (packages/stem) is vendored the same way, as ./openvidstudio-stem, with its
+// public/ (the display font) so init_project can copy the font into the project. init_project
+// leaves both out of a standard project, so only a project made with mode "supernova" has them.
+const stemSrc = join(monorepoRoot, "packages", "stem");
+const vendoredStemDest = join(dest, "openvidstudio-stem");
+if (existsSync(stemSrc)) {
+  copyDir(join(stemSrc, "src"), join(vendoredStemDest, "src"));
+  if (existsSync(join(stemSrc, "public"))) copyDir(join(stemSrc, "public"), join(vendoredStemDest, "public"));
+  // The maths renderer's runtime: MathJax 4 with its sans Fira font, served from the project's own
+  // public/ so a render needs no network. Generated from the installed packages rather than checked
+  // in (about 3.5MB). Only the SVG output with no bundled font, plus Fira's SVG glyph ranges.
+  const mathjaxPkg = join(stemSrc, "node_modules", "mathjax");
+  const firaPkg = join(stemSrc, "node_modules", "@mathjax", "mathjax-fira-font");
+  if (!existsSync(join(mathjaxPkg, "tex-svg-nofont.js")) || !existsSync(join(firaPkg, "svg.js"))) {
+    process.stderr.write(`copy-template: mathjax and @mathjax/mathjax-fira-font are not installed under packages/stem/node_modules. Run pnpm install at the repo root.\n`);
+    process.exit(1);
+  }
+  const mjDest = join(vendoredStemDest, "public", "mathjax");
+  mkdirSync(join(mjDest, "fira", "svg"), { recursive: true });
+  copyFileSync(join(mathjaxPkg, "tex-svg-nofont.js"), join(mjDest, "tex-svg-nofont.js"));
+  copyFileSync(join(mathjaxPkg, "LICENSE"), join(mjDest, "MATHJAX-LICENSE.txt"));
+  copyFileSync(join(firaPkg, "svg.js"), join(mjDest, "fira", "svg.js"));
+  copyDir(join(firaPkg, "svg", "dynamic"), join(mjDest, "fira", "svg", "dynamic"));
+  const stemPkg = JSON.parse(readFileSync(join(stemSrc, "package.json"), "utf8"));
+  // The workspace's dev dependencies (workspace:* links) mean nothing to a project's own npm install,
+  // which fails on them. The vendored copy keeps only what a consumer needs: its peer dependencies.
+  delete stemPkg.devDependencies;
+  delete stemPkg.scripts;
+  writeFileSync(join(vendoredStemDest, "package.json"), JSON.stringify(stemPkg, null, 2) + "\n");
+  process.stderr.write(`copy-template: vendored @openvidstudio/stem -> ${vendoredStemDest}\n`);
+} else {
+  process.stderr.write(`copy-template: packages/stem not found at ${stemSrc}, skipping stem vendoring\n`);
+}
+
 const templatePkgPath = join(dest, "package.json");
 const templatePkg = JSON.parse(readFileSync(templatePkgPath, "utf8"));
 if (templatePkg.dependencies && templatePkg.dependencies["@openvidstudio/core"]) {
   templatePkg.dependencies["@openvidstudio/core"] = "file:./openvidstudio-core";
+  if (templatePkg.dependencies["@openvidstudio/stem"]) {
+    templatePkg.dependencies["@openvidstudio/stem"] = "file:./openvidstudio-stem";
+  }
   writeFileSync(templatePkgPath, JSON.stringify(templatePkg, null, 2) + "\n");
   process.stderr.write(
-    `copy-template: rewrote bundled package.json's @openvidstudio/core dependency to file:./openvidstudio-core\n`,
+    `copy-template: rewrote bundled package.json's @openvidstudio/core (and stem) dependency to a relative file: reference\n`,
   );
 }

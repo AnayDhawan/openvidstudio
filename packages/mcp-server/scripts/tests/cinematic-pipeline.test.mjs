@@ -116,7 +116,13 @@ console.log("\n== Rhythm: uniform shot lengths draw a warning, never an error ==
   check("a file with no beats array returns no warnings and no crash", Array.isArray(withErrors.warnings) && withErrors.warnings.length === 0 && withErrors.valid === false);
   const { runWriteBeatsFile } = require(path.join(distDir, "tools", "writeBeatsFile.js"));
   const wroteRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-rhythm-"));
-  check("write_beats_file still writes a uniform file: a warning does not block", runWriteBeatsFile({ projectRoot: wroteRoot, videoName: "u", beatsJson: file([90, 90, 90, 90]) }).written === true);
+  const wroteUniform = runWriteBeatsFile({ projectRoot: wroteRoot, videoName: "u", beatsJson: file([90, 90, 90, 90]) });
+  check("write_beats_file still writes a uniform file: a warning does not block", wroteUniform.written === true && fs.existsSync(wroteUniform.path));
+  check("...and passes the rhythm warning on in the successful result", Array.isArray(wroteUniform.warnings) && wroteUniform.warnings.length === 1 && /metronome/.test(wroteUniform.warnings[0]));
+  const wroteVaried = runWriteBeatsFile({ projectRoot: wroteRoot, videoName: "v", beatsJson: file([100, 40, 70, 70]) });
+  check("a varied file is written with an empty warnings array", wroteVaried.written === true && Array.isArray(wroteVaried.warnings) && wroteVaried.warnings.length === 0);
+  const refused = runWriteBeatsFile({ projectRoot: wroteRoot, videoName: "bad", beatsJson: file([90, 90, 90, 90], { beats: undefined }) });
+  check("control: an invalid file is still refused, nothing written", refused.valid === false && !fs.existsSync(path.join(wroteRoot, "src", "videos", "bad", "beats.json")));
 }
 
 console.log("\n== Layers: capture_screenshot splits a page into a background and transparent element layers ==");

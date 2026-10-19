@@ -90,7 +90,10 @@ One file per beat. **How a scene gets written depends on the creative level in t
 - **literal, or a tight time budget: use a template.** `scaffold_scene` in its default
   `"template"` mode emits a scene that renders as-is from the beat's own copy and duration.
 - Either way the scene passes STYLE.md's hard rules, and any number it shows comes from
-  `facts.json` (see Run records and facts below) or a capture, never from memory.
+  `facts.json` (see Run records and facts below) or a capture, never from memory. In a
+  Supernova lesson the numbers are computed, not claimed: `validate_scenes` accepts a number that
+  is in the concept card's worked example (`concept.json`) or in an `Equation`'s `tex`, and still
+  flags one that appears nowhere.
 - Bespoke scenes live anywhere under the video folder; point the beat at the file with
   `scene: "./scenes/Whatever.tsx"` and `stitch_composition` wires it.
 
@@ -245,6 +248,10 @@ Then `validate_scenes` with `render: true` is the gate before stitching and rend
         claim
 
 ## 5. Render + exports
+Every tool rejects an input it does not take, naming the key, listing the valid ones and suggesting
+the closest, so `render_video { quality: "draft" }` fails at once instead of running a full render
+(the option is `draft: true`).
+
 - `npx remotion render <composition-id> output/<video>.mp4`
 - After the first full render, prefer `render_video` with `incremental: true`.
   Each beat renders to `output/segments/<video>/<beatId>.mp4` and the segments
@@ -334,6 +341,33 @@ read the render plus `beats.json`, so none of them can drift from the video:
   screen. It does not write the narration and does not install the manifest:
   both go through the approval gate in `PLANNING.md` §5.
 
+## Production mode: standard and supernova
+
+`production.mode` in `openvidstudio.config.json` is `"standard"` when it is absent, and that is every
+product video: real captures, a story, a creative level (peak, mid or literal). `"supernova"` is a
+different kind of production, a short STEM lesson that is written script first, narrated, and built
+from constructed pictures rather than captures. It is not a fourth creative level, so a lesson is not
+asked for one and is not planned on that scale.
+
+`init_project` with `mode: "supernova"` makes a lesson project: it stores the mode, defaults the frame
+to 1080x1920, vendors `@openvidstudio/stem` (with its display font, Space Grotesk, copied into
+`public/fonts/`) and adds the dependency. A standard project gets none of that: its files, config and
+`package.json` are exactly what they were. `@openvidstudio/stem` exports `supernovaDesignSystem(subject)`,
+the Void + Spark design system with one accent per subject (math, physics, cs, chemistry, biology):
+
+```ts
+import { supernovaDesignSystem } from "@openvidstudio/stem";
+export const design = supernovaDesignSystem("physics");
+```
+
+`validate_beats` reads `production.mode` (an unknown value is an error; a silent lesson is a warning),
+`write_brief` takes `mode` and needs no `creativeLevel` for a lesson (and no real or constructed split
+in its shot list), `plan_production` plans a lesson with its own arc, no capture time and no creative
+level, and `validate_scenes` and `write_description` follow it: numbers in a worked example or an
+equation pass, `validate_scenes` in render mode counts glowing elements (more than one is a warning,
+more than two an error, except in a beat with a Nova), and the description says in one line that the
+video is a constructed explanation instead of disclosing shots one by one.
+
 ## Native vertical (9:16)
 
 For Reels, Shorts and TikTok there are two ways to get a 1080x1920 file, and they are not
@@ -354,9 +388,12 @@ the 16:9 version is cropped, not reflowed. If the picture is the content, render
    writes that size into the composition, and `validate_scenes` reads it from
    `openvidstudio.config.json`, so framing is judged against 1080 wide, not 1920.
 2. Camera coordinates are stage pixels, and `CinematicScene`'s stage is the composition size, so
-   the frame centre is `x: 540, y: 960` (not 960,540). `scaffold_scene` writes 960,540 into its
-   starter and its templates, which are laid out for 1920x1080: in a vertical project change
-   those keyframes, or write the scene by hand with a `scene` override on the beat.
+   the frame centre is `x: 540, y: 960` (not 960,540). `scaffold_scene` reads the project's frame
+   size and writes that centre into its starter and templates, and lays the templates out for it:
+   the camera is centred, content is sized to the 1080 wide frame, and the side-by-side templates
+   (split-panel, comparison) stack. A scene you write by hand takes the centre from
+   `useVideoConfig()`. A landscape recording or capture in a vertical frame is cropped (a recording
+   fills the frame with `object-fit: cover`), so for those keep what matters near the centre.
 3. In the video's `design.ts`, pass the stage so the layout grid scales to it: `defineDesignSystem({
    stage: { width: 1080, height: 1920 } })` gives margins of 84 / 231 / 196 instead of
    150 / 130 / 110. Set `grid` yourself for the safe zones below.
@@ -403,6 +440,12 @@ Each is checked at both sizes in `vertical.test.mjs`.
 - `DotGrid`: `w` and `h` default to the composition size, so the grid covers the whole frame.
 - `Letterbox`: bars are 64/1080 of the frame height, about 114px at 1920 tall.
 - `RepoCta`: laid out from the frame centre, so the card is centred in either shape.
+- `scaffold_scene`: every template and the starter, generated from the project's frame size
+  (checked at both sizes in `scaffold-vertical.test.mjs`; the 1920x1080 output is unchanged byte
+  for byte). `DirectedShot` is not used by any scaffolded scene, so there is nothing to set there;
+  when you use it by hand, pass the real `captureWidth` and `captureHeight`.
+- `ChapterHud`: with no `design` it takes the layout grid for the composition's size, so in a reel
+  the rail sits above the bottom safe zone rather than 46px from the edge.
 - `defineDesignSystem`: the layout grid scales to the `stage` it is given.
 - `validate_scenes`: the static framing check uses the project's `videoConfig`; render mode already
   measured the real composition.

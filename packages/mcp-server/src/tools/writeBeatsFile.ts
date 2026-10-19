@@ -12,7 +12,7 @@ export interface WriteBeatsFileInput {
   beatsJson: unknown;
 }
 
-export type WriteBeatsFileResult = { written: true; path: string } | ValidateBeatsResult;
+export type WriteBeatsFileResult = { written: true; path: string; warnings: string[] } | ValidateBeatsResult;
 
 /**
  * Runs validate_beats' own logic directly (no MCP round-trip) and refuses to write
@@ -34,7 +34,7 @@ export function runWriteBeatsFile(input: WriteBeatsFileInput): WriteBeatsFileRes
   const filePath = path.join(videoDir, "beats.json");
   fs.writeFileSync(filePath, JSON.stringify(input.beatsJson, null, 2) + "\n", "utf8");
 
-  return { written: true, path: filePath };
+  return { written: true, path: filePath, warnings: validation.warnings };
 }
 
 export function registerWriteBeatsFile(server: McpServer): void {
@@ -46,7 +46,9 @@ export function registerWriteBeatsFile(server: McpServer): void {
         "Runs validate_beats' own validation logic internally first (a direct function call, not an MCP " +
         "round-trip) and refuses to write anything invalid, returning the same { valid: false, errors } " +
         "shape instead. On success writes src/videos/<videoName>/beats.json (pretty-printed, 2-space indent) " +
-        "and returns { written: true, path }. IMPORTANT: this tool only enforces schema validity. It does " +
+        "and returns { written: true, path, warnings }: a successful write can still carry warnings (for example " +
+        "that the shot lengths are nearly uniform), which never block the write but are worth acting on. " +
+        "IMPORTANT: this tool only enforces schema validity. It does " +
         "NOT enforce PLANNING.md's mandatory human-approval gate -- the calling agent must show the dev the " +
         "full drafted beats.json (not a summary) and get explicit approval before ever calling this tool, " +
         "even for a small, obviously-fine-looking draft. Passing this tool's validation is necessary but " +

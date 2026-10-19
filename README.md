@@ -38,7 +38,7 @@ You ask your agent for a video. openvidstudio gives it the tools to actually mak
 
 Claude Code, Cursor, or any other client that speaks the
 [Model Context Protocol](https://modelcontextprotocol.io) can drive it, through
-<!-- tools:base -->forty<!-- /tools --> tools (<!-- tools:higgsfield -->forty-one<!-- /tools --> with the optional Higgsfield tier).
+<!-- tools:base -->forty-one<!-- /tools --> tools (<!-- tools:higgsfield -->forty-two<!-- /tools --> with the optional Higgsfield tier).
 
 ### Why not just record the screen?
 
@@ -92,7 +92,7 @@ your clone, and restart the client:
 }
 ```
 
-<!-- tools:Base -->Forty<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
+<!-- tools:Base -->Forty-one<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
 names the fix for your platform.
 
 > **About npm.** `npx -y @openvidstudio/mcp-server` installs version 0.1.0 from September, which
@@ -195,6 +195,16 @@ authored scenes) and **literal** (exactly what you specified, templates welcome)
 process is the `openvidstudio-director` skill, and the craft is written down in
 [CREATIVE.md](packages/docs/CREATIVE.md).
 
+## Supernova mode (STEM lessons)
+
+A separate kind of production for short animated lessons: one maths, physics or computer science concept in 60 to 90
+seconds, vertical, narrated, with the script written and approved first. `init_project` with `mode: "supernova"` makes a
+project with the `@openvidstudio/stem` primitives (a glowing Spark and a one-per-video Nova, graphs, sans-serif equations
+with a spoken form, force diagrams, array pictures), `check_script` lints the lesson script, and `generate_narration`
+gives word timings so a scene can point at the word being said. The pieces are built and tested one by one; the voice
+step needs `edge-tts` and a network, and no finished lesson has been published yet. The process is the `supernova`
+skill and the design and voice are in [SUPERNOVA.md](packages/docs/SUPERNOVA.md).
+
 ## The tools
 
 | Area | What it does | Key tools |
@@ -274,7 +284,8 @@ openvidstudio/
 ├── packages/
 │   ├── capture/        # browser, desktop, mobile and terminal capture, no Remotion needed
 │   ├── core/           # Remotion building blocks: camera, scenes, transitions, sound
-│   ├── mcp-server/     # @openvidstudio/mcp-server: the <!-- tools:base:digits -->40<!-- /tools -->-<!-- tools:higgsfield:digits -->41<!-- /tools --> MCP tools an agent calls
+│   ├── mcp-server/     # @openvidstudio/mcp-server: the <!-- tools:base:digits -->41<!-- /tools -->-<!-- tools:higgsfield:digits -->42<!-- /tools --> MCP tools an agent calls
+│   ├── stem/           # @openvidstudio/stem: Supernova lesson primitives
 │   └── docs/           # PLANNING · OVERVIEW · PIPELINE · STYLE · CREATIVE · CAPTURE · SCRIPT · API · NARRATION · TOOLS
 ├── templates/
 │   └── default/        # the project init_project creates

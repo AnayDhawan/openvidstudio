@@ -47,7 +47,7 @@ Fixed in this branch during the run:
 Open, not changed:
 - Bar numbering: brief bars are 1-based, compose_score's impact `bar` is a zero-based index. An impact written as "bar 6" lands one bar later than a reader expects. Needs a product decision.
 - The dead-frames check detects a beat that never moves, not a freeze mid-beat.
-- plan_production's time estimate (see W2).
-- `render_video` silently ignored an unknown `quality: "draft"` input (the option is `draft: true`), so a full render ran. The tool should reject unknown inputs.
+- plan_production's time estimate (see W2). Since fixed: it now has a capture term, a bundle term per review round, and a per-level scene weight on the render terms, giving 38.2 min for this run on a fresh benchmark (56 is 1.47x of that, so W2 passes). The scene weight and capture constants are calibrated on this one run.
+- `render_video` silently ignored an unknown `quality: "draft"` input (the option is `draft: true`), so a full render ran. Since fixed: every tool now rejects an input it does not take.
 
 Best contact grid kept: `evals/acme-launch/contact-grid-round-2.png`.

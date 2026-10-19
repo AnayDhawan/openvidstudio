@@ -19,7 +19,7 @@ Hook, picture, set up, derive, use it, aha, close. In that order, every lesson. 
 1. **Hook**: a beginner's question or a surprising fact in sentence one. Then say where the lesson sits (the card's `referenceSpoken`: a chapter code or "Part 2 of 4").
 2. **Picture**: the diagram starts here, before any formula, inside the first 15 s. Everyday words; define each term at first use.
 3. **Set up**: symbols, units, assumptions, drawn on the diagram.
-4. **Derive**: the formula built line by line, one `Equation` per line with its `spoken` form, each step justified.
+4. **Derive**: the formula built line by line with one `Derivation`: a step per line, each with its `spoken` form and a `because`, each step justified.
 5. **Use it**: one worked example with the real numbers and units.
 6. **Aha**: the result that generalises or surprises, and where it stops being true.
 7. **Close**: one-line recap, then the check question. End on the question; hold the last frame.
@@ -60,12 +60,12 @@ A big topic is a series; each part ends on the next question.
 ## 5. Scenes
 
 - `scaffold_scene` in `"starter"` mode per beat, or write the file by hand. Build each from `@openvidstudio/stem`
-  (`Spark`, `Nova`, `Axes`, `Plot`, `NumberLine`, `Equation`, `FreeBody`, `ArrayViz`) against the video's `design.ts`:
+  (`Spark`, `Nova`, `Axes`, `Plot`, `NumberLine`, `Equation`, `Derivation`, `FreeBody`, `ArrayViz`, `LessonCaptions`) against the video's `design.ts`:
   `export const design = supernovaDesignSystem("<subject>")`.
 - One idea on screen at a time, at most two things moving, **one glowing element at a time**. The Nova is used once,
-  on the aha. Every `Equation` carries a `spoken` string that appears in its beat's narration, in the order spoken.
-- Key content stays inside the Reels safe zones. Sizes come from `useVideoConfig()`. Captions come from the beat's `vo`
-  text (see "Captions" in `SUPERNOVA.md`), so they break at sentence ends.
+  on the aha. Every `Equation` and every `Derivation` step carries a `spoken` string that appears in its beat's narration, in the order spoken.
+- Key content stays inside the Reels safe zones. Sizes come from `useVideoConfig()`. Captions: one line per beat,
+  `<LessonCaptions beatId="hook" text={vo} />` (see "Captions" in `SUPERNOVA.md`), so they break at sentence ends.
 - `compose_score` with `percussion: "none"` for a quiet pad under the voice. `stitch_composition`.
 
 ## 6. Review

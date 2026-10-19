@@ -1,13 +1,25 @@
 # Credits for public/sfx/
 
-Everything here is free of licence obligations: no attribution required, no content ID,
-nothing to breach. Three different reasons for that, so all three are recorded.
+A rendered video carries no attribution duty from anything here and no content ID.
+Four different sources, so all four are recorded.
 
 ## Synthesized in this repo
 
-`bell.wav`, `blip.wav`, `click.wav`, `success.wav`, `whoosh.wav` and `music-bed.mp3`
+`bell.wav`, `blip.wav`, `success.wav`, `whoosh.wav` and `music-bed.mp3`
 come from `scripts/gen-sfx.sh` (ffmpeg, sine and anoisesrc). No sampled or
 licensed material went into any of them.
+
+## Mixkit
+
+`click.wav` is "Fast double click on mouse" (Mixkit sound effect 275,
+https://mixkit.co/free-sound-effects/click/), supplied by the project owner on 2026-10-19 to
+replace a 30 ms synthesized tick. Trimmed to the two clicks (the first lands on the cue frame),
+mixed to mono, 48 kHz 16-bit PCM like the rest of the pack, and raised 1.5 dB so its peak is
+-1.5 dBFS. Licence: the Mixkit Sound Effects Free License, https://mixkit.co/license/#sfxFree.
+Using it in a rendered video needs no attribution. The licence text could not be read when
+this file was added, so confirm its terms on redistribution before republishing this pack as
+a sound library on its own (a fork that only ships the video tool is a different thing).
+Replace it with a synthesized or CC0 click and `click.wav` stops being the only licensed file here.
 
 ## Copyright-free recording
 

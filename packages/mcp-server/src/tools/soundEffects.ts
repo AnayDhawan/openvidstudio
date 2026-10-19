@@ -35,7 +35,7 @@ import { runTool } from "./mcp";
  * and attribution for every clip it fetches.
  */
 
-/** The pack that ships with @openvidstudio/core: synthesized, one copyright-free typing recording, three CC0. No rights attached. */
+/** The pack that ships with @openvidstudio/core: synthesized, a copyright-free typing recording, three CC0 sounds and a Mixkit click (see public/sfx/CREDITS.md). Using it in a video needs no credit. */
 const BUILT_IN: Record<string, string> = {
   bell: "soft notification chime, harmonic stack",
   blip: "short UI beep",
@@ -403,8 +403,8 @@ export async function runSoundEffects(input: SoundEffectsInput): Promise<SoundEf
     instructions,
     licenceNote:
       "The built-in pack in public/sfx/ is synthesized by ffmpeg, apart from a copyright-free typing " +
-      "recording and three CC0 sounds from Kenney, both recorded in public/sfx/CREDITS.md, and it " +
-      "carries no rights anyone has to honor. " +
+      "recording, three CC0 sounds from Kenney and one Mixkit click, all recorded in public/sfx/CREDITS.md. " +
+      "Using any of it in a video asks for no credit. " +
       "Anything imported into public/imported_audios/ does carry terms: Pixabay content is covered by " +
       "their Content Licence, and Freesound clips are per-clip CC and often require credit. Whatever " +
       "lands in ATTRIBUTION.md belongs in the video description.",
@@ -433,8 +433,8 @@ export function registerSoundEffects(server: McpServer): void {
         "and neither should you: their terms prohibit automated collection and state the API is for " +
         "real human requests, and they publish no sound-effects endpoint, so the user does that step. " +
         "Set provider to 'freesound' to fetch automatically instead, which needs the user's own API " +
-        "token and records licence and attribution per clip. Note that the built-in pack is free of " +
-        "any obligation (synthesized or CC0), and every downloaded sound gives that up, so prefer the " +
+        "token and records licence and attribution per clip. Note that the built-in pack asks " +
+        "for no credit, and every downloaded sound gives that up, so prefer the " +
         "built-ins when they fit.",
       inputSchema: {
         projectRoot: z.string().optional(),

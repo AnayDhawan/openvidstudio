@@ -165,7 +165,7 @@ Cuts on the beat feel intentional; cuts between beats feel accidental.
 
 ## 8. An SFX map
 
-Sound sells motion. The built-in pack is synthesized, so it needs no licence and no credit.
+Sound sells motion. The built-in pack needs no credit in a video (`public/sfx/CREDITS.md` records where each file came from).
 
 | Moment | Sound |
 |---|---|

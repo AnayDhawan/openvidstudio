@@ -1,15 +1,12 @@
 #!/bin/bash
 # Generate synthesized UI SFX into public/sfx/ (no licensing, fully reproducible).
 # Swap any file for a real recorded pack later, sfx.tsx API stays identical.
-# typing-effect.mp3 is not generated here: it is a copyright-free recording committed as-is.
+# typing-effect.mp3 and click.wav are not generated here: they are recordings committed as-is.
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p public/sfx
 
-# Click: sharp short tick
-ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.03:c=white:a=0.8" \
-  -af "highpass=f=1400,lowpass=f=6500,afade=t=in:d=0.002,afade=t=out:st=0.01:d=0.02,volume=2.2" \
-  public/sfx/click.wav
+# Click: not generated. click.wav is a recorded double click (Mixkit), committed as-is; see public/sfx/CREDITS.md.
 
 # Whoosh: bandpassed pink noise swell
 ffmpeg -v error -y -f lavfi -i "anoisesrc=d=0.55:c=pink:a=0.8" \

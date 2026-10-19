@@ -390,6 +390,31 @@ console.log("\n== Part 10: render_video's brand-lock gate ==");
     gatePassedWithBrandFile = !msg.includes("Brand-lock gate");
   }
   check("gate passes once src/brand.ts exists, no skipBrandLock needed (fails later, on the missing project)", gatePassedWithBrandFile);
+
+  // A Supernova lesson has no brand to extract, so the gate steps aside for it (and only for it).
+  const { prepareRenderVideo } = require(path.join(distDir, "tools", "renderVideo.js"));
+  const { runInitProject } = require(path.join(distDir, "tools", "initProject.js"));
+  const lessonRoot = path.join(tmpRoot, "brand-lock-supernova-test");
+  runInitProject({ name: "lesson", projectRoot: lessonRoot, mode: "supernova" });
+  let lessonPrepared = null;
+  let lessonError = "";
+  try {
+    lessonPrepared = prepareRenderVideo({ projectRoot: lessonRoot, videoName: "lesson" });
+  } catch (err) {
+    lessonError = err instanceof Error ? err.message : String(err);
+  }
+  check("a supernova project passes the brand-lock gate without skipBrandLock", lessonPrepared !== null && lessonError === "");
+  check("the result says brandLocked is false and why", lessonPrepared?.brandLocked === false && /supernova/.test(lessonPrepared?.brandLockSkipReason ?? ""));
+
+  const standardRoot = path.join(tmpRoot, "brand-lock-standard-test");
+  runInitProject({ name: "plain", projectRoot: standardRoot });
+  let standardRefused = false;
+  try {
+    prepareRenderVideo({ projectRoot: standardRoot, videoName: "plain" });
+  } catch (err) {
+    standardRefused = /Brand-lock gate/.test(err instanceof Error ? err.message : String(err));
+  }
+  check("a standard project without a brand still gets the gate", standardRefused);
 }
 
 console.log("\n== Part 10b: missing narration is reported, not silent ==");

@@ -10,6 +10,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - **`init_project` no longer copies untracked files from the template's `output/` folder (#139).** `copy-template` now copies the template from what git tracks (and, outside a checkout, allows only `output/README.md` and `output/.gitignore`), and `init_project` skips any other file under `output/`, so a render left on one machine does not land in every new project.
+- **`render_video` no longer blocks every Supernova project at the brand-lock gate (#136).** A project with `production.mode: "supernova"` skips the gate and reports `brandLocked: false` with a `brandLockSkipReason`; a standard project without `src/brand.ts` still gets the gate. The `skipBrandLock: true` workaround is gone from SUPERNOVA.md and the supernova skill.
 
 ## [1.3.1] - 2026-10-19
 

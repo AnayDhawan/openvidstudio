@@ -4,11 +4,13 @@
 
 # openvidstudio
 
-**Your agent drives. Your product is the footage.**
+**Code-based video generation**
+
+Every frame of your product is a real capture, never a generated mockup.
 
 Tell your AI coding agent to make a video of your project, and it does: a real browser
-opens your real app, every frame is a capture of it, and the agent plans, narrates,
-scores and renders the result on your machine.
+opens your real app, and the agent plans, narrates, scores and renders the result on
+your machine.
 
 [What it does](#what-it-does) · [Quick start](#quick-start) · [Director mode](#director-mode) · [Docs](#docs) · [Contributing](CONTRIBUTING.md)
 

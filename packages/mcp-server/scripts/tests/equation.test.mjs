@@ -163,14 +163,16 @@ async function run(width, height) {
 console.log("\n== spoken is required by the types ==");
 {
   const stem = path.join(monorepoRoot, "packages", "stem");
-  const tsc = path.join(stem, "node_modules", ".bin", "tsc");
+  // On Windows the compiler is a .CMD shim, which CreateProcess cannot run without a shell (same as
+  // scaffold-and-stitch.test.mjs). A fixed argv, so the shell carries no injection concern.
+  const tsc = path.join(stem, "node_modules", ".bin", process.platform === "win32" ? "tsc.CMD" : "tsc");
   const dir = path.join(stem, ".type-test");
   fs.rmSync(dir, { recursive: true, force: true });
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "tsconfig.json"), JSON.stringify({ extends: "../tsconfig.json", include: ["./*.tsx", "../src"] }));
   const compile = (source) => {
     fs.writeFileSync(path.join(dir, "probe.tsx"), source);
-    return spawnSync(tsc, ["--noEmit", "-p", dir], { encoding: "utf8", cwd: stem });
+    return spawnSync(tsc, ["--noEmit", "-p", dir], { encoding: "utf8", cwd: stem, shell: process.platform === "win32" });
   };
   try {
     const missing = compile(`import { Equation } from "../src";\nexport const A = <Equation tex="x" />;\n`);

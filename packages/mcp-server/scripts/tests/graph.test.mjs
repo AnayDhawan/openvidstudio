@@ -170,10 +170,21 @@ async function run(width, height) {
       for (let dy = -3; dy <= 3; dy++) if (close(rgb(proj, Math.round(px(10)), Math.round(py(7.5)) + dy), [255, 179, 71], 30)) return true;
       return false;
     })());
-    check("Projectile: it stops at the range, nothing past x = 40", (() => {
-      for (let x = Math.round(px(41)); x < box.x + box.width; x++) for (let y = box.y; y < box.y + box.height; y++) if (close(rgb(proj, x, y), [255, 179, 71], 30)) return false;
-      return true;
-    })());
+    // The "range 40 m" label sits just right of the range marker, inside this region. Its anti-aliased edge can
+    // produce a stray amber-ish pixel (one, at 1080x1920 on Windows: (228,180,99)), so a few pixels are label
+    // fringe and the curve past x = 40 would be dozens: a 3px stroke over even one more unit.
+    const pastRange = (() => {
+      let n = 0;
+      for (let x = Math.round(px(41)); x < box.x + box.width; x++) for (let y = box.y; y < box.y + box.height; y++) if (close(rgb(proj, x, y), [255, 179, 71], 30)) n++;
+      return n;
+    })();
+    check(`Projectile: it stops at the range, nothing past x = 40 (${pastRange} amber pixels there, label fringe at most)`, pastRange < 8);
+    const onCurve = (() => {
+      let n = 0;
+      for (let x = Math.round(px(30)); x < Math.round(px(35)); x++) for (let y = box.y; y < box.y + box.height; y++) if (close(rgb(proj, x, y), [255, 179, 71], 30)) n++;
+      return n;
+    })();
+    check(`control: the same count over x = 30 to 35, where the curve is, is far above that threshold (${onCurve})`, onCurve > 40);
 
     // ---- NumberLine ----
     const line = await frame("numberline-scene", 5);

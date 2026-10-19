@@ -132,7 +132,9 @@ if (writeGolden) {
 }
 for (const b of BEATS) {
   const goldenPath = path.join(goldenDir, `${b.id}.tsx`);
-  const golden = fs.existsSync(goldenPath) ? fs.readFileSync(goldenPath, "utf8") : null;
+  // The goldens are LF in the repository; a Windows checkout with core.autocrlf turns them into CRLF,
+  // while the generated source is always LF. Line endings are not what this compares.
+  const golden = fs.existsSync(goldenPath) ? fs.readFileSync(goldenPath, "utf8").replace(/\r\n/g, "\n") : null;
   check(`${b.id} (${b.template ?? b.mode}) in a 1920x1080 project is byte-identical to the golden`, golden !== null && landscapeSources[b.id] === golden);
 }
 check("the set covers all 12 templates and the starter", new Set(BEATS.filter((b) => b.template).map((b) => b.template)).size === 12 && BEATS.some((b) => b.mode === "starter"));

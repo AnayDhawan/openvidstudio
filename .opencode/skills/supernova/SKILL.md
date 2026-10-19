@@ -70,7 +70,7 @@ A big topic is a series; each part ends on the next question.
 
 ## 6. Review
 
-- `check_script` again with the scenes present, then `validate_scenes` with `render: true`. Ignore "fewer than two camera keyframes".
+- `check_script` again with the scenes present, then `validate_scenes` with `render: true`.
 - `render_stills` and `contact_sheet`: look at the frames, then `render_video`, and **listen**.
 - Done when there are no errors, the diagram starts early, the Nova lands on the aha, and every beat sounds like one person.
 

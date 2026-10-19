@@ -344,8 +344,9 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
       }
     }
 
-    // Motion. A frozen frame is a QC fail in STYLE.md.
-    if (scales.length >= 2 && new Set(scales).size === 1) {
+    // Motion. A frozen frame is a QC fail in STYLE.md. A lesson scene is flat on purpose (a Void with a
+    // Spark, a graph, an equation) and need not use CinematicScene, so the camera checks are product-demo rules.
+    if (!lesson && scales.length >= 2 && new Set(scales).size === 1) {
       const positions = new Set([...src.matchAll(/\bx:\s*(\d+),\s*y:\s*(\d+)/g)].map((m) => `${m[1]},${m[2]}`));
       if (positions.size <= 1) {
         findings.push({
@@ -356,7 +357,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
         });
       }
     }
-    if (scales.length < 2 && !usesSelfManagedCamera(src)) {
+    if (!lesson && scales.length < 2 && !usesSelfManagedCamera(src)) {
       findings.push({
         beatId: beat.id,
         scene: `${component}.tsx`,
@@ -530,7 +531,8 @@ export function registerValidateScenes(server: McpServer): void {
         "needs longer to read than the beat lasts (3.5 words/sec plus 0.8s, the same budget validate_beats " +
         "applies), beats whose frames never change, em dashes in on-screen copy, text colour against the " +
         "pixels rendered behind it (WCAG 4.5:1, 3:1 for large text), text outside the title-safe area, and " +
-        "scene text that overlaps the chapter HUD. In a Supernova lesson (production mode supernova) two checks change: " +
+        "scene text that overlaps the chapter HUD. In a Supernova lesson (production mode supernova) the camera warnings (fewer than two keyframes, a camera that never moves) are dropped, " +
+        "and two checks change: " +
         "a number typed into a scene passes when the concept card's worked example (concept.json) or an Equation's tex " +
         "has it, and one that appears nowhere is still flagged, and render mode also counts the glowing elements in " +
         "sampled frames (Void + Spark allows one at a time): more than one is a warning, more than two an error, " +

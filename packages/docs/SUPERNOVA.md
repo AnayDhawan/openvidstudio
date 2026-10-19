@@ -151,4 +151,4 @@ trusting any of these. Backgrounds can run to the edge; key content stays inside
 `render: true` (framing, numbers, glow), a contact sheet, then listen. `finalize_video` must report no `audio-tick`. See
 the skill for the order. `render_video` skips its brand-lock gate on a Supernova project, because a lesson has no brand to
 extract, and says so in `brandLockSkipReason`.
-`validate_scenes` warns "fewer than two camera keyframes" on lesson scenes, which are flat on purpose: ignore it.
+In a lesson `validate_scenes` leaves out the camera checks (keyframes, a camera that never moves): lesson scenes are flat on purpose.

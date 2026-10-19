@@ -11,7 +11,8 @@
 // so it ships inside the published npm tarball.
 
 import { existsSync, mkdirSync, readdirSync, copyFileSync, rmSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { execFileSync } from "node:child_process";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -25,14 +26,35 @@ if (!existsSync(src)) {
   process.exit(1);
 }
 
-function copyDir(from, to) {
+// The template is copied from what git tracks, not from whatever sits in the folder on this machine:
+// the maintainer's output/ held a 20 MB render and a tarball that were never committed, and every
+// project made from that build carried them. Outside a git checkout (a source tarball) the fallback
+// is an allow list for output/, the one folder that collects stray files.
+function trackedTemplateFiles() {
+  try {
+    const out = execFileSync("git", ["ls-files", "-z", "--", "."], { cwd: src, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const files = out.split("\0").filter(Boolean);
+    return files.length > 0 ? new Set(files) : null;
+  } catch {
+    return null;
+  }
+}
+const tracked = trackedTemplateFiles();
+const OUTPUT_ALLOWED = new Set(["output/README.md", "output/.gitignore"]);
+function isStray(rel) {
+  if (rel.startsWith("output/") && !OUTPUT_ALLOWED.has(rel)) return true;
+  return tracked !== null && !tracked.has(rel);
+}
+
+function copyDir(from, to, root = from, strayCheck = false) {
   mkdirSync(to, { recursive: true });
   for (const entry of readdirSync(from, { withFileTypes: true })) {
     if (entry.name === "node_modules") continue; // never ship the dev monorepo's installed deps
     const s = join(from, entry.name);
     const d = join(to, entry.name);
+    if (strayCheck && !entry.isDirectory() && isStray(relative(root, s).split(sep).join("/"))) continue;
     if (entry.isDirectory()) {
-      copyDir(s, d);
+      copyDir(s, d, root, strayCheck);
     } else {
       copyFileSync(s, d);
     }
@@ -40,7 +62,7 @@ function copyDir(from, to) {
 }
 
 rmSync(dest, { recursive: true, force: true });
-copyDir(src, dest);
+copyDir(src, dest, src, true);
 process.stderr.write(`copy-template: copied ${src} -> ${dest}\n`);
 
 // Bridge for C1 (final-review-fix-report.md): templates/default/package.json depends on

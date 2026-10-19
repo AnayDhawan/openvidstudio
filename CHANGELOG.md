@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-10-19
+
+The packages are ready for npm: each now ships a README, and `@openvidstudio/mcp-server` and `@openvidstudio/stem`
+ship the Apache-2.0 LICENSE file, which they did not. Without them an npm page would have been blank. No code changes.
+
+### Added
+
+- **A README in `packages/mcp-server`, `packages/core` and `packages/stem`**, written for the npm page: what it is, how to add it to an MCP client with `npx -y @openvidstudio/mcp-server`, what the machine needs, where the docs are, and the Remotion license note.
+- **The LICENSE file in `packages/mcp-server` and `packages/stem`**, as `capture` and `core` already had.
+
 ## [1.3.0] - 2026-10-19
 
 Lessons get one shape. A Supernova lesson is now one concept in up to two minutes, in seven fixed beats,

@@ -16,6 +16,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **`preflight` checks that edge-tts can synthesize, and a refusal is reported with its cause (#140).** With the edge-tts engine, `preflight` shows the installed version and speaks one word to a temp file; on failure it shows the error line and `pip install -U edge-tts`. `generate_narration`'s "no usable audio" warning now ends with edge-tts's last stderr line. The version notes in NARRATION.md, SUPERNOVA.md and the skill now point at `preflight`.
+- **`validate_scenes` checks a lesson's arc: `diagram-late` and `static-stretch` (#138).** In render mode, from the frames it already samples (no extra render pass), a Supernova lesson gets a warning when the first thing drawn beyond the background and the captions is later than 15 s (an error after 25 s), and a warning when sampled frames do not change, captions aside, for more than 8 s. The thresholds are the options `diagramWarnSeconds`, `diagramErrorSeconds` and `staticSeconds`. Captions are ignored by their `data-ovs-captions` box, or the bottom 22 percent.
 
 ## [1.3.1] - 2026-10-19
 

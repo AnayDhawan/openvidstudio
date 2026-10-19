@@ -134,7 +134,11 @@ the others. The times are for a 120 second lesson; shrink them in proportion for
 
 About 270 to 330 words fit (2.3 to 2.9 words per second on plain prose; maths-heavy lines are read slower,
 nearer 2.2). The viewer should never wait more than about 8 seconds without something on screen changing,
-and the diagram's first element is on screen inside the first 15 seconds.
+and the diagram's first element is on screen inside the first 15 seconds. `validate_scenes` with `render: true` checks both
+from the frames it samples: `diagram-late` (the first frame with anything drawn beyond the background and the captions:
+a warning after 15 s, an error after 25 s) and `static-stretch` (frames that do not change, captions aside, for more
+than 8 s: a warning). The thresholds are the options `diagramWarnSeconds`, `diagramErrorSeconds` and `staticSeconds`.
+A caption box marked `data-ovs-captions` (`LessonCaptions` does it) is the part ignored; otherwise the bottom 22 percent.
 
 ### Rules
 

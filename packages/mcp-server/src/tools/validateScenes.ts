@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
 import { loadConfig, productionMode } from "../config";
+import { DEFAULT_ARC_THRESHOLDS, type ArcThresholds } from "../lessonArc";
 import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { writeFactRecord } from "../facts";
@@ -39,6 +40,20 @@ export interface ValidateScenesInput {
   compositionId?: string;
   /** With render: limit the measurement to these beats. Static checks always cover every beat. */
   beatIds?: string[];
+  /** Lessons, with render: warn when the first drawn element is later than this many seconds. Default 15. */
+  diagramWarnSeconds?: number;
+  /** Lessons, with render: an error when the first drawn element is later than this. Default 25. */
+  diagramErrorSeconds?: number;
+  /** Lessons, with render: warn when nothing changes for longer than this. Default 8. */
+  staticSeconds?: number;
+}
+
+function arcThresholds(input: ValidateScenesInput): ArcThresholds {
+  return {
+    diagramWarnSeconds: input.diagramWarnSeconds ?? DEFAULT_ARC_THRESHOLDS.diagramWarnSeconds,
+    diagramErrorSeconds: input.diagramErrorSeconds ?? DEFAULT_ARC_THRESHOLDS.diagramErrorSeconds,
+    staticSeconds: input.staticSeconds ?? DEFAULT_ARC_THRESHOLDS.staticSeconds,
+  };
 }
 
 export interface SceneFinding {
@@ -471,6 +486,7 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
     production?: { mode?: string };
   };
 
+  const lesson = isLesson(projectRoot, doc);
   let beats = doc.beats;
   if (input.beatIds && input.beatIds.length > 0) {
     const known = new Set(beats.map((b) => b.id));
@@ -488,7 +504,10 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
     fps: doc.fps ?? 30,
     minimums: readTypeMinimums(videoDir),
     deliberateHolds: readDeliberateHolds(videoDir),
-    glowBudget: isLesson(projectRoot, doc),
+    glowBudget: lesson,
+    // The arc is about the whole lesson, so a run over a few beats (beatIds) does not judge it.
+    arc: lesson && beats.length === doc.beats.length ? arcThresholds(input) : undefined,
+    lessonSeconds: Math.max(0, ...doc.beats.map((b) => b.start + b.duration)) / (doc.fps ?? 30),
   });
 
   const findings = [...result.findings, ...rendered.findings];
@@ -536,7 +555,11 @@ export function registerValidateScenes(server: McpServer): void {
         "a number typed into a scene passes when the concept card's worked example (concept.json) or an Equation's tex " +
         "has it, and one that appears nowhere is still flagged, and render mode also counts the glowing elements in " +
         "sampled frames (Void + Spark allows one at a time): more than one is a warning, more than two an error, " +
-        "except in a beat that holds a Nova. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
+        "except in a beat that holds a Nova. Render mode in a lesson also judges its arc from the frames it " +
+        "already samples (and only when every beat is measured): diagram-late, the first sampled frame with anything " +
+        "drawn beyond the background and the captions (a warning after 15 s, an error after 25 s), and static-stretch, " +
+        "a run of sampled frames that do not change, captions aside, for more than 8 s (a warning). The thresholds are " +
+        "the options diagramWarnSeconds, diagramErrorSeconds and staticSeconds. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
         "recording played through OffthreadVideo) is reported as render-skipped, never as clean.",
       inputSchema: {
         projectRoot: z.string().optional(),
@@ -544,6 +567,9 @@ export function registerValidateScenes(server: McpServer): void {
         render: z.boolean().optional(),
         compositionId: z.string().optional(),
         beatIds: z.array(z.string()).optional(),
+        diagramWarnSeconds: z.number().positive().optional().describe("Lessons, render mode: warn when the first drawn element is later than this (default 15)."),
+        diagramErrorSeconds: z.number().positive().optional().describe("Lessons, render mode: error when the first drawn element is later than this (default 25)."),
+        staticSeconds: z.number().positive().optional().describe("Lessons, render mode: warn when nothing changes for longer than this (default 8)."),
       },
     },
     async (input) => runTool("validate_scenes", () => runValidateScenesFull(input)),

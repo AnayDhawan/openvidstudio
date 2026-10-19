@@ -70,7 +70,7 @@ A big topic is a series; each part ends on the next question.
 
 ## 6. Review
 
-- `check_script` again with the scenes present, then `validate_scenes` with `render: true`.
+- `check_script` again with the scenes present, then `validate_scenes` with `render: true`. Besides framing, numbers and glow it checks the arc: `diagram-late` (nothing drawn beyond the background and captions by 15 s) and `static-stretch` (nothing changes for 8 s). Fix both before posting.
 - `render_stills` and `contact_sheet`: look at the frames, then `render_video`, and **listen**.
 - Done when there are no errors, the diagram starts early, the Nova lands on the aha, and every beat sounds like one person.
 

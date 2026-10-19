@@ -14,6 +14,7 @@ import {
 } from "../remotionBridge";
 import sharp from "sharp";
 import { compareFrames } from "../frameDiff";
+import { judgeLessonArc, measureArcFrame, type ArcSample, type ArcSignature, type ArcThresholds, type Rect } from "../lessonArc";
 import type { SceneFinding } from "./validateScenes";
 import { pascalCase } from "../util";
 import { MAX_READING_WORDS_PER_SEC, READING_OVERHEAD_SEC } from "./validateBeats";
@@ -146,6 +147,13 @@ export interface RenderCheckInput {
   deliberateHolds?: string[];
   /** Count the glowing elements in each sampled frame against Supernova's one-at-a-time budget. Lessons only. */
   glowBudget?: boolean;
+  /**
+   * Judge the lesson arc (the diagram inside the first seconds, no long static stretch) from the frames sampled
+   * here, with these thresholds. Lessons only, and only when every beat of the lesson is measured.
+   */
+  arc?: ArcThresholds;
+  /** The lesson's length in seconds, which bounds a static stretch that runs to the end. */
+  lessonSeconds?: number;
 }
 
 export interface RenderCheckResult {
@@ -731,6 +739,14 @@ export function judgeGlow(beat: RenderBeat, samples: GlowProbe[][], frames: numb
   ];
 }
 
+/** Runs in the page: the boxes of the lesson's captions (LessonCaptions marks them), in frame pixels. */
+function probeCaptionBoxes(): Rect[] {
+  return Array.from(document.querySelectorAll("[data-ovs-captions]")).map((el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  });
+}
+
 function sampleFrames(beat: RenderBeat): number[] {
   const last = Math.max(0, beat.duration - 1);
   const frames = SAMPLE_FRACTIONS.map((f) => beat.start + Math.min(last, Math.round(beat.duration * f)));
@@ -755,6 +771,8 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
   // Largest share of each brand colour seen in any sampled frame, for the palette check.
   const brandColors = brandHexColors(input.projectRoot);
   const brandSeen = new Map<string, number>(brandColors.map((c) => [c, 0]));
+  const arcSamples: ArcSample[] = [];
+  let arcPrevious: ArcSignature | null = null;
 
   try {
     const composition = await resolveComposition(bundleDir, input.compositionId, remotionBrowser);
@@ -793,6 +811,11 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
           const shot = path.join(scratch, `${beat.id}-${i}.png`);
           await page.screenshot({ path: shot });
           shots.push(shot);
+          if (input.arc) {
+            const arc = await measureArcFrame(shot, await page.evaluate(probeCaptionBoxes), arcPrevious);
+            arcPrevious = arc.signature;
+            arcSamples.push({ time: frame / input.fps, beatId: beat.id, drawn: arc.drawn, changedFromPrevious: arc.changedFromPrevious });
+          }
           const shares = await measureFrame(shot, probes, brandColors);
           for (const [hex, share] of shares) brandSeen.set(hex, Math.max(brandSeen.get(hex) ?? 0, share));
           samples.push(probes);
@@ -833,6 +856,7 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
           message:
             `Render-based checks could not run for this beat, so it was NOT measured: ${skipped[skipped.length - 1].reason}`,
         });
+        arcPrevious = null;
         // The page may be wedged mid-mount; the next beat gets a fresh one.
         await page?.close().catch(() => undefined);
         page = null;
@@ -842,6 +866,21 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
     // Only judged when at least one beat was actually measured: with nothing rendered there is
     // no frame to find the palette in, and saying it is missing would be a false alarm.
     if (measured > 0) findings.push(...judgeBrandPalette(brandSeen));
+    // A lesson that skipped a beat has a hole in its samples, and a hole reads as a static stretch or a late
+    // diagram that may not be there. Judged only when every beat was measured.
+    if (input.arc && measured === input.beats.length && measured > 0) {
+      const lessonSeconds = input.lessonSeconds ?? Math.max(...input.beats.map((b) => b.start + b.duration)) / input.fps;
+      for (const f of judgeLessonArc(arcSamples, lessonSeconds, input.arc)) {
+        findings.push({
+          beatId: f.beatId,
+          scene: f.beatId === "*" ? "beats.json" : `${pascalCase(f.beatId)}.tsx`,
+          source: "render",
+          check: f.check,
+          severity: f.severity,
+          message: f.message,
+        });
+      }
+    }
   } finally {
     await browser?.close().catch(() => undefined);
     await remotionBrowser.close({ silent: true });

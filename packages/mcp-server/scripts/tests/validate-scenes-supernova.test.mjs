@@ -102,6 +102,42 @@ console.log("\n== numbers typed into copy ==");
   check("typedNumbers is unchanged (the standard check's own reader)", JSON.stringify(typedNumbers("<p>Over 1,200 users and 73%</p>")) === JSON.stringify(["1,200", "73"]));
 }
 
+console.log("\n== camera keyframes: a product-demo rule, not a lesson one ==");
+{
+  const cameraWarning = (result, beatId) => result.findings.find((f) => f.beatId === beatId && /camera/i.test(f.message));
+  const flat = `import React from "react";
+export const Flat: React.FC = () => <div>A flat lesson scene</div>;
+`;
+  const oneKeyframe = `import React from "react";
+import { CinematicScene } from "@openvidstudio/core";
+export const One: React.FC = () => (
+  <CinematicScene camera={[{ frame: 0, x: 540, y: 960, scale: 1 }]}>
+    <div>One keyframe</div>
+  </CinematicScene>
+);
+`;
+  const staticCamera = `import React from "react";
+import { CinematicScene } from "@openvidstudio/core";
+export const Still: React.FC = () => (
+  <CinematicScene camera={[{ frame: 0, x: 540, y: 960, scale: 1 }, { frame: 60, x: 540, y: 960, scale: 1 }]}>
+    <div>Two identical keyframes</div>
+  </CinematicScene>
+);
+`;
+  const sn = project("ovs-vs-cam-sn-", "supernova");
+  scenes(sn, { flat, one: oneKeyframe, still: staticCamera });
+  const snResult = runValidateScenes({ projectRoot: sn, videoName: "lesson" });
+  check("supernova project: plain scenes get no camera warning", snResult.findings.every((f) => !/camera/i.test(f.message)));
+  check("supernova project: the result is still mode supernova", snResult.mode === "supernova");
+
+  const std = project("ovs-vs-cam-std-");
+  scenes(std, { flat, one: oneKeyframe, still: staticCamera });
+  const stdResult = runValidateScenes({ projectRoot: std, videoName: "lesson" });
+  check("standard project: a scene with no camera still warns", !!cameraWarning(stdResult, "flat"));
+  check("standard project: a one-keyframe scene still warns", /Fewer than two camera keyframes/.test(cameraWarning(stdResult, "one")?.message ?? ""));
+  check("standard project: a camera that never moves still warns", /never moves/.test(cameraWarning(stdResult, "still")?.message ?? ""));
+}
+
 console.log("\n== constructed content: disclosed in a product video, one line in a lesson ==");
 {
   const briefBase = {

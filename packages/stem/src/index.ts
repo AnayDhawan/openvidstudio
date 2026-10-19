@@ -38,3 +38,24 @@ export { FreeBody, ARROW_GROW_FRAMES } from "./FreeBody";
 export type { FreeBodyProps, Force } from "./FreeBody";
 export { ArrayViz, useArrayViz } from "./ArrayViz";
 export type { ArrayVizProps, ArrayPointer, ArrayGeometry } from "./ArrayViz";
+
+export { LessonCaptions, captionChunks, captionInsets } from "./LessonCaptions";
+export type { LessonCaptionsProps } from "./LessonCaptions";
+
+export { Derivation, revealFrames, matchTerms, slotOpacity, DERIVATION_MOVE_FRAMES, DERIVATION_TERM_STAGGER, DERIVATION_STACK } from "./Derivation";
+export type { DerivationProps, DerivationStep } from "./Derivation";
+
+export { Wave, waveField, WAVE_REVEAL_FRAMES } from "./Wave";
+export type { WaveProps, WaveLabels, WaveFieldInput } from "./Wave";
+export { Orbit, orbitState, eccentricAnomaly, visViva, inverseSquare, ORBIT_ARROW_FRAMES } from "./Orbit";
+export type { OrbitProps, OrbitShape, OrbitState } from "./Orbit";
+export { VectorField, vectorFieldGrid, traceFieldLine, FIELD_ARROW_FRAMES } from "./VectorField";
+export type { VectorFieldProps, VectorFieldGrid } from "./VectorField";
+export { ComplexityCurve, complexityValue, COMPLEXITY_NAMES, COMPLEXITY_COLORS } from "./ComplexityCurve";
+export type { ComplexityCurveProps, ComplexityKind } from "./ComplexityCurve";
+export { MatrixGrid, matrixGridGeometry, interpolateMatrix, applyMatrix, defaultMatrixBox } from "./MatrixGrid";
+export type { MatrixGridProps, MatrixGridGeometry, Matrix2 } from "./MatrixGrid";
+export { TreeViz, treeLayout } from "./TreeViz";
+export type { TreeVizProps, TreeLayout, TreeNodeLayout, Traversal } from "./TreeViz";
+export { GraphViz, GRAPH_ROLES, GRAPH_ROLE_COLOR, adjacencyFrom, bfsOrder, bfsSteps, shortestPath, graphLayout } from "./GraphViz";
+export type { GraphVizProps, GraphNode, GraphStep, GraphRole, GraphLayout, Adjacency } from "./GraphViz";

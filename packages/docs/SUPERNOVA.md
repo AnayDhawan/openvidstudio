@@ -92,6 +92,8 @@ All in `@openvidstudio/stem`, documented with stills in [API.md](API.md#supernov
   condenses from particles.
 - `Axes`, `Plot`, `NumberLine`: graphs, tangents, shaded area, intervals.
 - `Equation`: sans-serif maths revealed term by term, with a required `spoken` form that must match the narration.
+- `Derivation`: the derive beat. A formula built line by line, each step with its `spoken` form and an optional `because`; the line before moves up and dims (a stack of three), terms that carry over stay put, new ones arrive in the accent, gone ones fade. Each step is revealed at the word it is spoken at, so `check_script` also reads its `spoken` strings and checks they are in the narration in order.
+- `LessonCaptions`: word-timed captions that break at sentence ends, in the Reels safe zone.
 - `FreeBody`: forces as arrows whose length is exactly magnitude times the scale shown.
 - `ArrayViz`: cells, named pointers, a lit range and a dimmed one, a Spark-driven pointer.
 - `useNarrationWords(beatId)` (in core): when each word of the narration is said, so the Spark can point at it.
@@ -104,7 +106,7 @@ One fixed voice for the handle, so a viewer knows it by ear and lessons can be m
 
 | | |
 |---|---|
-| Engine | `edge-tts` 7.3 or newer (fast, and it gives word timings). It sends the script text to Microsoft, which is fine for public lesson scripts. Version 7.2.8 was refused with a 403 in October 2026: `pip install -U edge-tts` fixes it |
+| Engine | `edge-tts` (fast, and it gives word timings). It sends the script text to Microsoft, which is fine for public lesson scripts. `preflight` speaks one word to check it works: Microsoft refused 7.2.8 with a 403 in October 2026, and `pip install -U edge-tts` fixes it |
 | Voice | `en-US-AndrewNeural` |
 | Rate | the engine's default, `+0%`. Pace comes from the script (2.3 to 2.9 words per second); the stretch is clamped to 0.9 to 1.12 so it never sounds processed |
 | Final pass | `omnivoice` gives better control but runs about 40 times slower than real time on a CPU: use it for a last pass, never to iterate |
@@ -115,23 +117,30 @@ owner, made once and for every lesson: pass the same `voice` to `generate_narrat
 ### Fit the beats to the voice
 
 The voice reads plain prose at about 3 words per second and number-heavy lines at about 2.2, so a word count
-alone mis-sizes a beat. Write the beats with provisional lengths, run `generate_narration`, read each clip's
-`spokenSeconds`, and set each beat to about the spoken length plus half a second. `validate_beats` still wants
-2.3 to 2.9 words per second on the beat length, so a very short line ("Now the honest part.") needs a beat of about
-1.7 seconds, and a long maths line needs more words or a longer beat. Rewrite the beats and run `generate_narration`
-again with `overwrite: true`. NARRATION.md has the clamp.
+alone mis-sizes a beat. Write the beats with provisional lengths, run `generate_narration`, then run `fit_beats`.
+It sets each beat to the measured spoken length plus half a second (`padSeconds`), clamps it into the 2.3 to 2.9
+words per second window `validate_beats` wants, rounds to whole frames, moves the later beats' starts, and never
+touches `vo`. A very short line ("Now the honest part.") ends up near 1.7 seconds. A beat it cannot fit, because the
+voice needs more than the window allows, is listed in `unfittable` with the words to cut or the frames to lengthen it to.
+Pass `dryRun: true` to see the lengths first, then run `generate_narration` again with `overwrite: true`.
+NARRATION.md has the clamp.
 
 ## Captions
 
-Burn captions in for silent autoplay. The word timings carry bare words with no punctuation, so take the text from
-the beat's `vo`: split it on spaces (it matches the timings one to one) and break the caption at sentence ends, so a
-caption never runs one sentence into the next. Keep them inside the safe zone below.
+Burn captions in for silent autoplay with `LessonCaptions`, one line in a scene:
 
 ```tsx
-const tokens = vo.split(/\s+/).filter(Boolean);           // the beat's narration text
-const shown = tokens.length === narr.words.length ? tokens : narr.words.map((w) => w.word);
-const breakAfter = (i, size) => /[.?!:]$/.test(shown[i]) || (/[,;]$/.test(shown[i]) && size >= 3) || size >= 6;
+<LessonCaptions beatId="hook" text={vo} />   // vo is the beat's narration text
 ```
+
+The word timings carry bare words with no punctuation, so the component takes the text from the beat's `vo` (split on
+spaces, it matches the timings one to one) and breaks a caption at a sentence end, at a comma after at least three
+words, and at `maxWords` (default 6), so a caption never runs one sentence into the next. The word being said is
+picked out in the subject's accent. If the text and the timings differ in length it falls back to the timings' bare
+words, and with no timings at all (an engine that gives none) it spreads the words evenly over the scene and says so
+in `data-ovs-captions-timing="estimated"`. It stays out of the Reels safe zones by default (above the bottom 22
+percent of a tall frame, below the top 14), works at 1920x1080, and its box is tagged `data-ovs-captions`, which
+`validate_scenes` ignores when it looks for a diagram or a static stretch. See API.md for the props.
 
 ## Reels safe zones
 
@@ -148,6 +157,7 @@ trusting any of these. Backgrounds can run to the edge; key content stays inside
 ## Checks
 
 `validate_beats` (pace), `check_script` (the script, the two-minute budget and the reference), `validate_scenes` with
-`render: true` (framing, numbers, glow), a contact sheet, then listen. `finalize_video` must report no `audio-tick`. See
-the skill for the order. `render_video` asks for a brand lock and a lesson has none, so pass `skipBrandLock: true`.
-`validate_scenes` warns "fewer than two camera keyframes" on lesson scenes, which are flat on purpose: ignore it.
+`render: true` (framing, numbers, glow, and the arc: `diagram-late` and `static-stretch`), a contact sheet, then listen. `finalize_video` must report no `audio-tick`. See
+the skill for the order. `render_video` skips its brand-lock gate on a Supernova project, because a lesson has no brand to
+extract, and says so in `brandLockSkipReason`.
+In a lesson `validate_scenes` leaves out the camera checks (keyframes, a camera that never moves): lesson scenes are flat on purpose.

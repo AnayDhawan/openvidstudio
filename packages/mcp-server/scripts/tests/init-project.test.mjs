@@ -122,4 +122,36 @@ check(
   fs.readFileSync(path.join(tmpRoot, "src", "Root.tsx"), "utf8").includes("PreflightBenchmark"),
 );
 
+// A stray file in the template's output/ (a render left on the maintainer's machine) must not
+// reach a new project, while the two tracked files still do. Checked at both steps: the build
+// that vendors the template, and init_project itself (a stale bundled copy can hold strays).
+{
+  const strayName = "stray-render.mp4";
+  const monorepoStray = path.join(monorepoTemplateDir, "output", strayName);
+  const bundledStray = path.join(bundledTemplateDir, "output", strayName);
+  try {
+    fs.writeFileSync(monorepoStray, "not in git");
+    execFileSync(process.execPath, [path.join(__dirname, "copy-template.mjs")], { stdio: "ignore" });
+    check("copy-template leaves an untracked file in output/ out of the bundled template", !fs.existsSync(bundledStray));
+    check(
+      "copy-template keeps the tracked output/README.md and output/.gitignore",
+      fs.existsSync(path.join(bundledTemplateDir, "output", "README.md")) &&
+        fs.existsSync(path.join(bundledTemplateDir, "output", ".gitignore")),
+    );
+    fs.writeFileSync(bundledStray, "stale copy");
+    const strayRoot = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-init-stray-"));
+    const { runInitProject: runInit } = require(path.join(distDir, "tools", "initProject.js"));
+    runInit({ name: "stray", projectRoot: strayRoot });
+    check("init_project does not copy a stray file from the template's output/", !fs.existsSync(path.join(strayRoot, "output", strayName)));
+    check(
+      "init_project still copies output/README.md and output/.gitignore",
+      fs.existsSync(path.join(strayRoot, "output", "README.md")) && fs.existsSync(path.join(strayRoot, "output", ".gitignore")),
+    );
+    fs.rmSync(strayRoot, { recursive: true, force: true });
+  } finally {
+    fs.rmSync(monorepoStray, { force: true });
+    fs.rmSync(bundledStray, { force: true });
+  }
+}
+
 finish();

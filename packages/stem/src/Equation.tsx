@@ -29,7 +29,7 @@ export interface EquationProps {
 /** The frames a single term takes to arrive. */
 export const EQUATION_TERM_FRAMES = 10;
 
-interface Parsed {
+export interface Parsed {
   svg: SVGSVGElement;
 }
 
@@ -38,7 +38,7 @@ interface Parsed {
  * MathJax's output contains; an XML parser rejects it when the TeX has a control character in it
  * (MathJax keeps the TeX in a data-latex attribute, and a plain JavaScript string "\frac" holds a form feed).
  */
-function parse(markup: string): Parsed {
+export function parse(markup: string): Parsed {
   const doc = new DOMParser().parseFromString(markup, "text/html");
   const svg = doc.body.querySelector("svg");
   if (!svg) throw new Error("Equation: the typeset markup has no <svg> in it.");
@@ -46,7 +46,7 @@ function parse(markup: string): Parsed {
 }
 
 /** The top-level terms of a typeset equation: the children of the root mrow, left to right. */
-function termsOf(root: Element): { parent: Element; kids: Element[] } | null {
+export function termsOf(root: Element): { parent: Element; kids: Element[] } | null {
   const math = root.querySelector('g[data-mml-node="math"]');
   if (!math) return null;
   const parent = math.children.length === 1 && math.children[0].getAttribute("data-mml-node") === "mrow" ? math.children[0] : math;

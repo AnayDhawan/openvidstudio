@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath, pascalCase, spawnCapture } from "../util";
-import { loadConfig } from "../config";
+import { loadConfig, productionMode } from "../config";
 import {
   CACHE_VERSION,
   buildConcatList,
@@ -89,6 +89,8 @@ export interface RenderVideoResult {
   stderr: string;
   /** True when src/brand.ts existed at render time (whether from this call's skipBrandLock or a real extract_brand run). */
   brandLocked: boolean;
+  /** Set when the brand-lock gate was skipped on purpose: a Supernova lesson has no brand to extract. */
+  brandLockSkipReason?: string;
   /** Incremental renders only: beats whose cached segment was reused untouched. */
   reusedBeats?: string[];
   /** Incremental renders only: beats that were actually re-rendered. */
@@ -418,7 +420,12 @@ export interface PreparedRenderVideo {
   compositionId: string;
   outPathRel: string;
   brandLocked: boolean;
+  brandLockSkipReason?: string;
 }
+
+const SUPERNOVA_BRAND_LOCK_SKIP =
+  "Brand-lock gate skipped: this is a supernova project, and a lesson has no brand to extract " +
+  "(its design is supernovaDesignSystem).";
 
 /**
  * The synchronous half of render_video: validate input and the brand-lock gate, throwing
@@ -438,7 +445,9 @@ export function prepareRenderVideo(input: RenderVideoInput): PreparedRenderVideo
   sanitizeRelativeOutPath(projectRoot, outPathRel, "outPath");
 
   const brandLocked = fs.existsSync(path.join(projectRoot, "src", "brand.ts"));
-  if (!brandLocked && input.skipBrandLock !== true) {
+  const brandLockSkipReason =
+    !brandLocked && productionMode(loadConfig(projectRoot)) === "supernova" ? SUPERNOVA_BRAND_LOCK_SKIP : undefined;
+  if (!brandLocked && input.skipBrandLock !== true && brandLockSkipReason === undefined) {
     throw new Error(
       `Brand-lock gate: no src/brand.ts found in this project. Run extract_brand with ` +
         `{ sourceRepo: "${projectRoot}" } before rendering. It writes src/brand.ts from the repo being filmed. ` +
@@ -447,7 +456,7 @@ export function prepareRenderVideo(input: RenderVideoInput): PreparedRenderVideo
   }
 
   fs.mkdirSync(path.dirname(path.join(projectRoot, outPathRel)), { recursive: true });
-  return { videoName, projectRoot, compositionId, outPathRel, brandLocked };
+  return { videoName, projectRoot, compositionId, outPathRel, brandLocked, ...(brandLockSkipReason ? { brandLockSkipReason } : {}) };
 }
 
 /**
@@ -479,7 +488,17 @@ export async function runRenderVideo(input: RenderVideoInput, opts: RenderVideoO
 }
 
 async function renderVideoUnrecorded(input: RenderVideoInput, opts: RenderVideoOpts): Promise<RenderVideoResult> {
-  const { videoName, projectRoot, compositionId, outPathRel, brandLocked } = prepareRenderVideo(input);
+  const prepared = prepareRenderVideo(input);
+  const result = await renderPrepared(input, opts, prepared);
+  return prepared.brandLockSkipReason ? { ...result, brandLockSkipReason: prepared.brandLockSkipReason } : result;
+}
+
+async function renderPrepared(
+  input: RenderVideoInput,
+  opts: RenderVideoOpts,
+  prepared: PreparedRenderVideo,
+): Promise<RenderVideoResult> {
+  const { videoName, projectRoot, compositionId, outPathRel, brandLocked } = prepared;
 
   const started = Date.now();
   if (input.incremental === true) {
@@ -541,7 +560,8 @@ export function registerRenderVideo(server: McpServer): void {
         "to tell progress from a hang. BRAND-LOCK GATE: refuses to run unless src/brand.ts exists (written " +
         "by extract_brand), so a video never ships wearing openvidstudio's own default look by accident. " +
         "Run extract_brand against the repo being filmed first; pass skipBrandLock: true only when the " +
-        "project deliberately has no brand to extract. Returns the render's captured stdout/stderr, how " +
+        "project deliberately has no brand to extract. A supernova project (production.mode in " +
+        "openvidstudio.config.json) skips the gate on its own and says why in brandLockSkipReason. Returns the render's captured stdout/stderr, how " +
         "long it took, and brandLocked (whether src/brand.ts existed at render time). Pass incremental to render "
         + "each beat to its own cached segment under output/segments/<videoName>/ and concatenate them with "
         + "ffmpeg under stream copy, re-rendering only the beats whose inputs actually changed. A segment is "

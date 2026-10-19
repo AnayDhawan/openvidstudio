@@ -131,6 +131,56 @@ export function spokenStrings(source: string): string[] {
   return out;
 }
 
+/** The text between the bracket at `open` and its match, strings respected, or null if it never closes. */
+function balanced(source: string, open: number): string | null {
+  const pairs: Record<string, string> = { "[": "]", "{": "}", "(": ")" };
+  const stack: string[] = [];
+  let quote: string | null = null;
+  for (let i = open; i < source.length; i++) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === "\\") i++;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+    else if (ch in pairs) stack.push(pairs[ch]);
+    else if (ch === stack[stack.length - 1]) {
+      stack.pop();
+      if (stack.length === 0) return source.slice(open, i + 1);
+    }
+  }
+  return null;
+}
+
+/**
+ * The `spoken` strings of each `<Derivation>` in a scene's source, in step order, one list per Derivation. The steps
+ * may be written inline (`steps={[{ tex, spoken }, ...]}`) or as a constant in the same file (`steps={STEPS}`).
+ */
+export function derivationSpoken(source: string): string[][] {
+  const out: string[][] = [];
+  for (const tag of source.matchAll(/<Derivation\b/g)) {
+    const open = tag.index ?? 0;
+    const props = source.slice(open, open + 20000);
+    const steps = /\bsteps\s*=\s*\{/.exec(props);
+    if (!steps) continue;
+    const braceAt = open + steps.index + steps[0].length - 1;
+    const inner = balanced(source, braceAt);
+    if (inner === null) continue;
+    let list: string | null = inner;
+    const ident = /^\{\s*([A-Za-z_$][\w$]*)\s*\}$/.exec(inner);
+    if (ident) {
+      const decl = new RegExp(`\\b${ident[1]}\\b\\s*(?::[^=]+)?=\\s*\\[`).exec(source);
+      list = decl ? balanced(source, decl.index + decl[0].length - 1) : null;
+    }
+    if (list === null) continue;
+    const found: string[] = [];
+    for (const m of list.matchAll(/\bspoken\s*:\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)/g)) found.push(m[1] ?? m[2] ?? m[3] ?? "");
+    out.push(found);
+  }
+  return out;
+}
+
 export function checkScriptLogic(
   beatsJson: unknown,
   card: ConceptCard,
@@ -193,6 +243,21 @@ export function checkScriptLogic(
         if (!heard.includes(normalise(said))) {
           add("error", "spoken", id, `The equation's spoken form "${said}" is not in this beat's narration. The voice and the equation must say the same thing.`);
         }
+      }
+      // A Derivation's steps are said in order: each one after the one before it.
+      for (const steps of derivationSpoken(source)) {
+        let cursor = 0;
+        steps.forEach((said, k) => {
+          const phrase = normalise(said);
+          const at = heard.indexOf(phrase, cursor);
+          if (at >= 0) {
+            cursor = at + phrase.length;
+          } else if (heard.includes(phrase)) {
+            add("error", "spoken", id, `The derivation's step ${k + 1} ("${said}") is said in this beat's narration, but before the step above it. The steps are revealed in order, so the voice has to say them in that order.`);
+          } else {
+            add("error", "spoken", id, `The derivation's step ${k + 1} spoken form "${said}" is not in this beat's narration. The voice and the formula must say the same thing.`);
+          }
+        });
       }
     }
   });
@@ -294,7 +359,8 @@ export function registerCheckScript(server: McpServer): void {
         "(error, warning or note), the check, and the beat it points at. Checks: average sentence length per beat " +
         "(warning above 16 words), Flesch-Kincaid reading level per beat (warning above grade 9), each concept-card " +
         "term used with a definition beside it at first mention (note), more than two new terms in a beat (warning), " +
-        "every Equation's `spoken` string present in its beat's narration (error; the scene is read from the beat's " +
+        "every Equation's `spoken` string present in its beat's narration, and every step of a Derivation present and in the order " +
+        "the steps are given (error; the scene is read from the beat's " +
         "scene path or scenes/<BeatId>.tsx), a hook in the first sentence that is a question or holds a number and " +
         "does not open \"in this video\" (error for that opener, warning otherwise), words per second against the " +
         "beat length using validate_beats' own budget (error), a last beat that ends with a question (error), the " +

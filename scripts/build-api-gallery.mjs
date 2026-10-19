@@ -500,6 +500,114 @@ stemScene(
 );
 stemAdd("stem-arrayviz", 30, { 10: "stem-arrayviz" });
 
+// Derivation: the range of a projectile, seven steps; part-way through, with the newest line in and a reason under one step.
+const RANGE_STEPS = [
+  { tex: String.raw`y = u \sin\theta \, t - \frac{1}{2} g t^{2}`, spoken: "y equals u sine theta t minus a half g t squared" },
+  { tex: String.raw`0 = t \left( u \sin\theta - \frac{1}{2} g t \right)`, spoken: "at the landing y is zero, so factor out t", because: "it lands when y is zero" },
+  { tex: String.raw`t = \frac{2 u \sin\theta}{g}`, spoken: "so the time of flight is two u sine theta over g" },
+  { tex: String.raw`R = u \cos\theta \, t`, spoken: "the range is the sideways speed times that time", because: "no horizontal force" },
+  { tex: String.raw`R = u \cos\theta \cdot \frac{2 u \sin\theta}{g}`, spoken: "put the time in" },
+  { tex: String.raw`R = \frac{2 u^{2} \sin\theta \cos\theta}{g}`, spoken: "tidy it up" },
+  { tex: String.raw`R = \frac{u^{2} \sin 2\theta}{g}`, spoken: "and two sine cos is sine two theta" },
+];
+stemScene(
+  "stem-derivation",
+  "Derivation",
+  `      <Derivation subject="physics" steps={${JSON.stringify(RANGE_STEPS)}} at={[0, 30, 60, 90, 120, 150, 180]} />`,
+  "physics",
+);
+stemAdd("stem-derivation", 220, { 138: "stem-derivation" });
+
+// LessonCaptions: the caption block over a plain graph, the word being said in the accent.
+const CAPTION_TEXT = "Why does the ball keep moving sideways? Because nothing pushes it back.";
+fs.mkdirSync(path.join(stemProject, "public", "audio", "vo"), { recursive: true });
+fs.writeFileSync(
+  path.join(stemProject, "public", "audio", "vo", "stem-lessoncaptions.words.json"),
+  JSON.stringify(CAPTION_TEXT.split(" ").map((word, i) => ({ word: word.replace(/[?.,]/g, ""), startMs: i * 400, endMs: i * 400 + 300 }))),
+);
+stemScene(
+  "stem-lessoncaptions",
+  "Axes, Plot, LessonCaptions",
+  `      <Axes box={{ x: 130, y: 420, width: 820, height: 640 }} xRange={[0, 48]} yRange={[0, 14]} xStep={10} yStep={2} xLabel="distance (m)" yLabel="height (m)" subject="physics">
+        <Plot fn={(x) => x - (x * x) / 40} domain={[0, 40]} />
+      </Axes>
+      <LessonCaptions beatId="stem-lessoncaptions" text={${JSON.stringify(CAPTION_TEXT)}} subject="physics" />`,
+  "physics",
+);
+stemAdd("stem-lessoncaptions", 150, { 42: "stem-lessoncaptions" });
+
+// Wave: a travelling wave with its wavelength and amplitude labelled, a Spark riding a crest.
+stemScene(
+  "stem-wave",
+  "Wave",
+  `      <Wave wavelength={Math.round(Math.min(width, height) * 0.3)} amplitude={Math.round(Math.min(width, height) * 0.09)} speed={3} spark="crest" labels={{ phase: false }} />`,
+  "physics",
+);
+stemAdd("stem-wave", 80, { 60: "stem-wave" });
+
+// Orbit: a body on an ellipse with its velocity and force arrows at one instant, drawn to scale.
+stemScene(
+  "stem-orbit",
+  "Orbit",
+  `      <Orbit eccentricity={0.4} period={160} v={20} F={40} scale={{ velocity: 5, force: 2 }} centreLabel="M" />`,
+  "physics",
+);
+stemAdd("stem-orbit", 80, { 50: "stem-orbit" });
+
+// VectorField: the field of a point charge, radial arrows with field lines on.
+stemScene(
+  "stem-vectorfield",
+  "VectorField",
+  `      <VectorField
+        box={{ x: Math.round((width - Math.min(width * 0.72, height * 0.6)) / 2), y: Math.round(height * (height > width ? 0.3 : 0.2)), width: Math.round(Math.min(width * 0.72, height * 0.6)), height: Math.round(Math.min(width * 0.72, height * 0.6)) }}
+        xRange={[-1, 1]} yRange={[-1, 1]} grid={{ columns: 8, rows: 8 }}
+        scale={Math.min(width, height) * 0.02} maxLength={Math.min(width, height) * 0.07}
+        fieldLines seeds={Array.from({ length: 12 }, (_, k): [number, number] => [0.3 * Math.cos((k * Math.PI) / 6 + 0.26), 0.3 * Math.sin((k * Math.PI) / 6 + 0.26)])}
+        field={(x: number, y: number): [number, number] => { const r2 = x * x + y * y; return r2 < 1e-6 ? [0, 0] : [x / r2, y / r2]; }} />`,
+);
+stemAdd("stem-vectorfield", 80, { 72: "stem-vectorfield" });
+
+// ComplexityCurve: n, n log n and n squared with a marker at n = 12.
+stemScene(
+  "stem-complexitycurve",
+  "ComplexityCurve",
+  `      <ComplexityCurve n={12} xMax={18} duration={40} />`,
+  "cs",
+);
+stemAdd("stem-complexitycurve", 60, { 50: "stem-complexitycurve" });
+
+stemScene(
+  "stem-matrixgrid",
+  "MatrixGrid",
+  `      <MatrixGrid matrix={[[2, 1], [0, 1]]} at={0} duration={40} unitSquare showMatrix subject="math" />`,
+  "math",
+);
+stemAdd("stem-matrixgrid", 60, { 50: "stem-matrixgrid" });
+
+stemScene(
+  "stem-treeviz",
+  "TreeViz",
+  `      <TreeViz values={[8, 3, 10, 1, 6, 14]} at={0} insertAt={14} walkValue={6} subject="cs" />`,
+  "cs",
+);
+stemAdd("stem-treeviz", 170, { 150: "stem-treeviz" });
+
+// GraphViz: breadth-first search on six nodes, part-way through (A B C done, E F on the frontier, the Spark on D).
+stemScene(
+  "stem-graphviz",
+  "GraphViz, adjacencyFrom, bfsSteps",
+  `      <GraphViz
+        nodes={[
+          { id: "A", x: 0.1, y: 0.5 }, { id: "B", x: 0.35, y: 0.15 }, { id: "C", x: 0.35, y: 0.85 },
+          { id: "D", x: 0.65, y: 0.15 }, { id: "E", x: 0.65, y: 0.85 }, { id: "F", x: 0.9, y: 0.5 },
+        ]}
+        edges={[["A", "B"], ["A", "C"], ["B", "D"], ["C", "E"], ["D", "F"], ["E", "F"]]}
+        steps={bfsSteps(adjacencyFrom([["A", "B"], ["A", "C"], ["B", "D"], ["C", "E"], ["D", "F"], ["E", "F"]]), "A", { first: 20, every: 40, goal: "F" })}
+        walk={["A", "B", "C", "D"]} hop={20} hold={20} />`,
+  "cs",
+);
+stemAdd("stem-graphviz", 180, { 150: "stem-graphviz" });
+
 let stemStart = 0;
 const stemFinal = stemBeats.map((b) => {
   const component = b.id.split("-").map((p) => p[0].toUpperCase() + p.slice(1)).join("");

@@ -44,6 +44,12 @@ export interface InitProjectResult {
 
 const STEM_DIR = "openvidstudio-stem";
 const STEM_DEPENDENCY = "@openvidstudio/stem";
+/** output/ collects renders on the maintainer's machine; only its two tracked files belong in a new project. */
+const OUTPUT_FILES = new Set(["output/README.md", "output/.gitignore"]);
+function isStrayOutputFile(rel: string): boolean {
+  return rel.startsWith("output/") && !OUTPUT_FILES.has(rel);
+}
+
 const SUPERNOVA_VIDEO_CONFIG: VideoConfig = { fps: 30, width: 1080, height: 1920 };
 
 /** Adds or removes the stem dependency in the project's package.json, leaving the rest as it is. */
@@ -98,7 +104,7 @@ export function runInitProject(input: InitProjectInput): InitProjectResult {
   const supernova = input.mode === "supernova";
   const configExisted = fs.existsSync(configPath(projectRoot));
   // The vendored stem package is part of the bundled shell but belongs only to supernova projects.
-  copyTemplateTree(TEMPLATE_DIR, projectRoot, supernova ? undefined : (rel) => rel === STEM_DIR);
+  copyTemplateTree(TEMPLATE_DIR, projectRoot, (rel) => (!supernova && rel === STEM_DIR) || isStrayOutputFile(rel));
   if (supernova) installStem(projectRoot);
   else if (!alreadyScaffolded) setStemDependency(projectRoot, false);
 

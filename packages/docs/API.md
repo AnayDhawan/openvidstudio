@@ -1014,6 +1014,55 @@ width }`). `useNumberLine().toScreen(value)` lets a Spark ride the line.
 Strokes are never thinner than `lineWeight(width, height)`, 3px at 1080 on the shorter side (the plot
 line is about 1.7 times that). None of these glow: the Spark is the one element that does.
 
+### `Derivation`
+
+![A projectile's range derived in steps: three lines of algebra stacked, the newest in the accent and white, the two before it dimmed, with a reason under one step](img/api/stem-derivation.png)
+
+A formula built line by line, each line spoken: the derive beat of a lesson. The newest line sits at the bottom;
+the one before it moves up and dims, up to a stack of three, so the viewer reads the algebra top to bottom. The
+lines share a left edge and sit on a baseline, as algebra on paper does, so between two lines the terms they
+share (matched by their TeX, top level terms) stay exactly where they are, and slide only if the terms before them
+changed width. Terms that are new fade in and rise in the accent and settle to white; terms that are gone fade out where
+they were. Term level, not per glyph. The range of a projectile, `R = u^2 sin(2 theta) / g`, in seven steps, is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `steps` | `{ tex, spoken, because? }[]` | required | `tex` is the line. `spoken` is **required**, exactly as on `Equation`: it must appear in the beat's narration, in the order the steps are given, and `check_script` fails a step that does not. `because` is a short reason in plain words ("no horizontal force") shown under the step |
+| `beatId` | `string` | | Reveal each step at the word its `spoken` starts at, found in `useNarrationWords(beatId)` after the previous step's words |
+| `at` | `number[]` | | Explicit frames, one per step, which win over the narration |
+| `from`, `stagger` | `number` | `0`, `60` | When there is neither narration nor `at`: the first step's frame and the gap between steps |
+| `size` | `number` | 7% of the shorter side, smaller if the widest line would not fit | Font size in px |
+| `color`, `subject` | | the Void's warm white, `"math"` | `subject` picks the colour new terms arrive in |
+| `center` | `{ x, y }` | the horizontal centre, 60% down a tall frame | `y` is the baseline of the current line, `x` the middle of the block |
+
+The stack is three lines: opacity 1, about a half, about a quarter; a fourth line is gone. `revealFrames`,
+`matchTerms` and `slotOpacity` are the pure functions behind it.
+
+### `LessonCaptions`
+
+![A lesson caption block above the bottom safe zone over a projectile path: five words in warm white with the word being said in the accent](img/api/stem-lessoncaptions.png)
+
+Burned-in captions timed to the narration, in one line: `<LessonCaptions beatId="hook" text={vo} />`. The word
+timings (`<beat>.words.json`) carry bare words with no punctuation, so chunking on them runs one sentence into
+the next. The text comes from the beat's `vo`: split on spaces, and when that gives as many words as the timings it is
+shown with its punctuation, otherwise the timings' bare words are. A caption breaks at a sentence end, at a comma
+after at least three words, and at `maxWords`; a one word sentence is a caption on its own. The word being said is
+picked out in the subject's accent. A pure function of the frame.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `beatId` | `string` | required | Read with `useNarrationWords(beatId)` |
+| `text` | `string` | required | The beat's `vo` |
+| `position` | `"bottom" \| "top"` | `"bottom"` | Above the bottom 22% or below the top 14% of a tall frame (8% either way on a wide one) |
+| `maxWords` | `number` | `6` | Most words in one caption |
+| `left`, `width` | `number` | 10% of the width, the rest | The block's box |
+| `subject`, `fontSize` | | `"math"`, 4.8% of the shorter side | |
+
+With no timings at all (an engine that gives none) the words are spread evenly over the scene, and the block says so in
+`data-ovs-captions-timing="estimated"`. The block is tagged `data-ovs-captions`, which `validate_scenes` ignores when it
+looks for the first drawn element and for a static stretch. `captionChunks(words, maxWords)` and `captionInsets(width, height)`
+are the pure functions.
+
 ### `FreeBody`
 
 ![A block on a slope at rest: weight, the normal force and friction as labelled arrows from its centre, with a 10 N scale bar](img/api/stem-freebody.png)
@@ -1052,6 +1101,182 @@ binary search and a sorting pass. Binary search over a sorted array is the sampl
 
 `useArrayViz()` returns `{ cellSize, left, top, cellCenter(i) }` so a Spark's path (`walk`) can be built from
 the cells' own positions.
+
+### `Wave`
+
+![A sine wave on a dark background with a bracket one wavelength wide above two crests, an arrow from the rest line up to a crest for the amplitude, and a marker for the phase at the left edge.](img/api/stem-wave.png)
+
+A travelling or standing sine wave with its wavelength, amplitude and phase drawn on it. Every number is exact: crests are exactly `wavelength` px apart, a crest is exactly `amplitude` px above the rest line, and a travelling crest moves exactly `speed` px per frame. The curve is a dense SVG path (24 or more samples per wavelength, with a sample on every crest and trough). In a standing wave the nodes (small rings on the rest line) never move and the antinodes swing up and down. `spark="crest"` rides the one Spark on a crest (an antinode, for a standing wave). A pure function of the frame; nothing is drawn before `at`.
+
+The displacement is `amplitude * cos(k (x - x0 - speed t) + phase)` for a travelling wave and `amplitude * cos(k (x - x0) + phase) * cos(2 pi t / period)` for a standing one, with `k = 2 pi / wavelength` and `x0` the left edge of the box. Find the elements in a test by `data-ovs-wave` (with `data-ovs-crests`, `data-ovs-wavelength`, `data-ovs-amplitude`), `data-ovs-node`, `data-ovs-label` (`wavelength`, `amplitude`, `phase`) and `data-ovs-crest-spark`.
+
+| Prop | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `mode` | `"travelling" \| "standing"` | `"travelling"` | |
+| `wavelength` | number (px) | a third of the box width | Crest to crest. |
+| `amplitude` | number (px) | 8% of the shorter side | Rest line to crest. |
+| `speed` | number (px per frame) | one wavelength per 60 frames | Travelling only. A crest moves exactly this far each frame. |
+| `period` | number (frames) | 90 | Standing only. |
+| `phase` | number (radians) | 0 | The displacement at the left edge at time zero is `amplitude * cos(phase)`. |
+| `at` | number (frame) | 0 | The wave draws itself left to right over `WAVE_REVEAL_FRAMES` (24). |
+| `box` | `{ x, y, width, height }` | middle of the frame, inside the Reels safe zone | The rest line runs through the middle of the box. |
+| `labels` | boolean or `{ wavelength?, amplitude?, phase? }` | all on | Wavelength bracket (crest to crest), amplitude arrow (rest line to crest), phase marker. They fade in once the wave has drawn. |
+| `wavelengthText`, `amplitudeText` | string | `"λ"`, `"A"` | |
+| `spark` | `"crest"` | none | One Spark on a crest. On a travelling wave it rides a crest and, when that crest has gone a wavelength on, hands over to the next one. |
+
+`waveField(input)` returns `{ k, displacement, crestX, antinodeX, nodeX, crestsIn }`, the maths without the drawing.
+
+### `Orbit`
+
+![A dark picture of a body on an elliptical orbit round a grey central disc, with a blue velocity arrow along the path and an ember force arrow pointing at the centre, and two scale bars in the corner.](img/api/stem-orbit.png)
+
+A body on a circular or elliptical orbit with its velocity and force arrows drawn to scale, like `FreeBody`: each arrow is exactly `magnitude * scale` px from tail to tip, and a scale bar for each says how much that is. The body is the one Spark; the central mass is a plain disc at a focus of the ellipse.
+
+What is exact: the position (Kepler's equation is solved, so the body is at periapsis at `t = 0` and every `period`, at apoapsis half a period later, at distances `a(1 - e)` and `a(1 + e)`); the force arrow always points at the central mass; the velocity arrow is tangent to the path (perpendicular to the radius on a circle); the magnitudes follow vis-viva for speed, `v sqrt(2a/r - 1)`, and the inverse square law for force, `F (a/r)^2`, where `v` and `F` are the speed and force at a distance of `semiMajor`. What is not: `v` and `F` are the caller's numbers in the caller's units, so nothing is checked against a real gravitational constant, and the arrow scale (px per unit) is independent of the scale of the drawn orbit. A pure function of the frame; nothing is drawn before `at`. Find the elements by `data-ovs-arrow` (`velocity`, `force`, with `data-ovs-magnitude` and `data-ovs-length`), `data-ovs-mass`, `data-ovs-body`, `data-ovs-orbit-path` and `data-ovs-scale`.
+
+| Prop | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `semiMajor` | number (px) | 34% of the shorter side | The radius, for a circle. |
+| `eccentricity` | number | 0 | 0 is a circle; capped at 0.95. |
+| `period` | number (frames) | required | One full orbit. |
+| `v`, `F` | number | none | Speed and force at distance `semiMajor`. On a circle they are the speed and force all the way round. |
+| `speedAt`, `forceAt` | `(r: px) => number` | vis-viva, inverse square | Override the physics. |
+| `scale` | `{ velocity, force }` | required | Pixels per unit of magnitude. |
+| `units` | `{ velocity?, force? }` | `"m/s"`, `"N"` | On the scale bars. |
+| `scaleValue` | `{ velocity?, force? }` | a round value near half the periapsis value | What each scale bar stands for. |
+| `centre` | `{ x, y }` | puts the whole ellipse in the middle of the frame | Where the central mass is (the focus). |
+| `periapsisAngle` | degrees | 0 | Direction of the closest point, counter-clockwise from the right. The body starts there. |
+| `clockwise` | boolean | false | |
+| `arrows` | boolean | true | `false` hides the arrows and the scale bars. |
+| `at`, `arrowsAt` | number (frame) | 0, `at + 12` | The arrows grow over `ORBIT_ARROW_FRAMES` (14). |
+| `massRadius`, `centreLabel` | number, string | 3.2% of the shorter side, none | |
+
+`orbitState(shape, t)` returns `{ anomaly, r, offset, tangent, towardCentre }` for a body `t` frames after release.
+
+### `VectorField`
+
+![A point charge's electric field: amber arrows pointing straight out from the centre of a grid, longer near the charge, with twelve ember field lines running out to the edges](img/api/stem-vectorfield.png)
+
+Arrows on a grid for a vector field `(x, y) => [fx, fy]` given in graph coordinates, with optional field
+lines, for a physics lesson on electric or gravitational fields. Inside an `<Axes>` it uses that mapping;
+on its own it takes a `box` and `xRange`/`yRange`. Each arrow starts at its grid point (cell centres) and is
+exactly `|f| * scale` px from tail to tip, with arrowheads like `FreeBody`'s. Nothing is capped or
+normalised unless `maxLength` or `normalize` is given, and then the arrows that are capped or normalised no
+longer show `|f|`, so say so in the narration. Arrows and lines point along `(fx, -fy)` in px whatever the
+axes' scales; give the box and ranges equal px per unit (a square box over square ranges) if the picture
+should look like the field does in the plane. With `fieldLines`, streamlines are traced from the seeds by
+integrating the field (RK4, fixed step, deterministic) both ways until they leave the box, run into a zero
+or a source, or close up, and are drawn on after the arrows. A point charge's radial field with its lines
+is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `field` | `(x, y) => [fx, fy]` | required | Graph point to vector, y up. Return `[0, 0]` where undefined (a charge's own position) |
+| `grid` | `{ columns, rows? }` | 7 columns, rows to keep cells square | Arrows are at the cell centres, so a grid never sits on the origin or an edge |
+| `scale` | `number` | longest arrow is 80% of a cell | Pixels per unit of `|f|`. An arrow is exactly `\|f\| * scale` px |
+| `normalize` | `number` | off | Every arrow this many px long, direction only |
+| `maxLength` | `number` | off | Cap in px. Capped arrows are shorter than `\|f\| * scale` |
+| `fieldLines` | `boolean` | `false` | Trace and draw field lines |
+| `seeds` | `[x, y][]` | every other grid point | Graph points the lines start from, each traced both ways |
+| `box`, `xRange`, `yRange` | `Box`, `[n, n]` | frame-sized box, `[-1, 1]` | Used outside `<Axes>`. Inside one, the Axes' own are used |
+| `color`, `lineColor` | `string` | physics amber, ember | |
+| `at`, `lineDuration` | `number` | `0`, `45` | When the arrows start growing (20 frames, `FIELD_ARROW_FRAMES`), and how long the lines take to draw on after that |
+
+Helpers: `vectorFieldGrid(geometry, props)` returns each arrow (`world`, `screen` tail, `length`, unit
+`dir`), and `traceFieldLine(geometry, field, seed, step)` one streamline as px points. Elements carry
+`data-ovs-vectorfield`, `data-ovs-arrow` (with `data-ovs-gx`, `data-ovs-gy`, the grid point) and
+`data-ovs-fieldline`.
+
+### `ComplexityCurve`
+
+![n, n log n and n squared drawn on shared axes in green, violet and red, named at their ends, with a dashed rule at n equals 12 and a dot with its value on each curve](img/api/stem-complexitycurve.png)
+
+The growth of `n`, `n log n` and `n^2` plotted together on shared axes, with a marker for a chosen `n`: a
+dashed vertical rule, a dot on each curve and the value there. Built from `Axes` and `Plot`, so a curve
+that climbs past `yMax` is clipped at the top of the plot. **The log is base 2**: the `n log n` curve is
+`n * log2(n)` (drawn as 0 for n at or below 1). Each curve has its own accent (n green, n log n the cs
+violet, n squared red) and is named at its end. The curves are drawn on over `duration` frames, and the
+marker and names appear once the draw-on reaches them. The marker at n = 12 is the sample scene.
+
+| Prop | Type | Default | Notes |
+|---|---|---|---|
+| `curves` | `("n" \| "nlogn" \| "n2")[]` | all three | Which to draw, in this order |
+| `n` | `number` | none | The marked input size. Dots sit at `Axes.toScreen(n, f(n))` |
+| `xMax` | `number` | `1.5 * n`, or 16 | Right end of the x axis (it starts at 0) |
+| `yMax` | `number` | `1.25 * ` the largest value at `n`, or the largest at `xMax` | Top of the y axis |
+| `at`, `duration` | `number` | `0`, `60` | Draw-on start frame and length |
+| `box` | `Box` | frame-sized | Where the plot sits |
+| `labels` | `boolean` | `true` | Curve names at their ends, the values at the dots and "n = 12" |
+
+Also exports `complexityValue(kind, n)`, `COMPLEXITY_NAMES` and `COMPLEXITY_COLORS`. Elements carry
+`data-ovs-complexity`, `data-ovs-plot="point"`, `data-ovs-marker`, `data-ovs-marker-rule` and
+`data-ovs-curve-label`.
+
+### `MatrixGrid`
+
+![A two by two matrix drawn in brackets above a plane of points, with the unit square sheared and stretched into a parallelogram and arrows for the images of i-hat and j-hat.](img/api/stem-matrixgrid.png)
+
+A 2x2 matrix acting on the plane. A grid of points (and the lines through them), the unit square and the images of i-hat and j-hat move from the identity to the matrix over `at` to `at + duration`. Every entry is interpolated linearly from the identity, so each frame shows the plane under `I + p (M - I)` and the last frame exactly `M`. The picture is honest: a point (x, y) is drawn at `scale` px per unit times `M * (x, y)`, the origin never moves, and the square is drawn flipped when the determinant is negative (`data-ovs-orientation`). The matrix is shown in brackets above the plane in portrait and beside it in landscape, with its determinant. A pure function of the frame; nothing glows.
+
+| Prop | Type | Default | |
+|---|---|---|---|
+| `matrix` | `number[][]` | required | 2x2, rows first: `[[a, b], [c, d]]` |
+| `at` | `number` | `0` | Frame the picture appears and the transform starts |
+| `duration` | `number` | `45` | Frames from the identity to the matrix |
+| `transform` | `boolean` | `true` | `false` shows the plane already transformed |
+| `ease` | `(t) => number` | `E.cinematic` | Shapes the progress; `(t) => t` is linear |
+| `grid` | `{ extent?, spacing? }` | `{ 2, 1 }` | Reach and gap of the point grid, graph units |
+| `unitSquare` | `boolean` | `true` | Unit square, its image, and the i-hat and j-hat arrows |
+| `showMatrix` | `boolean` | `true` | Draw the matrix with its determinant |
+| `box` | `Box` | middle band (portrait), right side (landscape) | Where the plane is drawn; its centre is the origin |
+| `scale` | `number` | fits the grid and its image in the box | px per graph unit |
+| `subject` | `Subject` | `"math"` | Picks the accent |
+
+Helpers: `matrixGridGeometry(matrix, { width, height, box?, scale?, extent? })` returns `{ box, origin, scale, toScreen }`; `interpolateMatrix(m, progress)` and `applyMatrix(m, x, y)` are the pure maths. DOM: `data-ovs-point="x,y"` (with `data-ovs-sx/sy`), `data-ovs-corner`, `data-ovs-basis="i|j"`, `data-ovs-unit-square`, `data-ovs-progress`.
+
+### `TreeViz`
+
+![A binary search tree of six violet-ringed numbered nodes joined by edges, with the in-order list of visited values under it.](img/api/stem-treeviz.png)
+
+A binary search tree built one insert at a time, with traversals. The component builds the BST from `values` itself (smaller to the left, a repeated value skipped) and lays it out tidily from the frame size: x is the in-order rank, y the depth, so a left child is always left of its parent and a right child right of it, one level lower. Each node arrives with its edge. A Spark can walk from the root to the place of a value as it is inserted (the node appears when the Spark gets there). A traversal then lights the nodes in visit order, one every `hop` frames, and lists the visited values under the tree. The only glowing element is the Spark. A pure function of the frame.
+
+| Prop | Type | Default | |
+|---|---|---|---|
+| `values` | `number[]` | required | Inserted in this order |
+| `at` | `number` | `0` | Frame the first insert starts |
+| `insertAt` | `number` | `24` | Frames per insert (a walked insert also takes its walk) |
+| `walkValue` | `number` | last value | The Spark walks to this value's place |
+| `spark` | `boolean` | `true` | `false` turns the walk off |
+| `walkHop`, `walkHold` | `number` | `14`, `8` | Frames per hop down, and resting on each node |
+| `traversal` | `"inorder" \| "preorder" \| "postorder" \| "level"` | none | Light nodes in this order and list them |
+| `traverseAt` | `number` | 20 frames after the last insert | Frame the first node lights |
+| `hop` | `number` | `18` | Frames between one node lighting and the next |
+| `highlight` | `number` | none | Ring the node with this value |
+| `subject` | `Subject` | `"cs"` | Picks the accent |
+
+Helper: `treeLayout(values, { width, height, at?, insertAt?, walkValue?, spark?, walkHop?, walkHold?, traverseAt? })` returns `{ nodes: [{ value, order, parent, side, depth, x, y, appearFrame }], radius, orders: { inorder, preorder, postorder, level }, walkPoints, ... }`. DOM: `data-ovs-node`, `data-ovs-x/y`, `data-ovs-lit`, `data-ovs-edge="parent-child"`, `data-ovs-visited` with `data-ovs-visit-index`.
+
+### `GraphViz`
+
+![A graph of six violet-outlined nodes joined by lines, with three nodes filled blue as done, two filled violet as the frontier, one warm white where a single glowing Spark rests, and a legend naming each colour](img/api/stem-graphviz.png)
+
+Nodes and edges for teaching graph search. Each node is coloured by its role at the current frame (dim: unvisited, violet: frontier, warm white: being visited, blue: done, ember: on the final path) and a legend names the roles. A `walk` hops one `Spark` from node to node (the only glowing element), using `walk` from `paths.ts`. Build `steps` from a real search with `bfsSteps`, not by hand.
+
+| Prop | Type | Default | Meaning |
+|---|---|---|---|
+| `nodes` | `{ id, x?, y?, label? }[]` | required | `x`, `y` are fractions (0..1) of the layout box. Give all nodes both, or none: then they sit evenly on a circle that fits the box, from the top. `label` defaults to the id and is drawn inside the node. |
+| `edges` | `[from, to][]` | required | Lines run centre to centre. |
+| `directed` | `boolean` | `false` | Arrowheads; lines stop at the node edge. |
+| `steps` | `{ frame, visit?, frontier?, done?, path? }[]` | none | A snapshot from `frame` on: the latest step at or before the current frame gives every node's role. Nodes in none of its lists are unvisited. Edges between consecutive nodes of `path` are drawn in ember at twice the weight. |
+| `walk` | `string[]` | none | Node ids a single Spark hops along. The Spark rests on `walk[k]` during local frames `[k*(hop+hold)+hop, (k+1)*(hop+hold)]`, so a step at `walkAt + k*(hop+hold) + hop` lines the colour up with the Spark. |
+| `hop`, `hold` | `number` | `20`, `20` | Frames to move, and to rest on each node. |
+| `walkAt` | `number` | `at` | Frame the Spark starts. |
+| `at` | `number` | `0` | Frame the graph appears; nothing is drawn before it. |
+| `box` | `{ x, y, w, h }` | 80% of the width, from 17% down, 45% of the height | The layout box in px. |
+| `radius` | `number` | 4.5% of the shorter side | Node radius. Label text is 80% of it, the legend is 2.7% of the shorter side. |
+| `legend` | `boolean` | `true` | The role legend, below the box, wrapped to the box width. |
+
+Helpers: `bfsOrder(adjacency, start)` (visiting order, neighbours in listed order), `shortestPath(adjacency, from, to)` (fewest edges, or `null`), `adjacencyFrom(edges, directed?, ids?)`, `bfsSteps(adjacency, start, { first, every, goal? })` (a step per visited node: that node visiting, the earlier ones done, the discovered ones frontier; with `goal`, a last step showing the shortest path), `graphLayout(nodes, width, height, { box, radius })` (centres in px). `GRAPH_ROLE_COLOR` holds the role fills.
 
 ### The glow budget
 

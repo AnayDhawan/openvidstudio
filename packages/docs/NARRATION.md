@@ -102,6 +102,13 @@ const at = narration.frameOfWord(3);           // scene-local frame the fourth w
 `wordAt` gives the word being said, or in a pause the last one said (`speaking` is then false), and `null` before
 the first word. `available` is false for a beat with no timings.
 
+## Narration over a canvas explainer
+
+`render_canvas_explainer` with `videoName` mixes the clips `generate_narration` wrote into a canvas explainer's video: each
+clip starts at its beat's start, the score is rendered with the sound kit's `voiceover: true` mode and ducked at least 6 dB
+under the voice, and the beats' text is burned in as captions that break at sentence ends. Run `fit_beats` first so the beat
+times follow the voice. See "Canvas explainers" in PIPELINE.md.
+
 ## Silence is silent
 
 `stitch_composition` skips a missing `public/audio/vo/<beatId>.mp3` with no error and

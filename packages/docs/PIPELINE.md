@@ -454,6 +454,52 @@ Each is checked at both sizes in `vertical.test.mjs`.
 Anything not on this list has not been checked at 1080x1920. Measure it with `validate_scenes`
 (`render: true`) and a still before trusting it in a vertical video.
 
+## Canvas explainers
+
+A second visual path next to Remotion scenes: one self-contained HTML file with a `<canvas>` (chalkboard, whiteboard,
+flat vector, a pixel narrator) that keeps three promises:
+
+| Promise | Meaning |
+|---|---|
+| `window.seek(t)` | Draws the frame at time `t`, in seconds, as a pure function of `t` |
+| `window.DURATION` | Its length in seconds |
+| `window.scoreSound(kit)` | Its Web Audio score, rendered offline through `window.SOUND.renderOffline(scoreSound, seconds, sampleRate, { voiceover })` |
+
+`render_canvas_explainer` loads the file in headless Chromium, waits for `document.fonts.ready`, walks
+`round(DURATION * fps)` frames (1280x720 at 30 fps; pass `width: 720, height: 1280` for a Reel, both even), pipes the
+canvas PNGs into ffmpeg (H.264, yuv420p), renders the score, and muxes the two. A file that does not expose the
+promises is refused with the missing ones named. The logic is `dist/canvasExplainer.js`, which also runs standalone:
+`node canvasExplainer.js --html explainer.html --out out.mp4 --width 720 --height 1280`. `async: true` returns a
+`jobId` for `job_status`, as `render_video` does. The result carries SHA-256 hashes of the first, middle and last
+frame: render twice and compare them to check that frames are a function of `t`. A file that calls `Math.random` is
+warned about.
+
+**Voice-over.** Pass `videoName` and the project's `beats.json` (after `generate_narration` and `fit_beats`) drives the
+render: before the first draw the renderer sets `window.BEATS`, an array of `{ id, start, end, text }` in seconds, and
+`window.DURATION` becomes the last beat's end (an explainer reads `BEATS` instead of constants). The narration clips
+`public/audio/vo/<beatId>.mp3` are mixed in at each beat's start, to the sample, over the score rendered with
+`{ voiceover: true }`, and the score is ducked `audio.duckDb` (default 9, never under 6) while a clip plays, eased down over
+40 ms and back over 250 ms. `narration: "none"` renders silent narration with the full-mix sound. `check_script` and
+`validate_beats` read the same `beats.json`, so the script gates apply unchanged.
+
+**Captions.** Burned in from each beat's text, in chunks that break at sentence ends (and at a comma after three words
+and at six words), timed from `<beatId>.words.json` when it exists and by word length across the clip when it does not,
+inside the safe areas (above the bottom 22% and below the top 14% of a tall canvas, 8% either way on a wide one). Done
+through `window.CAPTIONS.draw(ctx, t, opts)`, a helper the renderer injects: an explainer calls it at the end of
+`seek(t)` to caption in its own font and colours (`opts.font`, `color`, `background`, `position`), and the renderer calls it
+itself for one that does not. Chosen over an ASS subtitle pass in ffmpeg because that needs libass and system fonts, cannot match a
+canvas's pixel font, and draws outside the explainer's own frame; the helper keeps captions inside the pure-function-of-`t`
+promise and costs an explainer one line.
+
+**Checks.** `validate_canvas_explainer` (also a pre-flight inside the renderer, which refuses to render on an error;
+`validate: false` skips it) loads the file and samples frames through `seek`: a frame is the same drawn twice (error); text is at
+least 28px for labels, 44px for headlines and 64px for key numbers at 720 on the shorter side, scaled to the canvas, found by
+intercepting `fillText` and `strokeText` (warning below, error below half; the shorter side rather than the width, so a
+720x1280 Reel keeps the full minimums); no text in the top 14% or bottom 22% of a tall canvas except captions (warning); the arc
+through the code `validate_scenes` uses (first drawn element after 15 s a warning, after 25 s an error; 8 s of identical
+frames a warning); the sound scheduled into an offline context, with the most source nodes playing at once (warning above 3)
+and the peak level (warning at clipping); and `Math.random` in the source. Findings have `validate_scenes`' shape.
+
 ## Run records and facts
 
 A beat's text says what was intended. A run record says what actually happened. Each tool

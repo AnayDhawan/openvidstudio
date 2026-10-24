@@ -33,6 +33,32 @@ export interface ConceptCard {
   referenceSpoken?: string;
   /** The longest the lesson may run, in seconds. Default 120. */
   maxSeconds?: number;
+  /**
+   * The lesson's shape. "seven-beat" (the default, and what a card without this field gets) is the arc in SCRIPT.md;
+   * "story" is the story-first arc: a real situation told as a problem, a narrator, the key formulas, the formulas
+   * applied to the story's numbers, one watch out, then a practice question. The story fields below are only read
+   * for "story".
+   */
+  arc?: "seven-beat" | "story";
+  /** Story arc: the one real-world scene the lesson opens on. The first beat has to name it. */
+  situation?: string;
+  /** Story arc: the narrator's name. */
+  character?: string;
+  /**
+   * Story arc: the key formulas, in the order they are stated. `tex` is what is on screen, `spoken` how it is said
+   * (it has to occur in the narration, in this order), `source` where it comes from (a syllabus booklet, a derivation).
+   */
+  formulas?: StoryFormula[];
+  /** Story arc: the original practice question. The last beat ends with it. */
+  practiceQuestion?: string;
+  /** Story arc: the practice question's answer. It is withheld from the narration (it goes in the pinned comment). */
+  answer?: string;
+}
+
+export interface StoryFormula {
+  tex: string;
+  spoken: string;
+  source: string;
 }
 
 export type ScriptFindingSeverity = "error" | "warning" | "note";
@@ -40,7 +66,7 @@ export type ScriptFindingSeverity = "error" | "warning" | "note";
 export interface ScriptFinding {
   severity: ScriptFindingSeverity;
   /** Which check produced it. */
-  check: "sentence-length" | "reading-level" | "glossary" | "new-terms" | "spoken" | "hook" | "pace" | "closing-question" | "length" | "reference";
+  check: "sentence-length" | "reading-level" | "glossary" | "new-terms" | "spoken" | "hook" | "pace" | "closing-question" | "length" | "reference" | "story-situation" | "story-formula" | "story-practice" | "story-comment" | "story-subscribe" | "story-answer";
   beatId: string;
   message: string;
 }
@@ -105,6 +131,15 @@ export function fleschKincaidGrade(text: string): number {
 }
 
 const normalise = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().replace(/\s+/g, " ");
+
+const STOP_WORDS = new Set(
+  "the and for with that this from have has had was were are but not you your his her its our their they them then than into onto over under about what when where which while will would could should can did does out off one all any too very just also more most some such only own same each both few other how why who whom".split(" "),
+);
+
+/** The distinct content words of a text: normalised, three letters or more, no stop words. */
+function contentWords(text: string): Set<string> {
+  return new Set(normalise(text).split(" ").filter((w) => w.length >= 3 && !STOP_WORDS.has(w)));
+}
 
 const NUMBER_WORDS = /\b(zero|one|two|three|four|five|six|seven|eight|nine|ten|hundred|thousand|million|billion|half|double|twice)\b/i;
 
@@ -181,6 +216,82 @@ export function derivationSpoken(source: string): string[][] {
   return out;
 }
 
+type AddFinding = (severity: ScriptFindingSeverity, check: ScriptFinding["check"], beatId: string, message: string) => void;
+
+/**
+ * The checks for the story arc. They look at the narration as a whole and at its first and last beat, and never
+ * count beats, so a story lesson may take as many beats as it needs.
+ */
+function checkStoryArc(spoken: BeatLike[], card: ConceptCard, add: AddFinding): void {
+  if (spoken.length === 0) return;
+  const idOf = (beat: BeatLike, i: number) => String(beat.id ?? `beat ${i + 1}`);
+  const first = spoken[0];
+  const last = spoken[spoken.length - 1];
+  const lastId = idOf(last, spoken.length - 1);
+
+  // beat 1 names the situation: it shares at least two content words with it
+  if (typeof card.situation !== "string" || card.situation.trim().length === 0) {
+    add("warning", "story-situation", idOf(first, 0), `The story arc needs a situation on the concept card, so the first beat cannot be checked for naming it.`);
+  } else {
+    const wanted = contentWords(card.situation);
+    const said = contentWords(first.vo as string);
+    const shared = [...wanted].filter((w) => said.has(w));
+    const need = Math.min(2, wanted.size);
+    if (shared.length < need) {
+      add("error", "story-situation", idOf(first, 0), `The first beat shares ${shared.length} content word${shared.length === 1 ? "" : "s"} with the situation "${card.situation}", and the story arc needs ${need}. Open on the situation, told as a problem.`);
+    }
+  }
+
+  // each formula's spoken form is in the narration, in the order the card gives them
+  const beatText = spoken.map((b) => normalise(b.vo as string));
+  const heard = beatText.join(" ");
+  const starts: number[] = [];
+  beatText.reduce((at, t) => (starts.push(at), at + t.length + 1), 0);
+  const beatAt = (pos: number) => {
+    let k = 0;
+    while (k + 1 < starts.length && starts[k + 1] <= pos) k++;
+    return idOf(spoken[k], k);
+  };
+  let cursor = 0;
+  (card.formulas ?? []).forEach((f, k) => {
+    if (typeof f?.spoken !== "string" || normalise(f.spoken).length === 0) return;
+    const phrase = normalise(f.spoken);
+    const at = heard.indexOf(phrase, cursor);
+    if (at >= 0) {
+      cursor = at + phrase.length;
+    } else if (heard.includes(phrase)) {
+      add("error", "story-formula", beatAt(heard.indexOf(phrase)), `Formula ${k + 1} ("${f.spoken}") is said before the formula above it. The card lists the formulas in the order they are stated, so the narration has to say them in that order.`);
+    } else {
+      add("error", "story-formula", idOf(first, 0), `Formula ${k + 1}, spoken as "${f.spoken}", is not in the narration. The voice has to say each key formula the way the card spells it.`);
+    }
+  });
+
+  // the last beat ends with the practice question and asks for an answer in the comments
+  if (typeof card.practiceQuestion !== "string" || normalise(card.practiceQuestion).length === 0) {
+    add("warning", "story-practice", lastId, `The story arc needs a practiceQuestion on the concept card, so the last beat cannot be checked for ending with it.`);
+  } else if (!normalise(last.vo as string).endsWith(normalise(card.practiceQuestion))) {
+    add("error", "story-practice", lastId, `The last beat does not end with the practice question "${card.practiceQuestion}". End on the question and let the last frame hold.`);
+  }
+  if (!/comment/i.test(last.vo as string)) {
+    add("error", "story-comment", lastId, `The last beat never asks the viewer to answer in the comments. Add a prompt such as "put your answer in the comments".`);
+  }
+
+  // "like and subscribe" anywhere is a warning
+  spoken.forEach((b, i) => {
+    if (/\blike\s*(?:,|and|&)?\s*(?:and\s+)?subscribe\b/i.test(b.vo as string)) {
+      add("warning", "story-subscribe", idOf(b, i), `This beat says "like and subscribe". The lesson ends on its question and the prompt to comment, nothing else.`);
+    }
+  });
+
+  // the answer is withheld until the pinned comment
+  if (typeof card.answer === "string" && normalise(card.answer).length > 0) {
+    const at = beatText.findIndex((t) => ` ${t} `.includes(` ${normalise(card.answer as string)} `));
+    if (at >= 0) {
+      add("warning", "story-answer", idOf(spoken[at], at), `The answer "${card.answer}" is in the narration. Withhold it: it belongs in the pinned comment, not in the video.`);
+    }
+  }
+}
+
 export function checkScriptLogic(
   beatsJson: unknown,
   card: ConceptCard,
@@ -191,6 +302,7 @@ export function checkScriptLogic(
   const fps = typeof root.fps === "number" && root.fps > 0 ? root.fps : 30;
   const beats = (Array.isArray(root.beats) ? root.beats : []) as BeatLike[];
   const add = (severity: ScriptFindingSeverity, check: ScriptFinding["check"], beatId: string, message: string) => findings.push({ severity, check, beatId, message });
+  const story = card.arc === "story";
 
   const seen = new Set<string>();
   const spoken = beats.filter((b) => typeof b.vo === "string" && b.vo.length > 0);
@@ -293,19 +405,21 @@ export function checkScriptLogic(
     const lead = splitSentences(first.vo as string)[0] ?? "";
     if (/^\s*in this video\b/i.test(lead)) {
       add("error", "hook", id, `The script opens "in this video". Open on a question or a surprising fact, not a promise of what is coming.`);
-    } else if (!lead.trim().endsWith("?") && !/\d/.test(lead) && !NUMBER_WORDS.test(lead)) {
+    } else if (!story && !lead.trim().endsWith("?") && !/\d/.test(lead) && !NUMBER_WORDS.test(lead)) {
       add("warning", "hook", id, `The first sentence is neither a question nor does it hold a number. The hook is a question or a surprising fact.`);
     }
   }
 
-  // the end: a check question
-  if (spoken.length > 0) {
+  // the end: a check question (a story lesson ends on its practice question instead, checked below)
+  if (!story && spoken.length > 0) {
     const last = spoken[spoken.length - 1];
     const lastSentence = splitSentences(last.vo as string).slice(-1)[0] ?? "";
     if (!lastSentence.trim().endsWith("?")) {
       add("error", "closing-question", String(last.id ?? "last beat"), `The last beat does not end with a question. End with a one-line recap, then a check question the viewer can answer in their head.`);
     }
   }
+
+  if (story) checkStoryArc(spoken, card, add);
 
   return { ok: !findings.some((f) => f.severity === "error"), beatsChecked: spoken.length, findings };
 }
@@ -330,7 +444,10 @@ export function runCheckScript(input: CheckScriptInput): CheckScriptResult {
     card = JSON.parse(fs.readFileSync(file, "utf8")) as ConceptCard;
   }
   if (typeof card !== "object" || card === null || typeof card.goal !== "string" || !Array.isArray(card.terms) || typeof card.example !== "string") {
-    throw new Error("The concept card must be { goal: string, terms: string[], example: string } with the optional reference, referenceSpoken and maxSeconds.");
+    throw new Error("The concept card must be { goal: string, terms: string[], example: string } with the optional reference, referenceSpoken, maxSeconds and, for the story arc, arc, situation, character, formulas, practiceQuestion and answer.");
+  }
+  if (card.arc !== undefined && card.arc !== "seven-beat" && card.arc !== "story") {
+    throw new Error(`The concept card's arc must be "seven-beat" or "story", not ${JSON.stringify(card.arc)}.`);
   }
 
   const readScene = (beat: BeatLike, id: string): string | null => {
@@ -354,7 +471,7 @@ export function registerCheckScript(server: McpServer): void {
       description:
         "Mechanical lint for a Supernova lesson script, no model call: it counts and matches patterns, so it can " +
         "say a sentence is long or a term was never defined, not that the explanation is good. Reads " +
-        "src/videos/<videoName>/beats.json and concept.json ({ goal, terms: string[], example, reference?, referenceSpoken?, maxSeconds? }, next to it), or the " +
+        "src/videos/<videoName>/beats.json and concept.json ({ goal, terms: string[], example, reference?, referenceSpoken?, maxSeconds?, arc?, situation?, character?, formulas?, practiceQuestion?, answer? }, next to it), or the " +
         "beatsJson and conceptCard inputs. Returns { ok, beatsChecked, findings } where each finding has a severity " +
         "(error, warning or note), the check, and the beat it points at. Checks: average sentence length per beat " +
         "(warning above 16 words), Flesch-Kincaid reading level per beat (warning above grade 9), each concept-card " +
@@ -366,6 +483,12 @@ export function registerCheckScript(server: McpServer): void {
         "beat length using validate_beats' own budget (error), a last beat that ends with a question (error), the " +
         "total length against the card's maxSeconds (default 120, error), and, when the card has a reference such as a " +
         "chapter code, that the first beat's narration says its referenceSpoken (error; warning if referenceSpoken is missing). " +
+        "The card's `arc` is \"seven-beat\" (the default) or \"story\". For \"story\" (situation, character, formulas: [{ tex, spoken, source }], " +
+        "practiceQuestion, answer), the closing-question check and the hook's warning give way to these, none of which count beats: " +
+        "story-situation (the first beat shares at least two content words with the situation, error), story-formula (each formula's spoken form is in the " +
+        "narration, in the order given, error), story-practice (the last beat ends with the practice question, error), story-comment (the last beat " +
+        "contains a prompt matching /comment/i, error), story-subscribe (\"like and subscribe\" anywhere, warning) and story-answer (the answer is " +
+        "in the narration, warning); a missing situation or practiceQuestion is a warning. Length, reference and the per-beat checks apply to both arcs. " +
         "ok is false only when a finding is an error. See SCRIPT.md's lesson script rules.",
       inputSchema: {
         projectRoot: z.string().optional(),
@@ -379,6 +502,15 @@ export function registerCheckScript(server: McpServer): void {
             reference: z.string().optional(),
             referenceSpoken: z.string().optional(),
             maxSeconds: z.number().positive().optional(),
+            arc: z.enum(["seven-beat", "story"]).optional().describe('The lesson shape. Default "seven-beat".'),
+            situation: z.string().optional().describe("Story arc: the real-world scene the first beat names."),
+            character: z.string().optional().describe("Story arc: the narrator's name."),
+            formulas: z
+              .array(z.object({ tex: z.string(), spoken: z.string(), source: z.string() }))
+              .optional()
+              .describe("Story arc: the key formulas in the order they are stated; each spoken form must be in the narration, in order."),
+            practiceQuestion: z.string().optional().describe("Story arc: the question the last beat ends with."),
+            answer: z.string().optional().describe("Story arc: the answer, which must not be in the narration."),
           })
           .optional()
           .describe("The concept card, instead of reading concept.json."),

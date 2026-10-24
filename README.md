@@ -40,7 +40,7 @@ You ask your agent for a video. openvidstudio gives it the tools to actually mak
 
 Claude Code, Cursor, or any other client that speaks the
 [Model Context Protocol](https://modelcontextprotocol.io) can drive it, through
-<!-- tools:base -->forty-two<!-- /tools --> tools (<!-- tools:higgsfield -->forty-three<!-- /tools --> with the optional Higgsfield tier).
+<!-- tools:base -->forty-four<!-- /tools --> tools (<!-- tools:higgsfield -->forty-five<!-- /tools --> with the optional Higgsfield tier).
 
 ### Why not just record the screen?
 
@@ -109,7 +109,7 @@ npx -y @openvidstudio/mcp-server install claude-desktop   # or: cursor, vscode
 On native Windows some clients need the command wrapped: `"command": "cmd"` with
 `"args": ["/c", "npx", "-y", "@openvidstudio/mcp-server"]`.
 
-<!-- tools:Base -->Forty-two<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
+<!-- tools:Base -->Forty-four<!-- /tools --> tools should appear. If they do not, run `preflight`; it checks your machine and
 names the fix for your platform.
 
 To run from source instead (to contribute, or to try what has not been released), clone the repo and
@@ -306,7 +306,7 @@ openvidstudio/
 ├── packages/
 │   ├── capture/        # browser, desktop, mobile and terminal capture, no Remotion needed
 │   ├── core/           # Remotion building blocks: camera, scenes, transitions, sound
-│   ├── mcp-server/     # @openvidstudio/mcp-server: the <!-- tools:base:digits -->42<!-- /tools -->-<!-- tools:higgsfield:digits -->43<!-- /tools --> MCP tools an agent calls
+│   ├── mcp-server/     # @openvidstudio/mcp-server: the <!-- tools:base:digits -->44<!-- /tools -->-<!-- tools:higgsfield:digits -->45<!-- /tools --> MCP tools an agent calls
 │   ├── stem/           # @openvidstudio/stem: Supernova lesson primitives
 │   └── docs/           # PLANNING · OVERVIEW · PIPELINE · STYLE · CREATIVE · CAPTURE · SCRIPT · API · NARRATION · TOOLS
 ├── templates/

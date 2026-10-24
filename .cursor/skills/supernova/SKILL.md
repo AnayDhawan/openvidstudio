@@ -14,6 +14,8 @@ on screen are computed by code from the concept card's worked example, never typ
 
 ## The arc (constant)
 
+This is the default, seven-beat arc. A concept card with `"arc": "story"` is the story-first lesson instead (a situation told as a problem, the idea, the formulas, the formulas applied, one watch out, a practice question to answer in the comments): its six beats, extra card fields and `story-*` checks are in `docs/SCRIPT.md#the-story-arc`.
+
 Hook, picture, set up, derive, use it, aha, close. In that order, every lesson. Times for 120 s are in SCRIPT.md.
 
 1. **Hook**: a beginner's question or a surprising fact in sentence one. Then say where the lesson sits (the card's `referenceSpoken`: a chapter code or "Part 2 of 4").
@@ -76,5 +78,5 @@ A big topic is a series; each part ends on the next question.
 
 ## 7. Finalize
 
-- `finalize_video` (it must report no `audio-tick`). `write_description`: one line saying the video is a constructed explanation, not footage.
+- `finalize_video` (it must report no `audio-tick`). `write_description`: one line saying the video is a constructed explanation, not footage. If the card has a `practiceQuestion` and an `answer` it also adds the question and writes `output/<name>-ANSWER.md` (the pinned comment), and the config's `disclaimers` close the description.
 - Done when the final file and the description are in `output/`.

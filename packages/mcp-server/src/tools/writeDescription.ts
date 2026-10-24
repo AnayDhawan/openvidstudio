@@ -39,6 +39,20 @@ export interface WriteDescriptionResult {
   chapters: string[];
   /** Credit lines written, so a caller can show them without re-reading the file. */
   credits: string[];
+  /** Lesson with a practiceQuestion and an answer: the ANSWER.md written next to the description (the pinned comment). Absent otherwise. */
+  answerPath?: string;
+  /** Lesson with a practiceQuestion and an answer: the question put in the description. Absent otherwise. */
+  practiceQuestion?: string;
+  /** The config's `disclaimers` appended to a lesson description, each once, in order. Absent when none were. */
+  disclaimers?: string[];
+}
+
+/** A lesson's practice question, read from its concept card. The answer never goes into the description. */
+interface PracticeQuestion {
+  question: string;
+  answer: string;
+  /** One line of working for the pinned comment. Optional on the card. */
+  working?: string;
 }
 
 /** YouTube lists chapters only when there are at least three and each is at least ten seconds. */
@@ -152,6 +166,34 @@ function readBrief(projectRoot: string, videoName: string): BriefLike | undefine
   }
 
   return { logline, audience, feeling, constructedShots, ...(lesson ? { lesson: true } : {}) };
+}
+
+/**
+ * A lesson's concept card (src/videos/<video>/concept.json) gives the practice question and its answer. Absence is
+ * normal: most lessons have no practice question, and then nothing here changes. It counts only when both the question
+ * and the answer are there, because a question with no answer to withhold is just a line in the narration.
+ */
+function readPractice(projectRoot: string, videoName: string): PracticeQuestion | undefined {
+  const file = path.join(projectRoot, "src", "videos", videoName, "concept.json");
+  if (!fs.existsSync(file)) return undefined;
+  let card: Record<string, unknown>;
+  try {
+    card = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+  } catch (err) {
+    throw new Error(`Failed to parse ${file}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const text = (v: unknown) => (typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined);
+  const question = text(card.practiceQuestion);
+  const answer = text(card.answer);
+  if (!question || !answer) return undefined;
+  return { question, answer, working: text(card.answerWorking) };
+}
+
+/** The pinned comment: the answer, and one line of working when the card has it. */
+function buildAnswer(practice: PracticeQuestion): string {
+  const lines = [`Answer: ${practice.answer}`];
+  if (practice.working) lines.push(`Working: ${practice.working}`);
+  return lines.join("\n") + "\n";
 }
 
 /**
@@ -327,6 +369,8 @@ function buildDescription(
   chapters: { chapters: Chapter[]; skippedBecause?: string },
   credits: string[],
   lesson = false,
+  practice?: PracticeQuestion,
+  disclaimers: string[] = [],
 ): string {
   const { fps, beats } = beatsData;
   const totalFrames = beats.reduce((sum, b) => sum + b.duration, 0);
@@ -378,6 +422,14 @@ function buildDescription(
     // Replaces the sample-content disclosure: everything in a lesson is drawn for it.
     lines.push("This video is a constructed explanation, not footage.");
     lines.push("");
+    if (practice) {
+      lines.push("## Practice question");
+      lines.push("");
+      lines.push(practice.question);
+      lines.push("");
+      lines.push("Drop your answer in the comments.");
+      lines.push("");
+    }
   } else if (constructedShots.length > 0) {
     lines.push("## Sample content used in this video");
     lines.push("");
@@ -405,6 +457,12 @@ function buildDescription(
   for (const c of credits) lines.push(`- ${c}`);
   lines.push("");
 
+  // Last, each line once: a line the description already carries on its own is not repeated.
+  const body = new Set(lines.map((l) => l.trim()));
+  const added = disclaimers.filter((d) => !body.has(d));
+  for (const d of added) lines.push(d);
+  if (added.length > 0) lines.push("");
+
   return lines.join("\n").replace(/\n{3,}/g, "\n\n").trimEnd() + "\n";
 }
 
@@ -423,7 +481,11 @@ export function runWriteDescription(input: WriteDescriptionInput): WriteDescript
   const chapters = buildChapters(beatsData.beats, beatsData.fps);
   const credits = buildCredits(projectRoot, videoName, beatsData.beats);
   const lesson = brief?.lesson === true || productionMode(loadConfig(projectRoot)) === "supernova";
-  const content = buildDescription(videoName, brief, beatsData, chapters, credits, lesson);
+  const practice = lesson ? readPractice(projectRoot, videoName) : undefined;
+  const disclaimers = lesson
+    ? [...new Set((loadConfig(projectRoot).disclaimers ?? []).map((d) => d.trim()).filter((d) => d.length > 0))]
+    : [];
+  const content = buildDescription(videoName, brief, beatsData, chapters, credits, lesson, practice, disclaimers);
 
   const outPath = path.join(projectRoot, "output", `${videoName}-DESCRIPTION.md`);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
@@ -453,12 +515,20 @@ export function runWriteDescription(input: WriteDescriptionInput): WriteDescript
     }
   }
 
+  let answerPath: string | undefined;
+  if (practice) {
+    answerPath = path.join(projectRoot, "output", `${videoName}-ANSWER.md`);
+    fs.writeFileSync(answerPath, buildAnswer(practice), "utf8");
+  }
+
   return {
     written: true,
     path: outPath,
     sampleContentDisclosed: constructedShots.map((s) => s.beatId),
     chapters: chapters.chapters.map((c) => `${chapterTimestamp(c.seconds)} ${c.label}`),
     credits,
+    ...(practice && answerPath ? { answerPath, practiceQuestion: practice.question } : {}),
+    ...(disclaimers.length > 0 ? { disclaimers } : {}),
   };
 }
 
@@ -483,6 +553,12 @@ export function registerWriteDescription(server: McpServer): void {
         "writing a list YouTube would ignore), and a Credits section read from what is on disk: the tool, " +
         "the music (an original compose_score track, an imported CC0 track with its source, or the built-in " +
         "bed), narration engine and voice, and any sound effect whose licence asks for a credit. " +
+        "For a lesson (Supernova mode) whose concept card (src/videos/<videoName>/concept.json) has a practiceQuestion " +
+        "and an answer, the description gains a Practice question section with the question and the line " +
+        "\"Drop your answer in the comments.\", and the answer goes only to output/<videoName>-ANSWER.md (a ready-to-paste " +
+        "pinned comment: the answer, plus a line of working from the card's optional answerWorking), returned as answerPath. " +
+        "The `disclaimers` string array in openvidstudio.config.json is appended to every lesson description, each line " +
+        "once, at the end. A project without these fields gets the same file as before. " +
         "finalize_video writes this file on every run, so a finished video always has one.",
       inputSchema: {
         projectRoot: z.string().optional(),

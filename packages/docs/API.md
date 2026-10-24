@@ -1283,3 +1283,69 @@ Helpers: `bfsOrder(adjacency, start)` (visiting order, neighbours in listed orde
 One glowing element at a time. Spark and Nova draw their glow through `Glow`, which tags its element
 with `data-ovs-glow` and `data-ovs-glow-level`; `countGlowing(root)` counts the elements above
 `GLOW_VISIBLE_LEVEL`. A Spark is one, a Nova's flash is one (the ring and particles do not glow).
+
+## Pixel narrator and depth kit: `@openvidstudio/styles`
+
+Plain TypeScript modules that draw to a 2D canvas context, for canvas explainers (hand-written or built by `render_canvas_explainer`). No React, no WebGL, no dependencies. Everything is a pure function of its inputs and of `t` in seconds: the same `t` draws the same pixels. Randomness comes from `createRng(seed)` (a seeded mulberry32), never from the platform's global generator, and a test greps the package for it. `import { ... } from "@openvidstudio/styles"`.
+
+### Sprites and the narrator
+
+`makeSprite(palette, frames, fps?)` builds a palette-indexed string-grid sprite: each frame is equal-width strings, each character a palette key, `.` is transparent, and a ragged row or a key missing from the palette throws. `drawSprite(ctx, sprite, x, y, scale, frame)` draws one frame with integer-scale `fillRect` and smoothing off, so a sprite pixel is exactly `scale` by `scale` device pixels (scale and position are rounded to whole pixels). Options: `tint` (a silhouette in one colour), `flipX`, `palette` (override colours by key). `frameAt(sprite, t)` is the frame that plays at `t`.
+
+`drawNarrator(ctx, pose, x, y, scale, t, accent?)` draws the one recurring narrator, a 16x23 pixel character whose shirt takes the lesson's accent. `narratorSprite(pose, accent?)` and `narratorFrame(pose, t)` give the sprite and the frame at `t`. Poses: `idle`, `talk`, `point`, `think`, `celebrate`.
+
+![The pixel narrator standing still with arms at his sides, blinking, in physics amber beside a ruler prop, on a dark ground with a perspective grid](img/api/styles-narrator-idle.png)
+
+`idle`: arms down, a blink every couple of seconds.
+
+![The pixel narrator mid-sentence with his mouth open, in maths blue beside a battery prop, on a dark ground with a perspective grid](img/api/styles-narrator-talk.png)
+
+`talk`: the mouth cycles closed, half, open at 8 frames a second. Drive it only while the voice is speaking.
+
+![The pixel narrator in computer science violet with his right arm stretched out to point at a bridge section on the ground](img/api/styles-narrator-point.png)
+
+`point`: the right arm reaches out (toward the right of the frame), a two-frame wobble. Place the thing pointed at to his right.
+
+![The pixel narrator in chemistry red with a hand at his chin and a trail of thought dots above his head, a ball on the ground beside him](img/api/styles-narrator-think.png)
+
+`think`: a hand at the chin, and three dots that appear one after another above the head.
+
+![The pixel narrator in biology green leaping with both arms raised and sparkles around his head, a bat standing on the ground beside him](img/api/styles-narrator-celebrate.png)
+
+`celebrate`: both arms up, a two-frame jump with sparkles. Use it on the payoff.
+
+Props are sprites in a registry: `ball`, `ruler`, `battery`, `cable`, `bridge` (a truss section) and `bat`. `drawProp(ctx, name, x, y, scale, t?)` draws one, `getProp(name)` returns it, `propNames()` lists them. A lesson adds its own with `registerProp(name, makeSprite(...))`; a name that already exists is refused unless `overwrite` is passed, so a lesson cannot silently change a built-in.
+
+### Depth without WebGL
+
+- `new Parallax({ width, height, seed?, layers?, horizon?, speed?, accent? })` holds three to five layers (fewer or more throws), drawn far to near. A layer is `{ kind: "stars" | "hills" | "towers" | "dots", color, depth (0 far, 1 near), blur?, count?, amplitude? }`. Each layer is rendered once into a wrapping tile, far layers pre-blurred (`blur`), so `parallax.draw(ctx, t, camera?)` is a few `drawImage` calls. Near layers scroll faster and zoom more with the camera. With no `layers`, `defaultLayers(accent)` gives four.
+- `dolly(t, { from?, to, start?, duration, ease? })` returns the camera `{ scale, x, y }` at `t`; pass it to `parallax.draw`, or to `applyCamera(ctx, camera, width, height)` for foreground drawing.
+- `drawFloorGrid(ctx, area, t, { horizon, vanishX?, color?, rows?, cols?, speed?, fog? })` draws a perspective floor: lines converge on the horizon and scroll toward the viewer with `t`; nothing is drawn above the horizon.
+- `drawFog(ctx, area, horizon, { color?, strength?, reach? })` is the depth fog: a band at the horizon that fades into the ground colour.
+- `drawShadow(ctx, cx, cy, rx, ry, alpha?, pixel?)` is a hard-edged pixel ellipse on the ground; `drawSpriteShadow(ctx, sprite, x, y, scale, frame?, opts?)` draws a sprite's offset silhouette (draw it before the sprite).
+
+![A violet night scene in four layers: faint stars, blurred far hills, a skyline of towers and nearer hills, with the narrator pointing from the ground in front of them](img/api/styles-parallax.png)
+
+![An amber perspective floor grid whose lines converge on a misty horizon, with a red ball standing on it under a glowing sky](img/api/styles-floorgrid.png)
+
+A frame of the full scene (parallax, floor grid, fog, shadow, narrator, prop, caption) draws in about 12 ms at 720x1280 in headless Chromium, and the `styles-depth` test holds it under 30 ms.
+
+### Accents, font and sound
+
+`ACCENTS` has one accent per subject: maths blue `#5CC8FF`, physics amber `#FFB347`, computer science violet `#B58CFF`, chemistry red `#FF4D5E`, biology green `#7CFFB2` (`Subject` is `"math" | "physics" | "cs" | "chemistry" | "biology"`). `VOID` (`#0B0D14`) is the dark ground the kit is drawn against.
+
+The pixel font has two paths. `drawPixelText(ctx, text, x, y, scale, color)` uses a 5x7 bitmap font written for this package (uppercase, digits and basic punctuation) and draws it with `fillRect`; nothing is fetched or vendored, so it works offline, and it is Apache-2.0 like the package. For text that goes through the normal font stack (`fitText`, captions), `PIXEL_FONT` names Press Start 2P (SIL Open Font License 1.1) and its Google Fonts stylesheet URL; the package loads nothing itself, so a lesson that wants that face adds the link and text falls back to `monospace` without it.
+
+`CHIP_SOUNDS` is a chip-style sound palette as plain data: `{ name, wave: "square" | "triangle" | "sawtooth" | "noise", gain, env: { attack, decay, sustain, release }, notes: [{ at, dur, note, slideTo? }] }` with `blip`, `confirm`, `wrong`, `think`, `point`, `celebrate`, `step` and `whoosh`. `noteToHz("A4")` is 440. `scheduleChip(audioContext, sound, when)` plays one on Web Audio (noise comes from the seeded generator, so it is the same samples every time); `chipDuration(sound)` gives its length, and `registerChipSound` adds a lesson's own. Because it is data, the same palette can be rendered offline into the narration mix.
+
+### Vertical layout: 720x1280
+
+`LOGICAL_WIDTH` and `LOGICAL_HEIGHT` (720 and 1280, also `LOGICAL_SIZE`) are the logical canvas of a Reel. The helpers keep the platform's own interface off your content:
+
+- `safeArea(width, height)` returns `{ x, y, w, h }`: the top 14% and the bottom 22% are clear, and 5% is kept at each side. At 720x1280 that is x 36, y 179, w 648, h 819 (the area ends at y 998). It is computed from proportions, so it is right for other sizes too. `insideSafeArea(width, height, rect)` tests a rectangle.
+- `fitText(ctx, text, maxWidth, maxLines, startSize, role?, family?, weight?)` returns the largest font size at which the text wraps into at most `maxLines` lines no wider than `maxWidth`, never below the role's minimum: `"headline"` 44, `"label"` 28, `"number"` 64 (`ROLE_MIN_SIZE`). A `startSize` below the minimum is raised to it. `fitTextLayout` takes the same arguments and returns `{ size, lines, fits }`: `fits` is false when even the minimum overflows, which means the text is too long and should be shortened, not shrunk.
+- `captionBand(width, height)` is the caption band: full safe width, resting on the bottom edge of the safe area, room for two lines. `drawCaption(ctx, text, width, height, style?)` fits the text at label size into it and draws it.
+
+![A vertical 720 by 1280 frame with the unsafe top and bottom bands shaded, a three-line headline, the narrator, a large key number with a label and a caption band, all inside a dashed safe-area outline](img/api/styles-vertical-layout.png)
+
+Reframe-by-cropping is not offered. Cropping a landscape layout to vertical cuts it, so there is no helper that does it; lay the frame out vertically with the helpers above. The renderer's `width` and `height` arguments carry the vertical size through to an explainer, which draws at that size.

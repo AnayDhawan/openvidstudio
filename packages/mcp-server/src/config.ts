@@ -78,6 +78,11 @@ export interface OpenvidstudioConfig {
   narration: NarrationConfig;
   render: RenderConfig;
   production: ProductionConfig;
+  /**
+   * Lines write_description appends, each exactly once, at the end of every lesson description ("Constructed
+   * animation, not footage", an exam-board non-affiliation line). Absent by default, and then the key is not written.
+   */
+  disclaimers?: string[];
 }
 
 export interface ConfigPatch {
@@ -88,6 +93,7 @@ export interface ConfigPatch {
   narration?: Partial<NarrationConfig>;
   render?: Partial<RenderConfig>;
   production?: Partial<ProductionConfig>;
+  disclaimers?: string[];
 }
 
 /**
@@ -167,6 +173,7 @@ export function loadConfig(projectRoot: string): OpenvidstudioConfig {
       creativeLevel: raw.production?.creativeLevel ?? DEFAULT_CONFIG.production.creativeLevel,
       timeBudgetMinutes: raw.production?.timeBudgetMinutes ?? DEFAULT_CONFIG.production.timeBudgetMinutes,
     },
+    ...(Array.isArray(raw.disclaimers) ? { disclaimers: raw.disclaimers.filter((d): d is string => typeof d === "string") } : {}),
   };
 }
 
@@ -204,6 +211,7 @@ export function writeConfig(projectRoot: string, patch: ConfigPatch): Openvidstu
       creativeLevel: patch.production?.creativeLevel ?? existing.production.creativeLevel,
       timeBudgetMinutes: patch.production?.timeBudgetMinutes ?? existing.production.timeBudgetMinutes,
     },
+    ...((patch.disclaimers ?? existing.disclaimers) !== undefined ? { disclaimers: patch.disclaimers ?? existing.disclaimers } : {}),
   };
   fs.mkdirSync(projectRoot, { recursive: true });
   fs.writeFileSync(configPath(projectRoot), JSON.stringify(merged, null, 2) + "\n", "utf8");

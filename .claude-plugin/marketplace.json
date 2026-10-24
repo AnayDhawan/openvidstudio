@@ -1,0 +1,15 @@
+{
+  "name": "openvidstudio",
+  "description": "openvidstudio: code-based video generation for AI coding agents.",
+  "owner": {
+    "name": "Anay Dhawan",
+    "url": "https://github.com/AnayDhawan"
+  },
+  "plugins": [
+    {
+      "name": "openvidstudio",
+      "source": "./plugins/openvidstudio",
+      "description": "Code-based video generation. The openvidstudio MCP server plus the skills that drive it: demo videos, director-mode films, and short STEM lessons. Every frame of your product is a real capture."
+    }
+  ]
+}

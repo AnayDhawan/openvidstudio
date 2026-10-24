@@ -34,6 +34,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`@openvidstudio/styles`, a pixel narrator and a depth-feel background kit (#153).** A new workspace package of plain 2D canvas modules, every one a pure function of `t` with a seeded generator and no `Math.random`: palette-indexed string-grid sprites drawn with integer-scale `fillRect` (`drawSprite`), one recurring narrator with idle, talk, point, think and celebrate poses and a prop set lessons can extend, `Parallax` layers, a perspective floor grid, depth fog, a camera dolly, drop shadows and pre-blurred far layers, per-subject accent tokens, a bitmap pixel font and a chip sound palette. Gallery stills in API.md.
 - **Vertical 720x1280 layout helpers in `@openvidstudio/styles` (#157).** `safeArea(W, H)` keeps the top 14% and bottom 22% clear (and a 5% side margin), `fitText` returns the largest size that fits and never goes below the role minimum (headline 44, label 28, key number 64), and a caption band sits at the bottom of the safe area. Reframe-by-cropping is not offered.
 
+### Security
+
+- **Twelve Dependabot alerts closed, including one critical.** The vulnerable packages (`hono`, `proxy-addr`, `fast-uri`, `qs`, `ip-address`, `source-map-js`, `postcss-selector-parser`) are transitive, so `pnpm.overrides` in the root `package.json` (and the same list in `pnpm-workspace.yaml`, which pnpm 11 reads) now require the patched versions, each bounded to its current major. Remotion is on 4.0.536 and React on 19.3.1 across every manifest at once (the three split Dependabot PRs for these are superseded).
+
 ### Changed
 
 - **The install is `npx -y @openvidstudio/mcp-server`.** All four packages are on npm at 1.3.1 (`@openvidstudio/capture`, `core`, `stem` and `mcp-server`), so the README, `llms.txt` and the package READMEs lead with the `npx` config and keep the clone as the way to run from source. The note saying the npm package was stale is gone. `@openvidstudio/capture` can be installed alone with `npm install @openvidstudio/capture`.

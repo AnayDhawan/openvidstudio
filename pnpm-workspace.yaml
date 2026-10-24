@@ -5,3 +5,13 @@ allowBuilds:
   esbuild: true
   node-pty: set this to true or false
   sharp: true
+# Patched versions of transitive dependencies (Dependabot alerts, October 2026). The same list is in the root
+# package.json under "pnpm.overrides" because pnpm 9 (CI) reads that and pnpm 11 reads this; the two must match.
+overrides:
+  hono: ">=4.13.11 <5"
+  proxy-addr: ">=2.0.8 <3"
+  fast-uri: ">=3.1.8 <4"
+  qs: ">=6.16.0 <7"
+  ip-address: ">=10.7.1 <11"
+  source-map-js: ">=1.2.2 <2"
+  postcss-selector-parser: ">=7.1.6 <8"

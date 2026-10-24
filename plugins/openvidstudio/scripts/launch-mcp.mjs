@@ -155,7 +155,14 @@ export function createBridge({ input, output, ensure, spawnServer, version = PIN
   let child = null;
   let clientInit = null;
   let buf = "";
+  let finished = false;
   const queued = [];
+  // Whichever ends first (the client closing its input, or the server exiting) decides the exit code, once.
+  const finish = (code) => {
+    if (finished) return;
+    finished = true;
+    onExit(code);
+  };
 
   const send = (obj) => output.write(JSON.stringify(obj) + "\n");
   const notifyChanged = () => send({ jsonrpc: "2.0", method: "notifications/tools/list_changed" });
@@ -245,7 +252,7 @@ export function createBridge({ input, output, ensure, spawnServer, version = PIN
         output.write(line + "\n");
       }
     });
-    child.on("exit", (code, signal) => onExit(code ?? (signal ? 1 : 0)));
+    child.on("exit", (code, signal) => finish(code ?? (signal ? 1 : 0)));
     child.stdin.write(
       JSON.stringify({
         jsonrpc: "2.0",
@@ -266,8 +273,8 @@ export function createBridge({ input, output, ensure, spawnServer, version = PIN
     }
   });
   input.on("end", () => {
+    finish(0);
     if (child) child.kill();
-    onExit(0);
   });
 
   ensure().then(becomeReady, (err) => {

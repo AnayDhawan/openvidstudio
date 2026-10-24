@@ -27,7 +27,14 @@ async function main() {
   process.stderr.write("openvidstudio-mcp: connected over stdio\n");
 }
 
-main().catch((err) => {
-  process.stderr.write(`openvidstudio-mcp: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
-  process.exit(1);
-});
+// `openvidstudio-mcp install <client>` writes the server into a client's MCP config and exits. It is
+// the only mode that prints to stdout; a normal start (no arguments) never does.
+if (process.argv[2] === "install") {
+  const { installCli } = require("./install") as typeof import("./install");
+  process.exit(installCli(process.argv.slice(3)));
+} else {
+  main().catch((err) => {
+    process.stderr.write(`openvidstudio-mcp: fatal: ${err instanceof Error ? err.stack : String(err)}\n`);
+    process.exit(1);
+  });
+}

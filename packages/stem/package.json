@@ -15,9 +15,9 @@
   ],
   "peerDependencies": {
     "@openvidstudio/core": "^1.3.1",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "remotion": "4.0.534"
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.536"
   },
   "devDependencies": {
     "@fontsource/space-grotesk": "^5.2.0",
@@ -25,9 +25,9 @@
     "@openvidstudio/core": "workspace:*",
     "@types/react": "19.3.0",
     "mathjax": "4.1.3",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "remotion": "4.0.534",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "remotion": "4.0.536",
     "typescript": "5.9.3"
   },
   "scripts": {

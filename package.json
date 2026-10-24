@@ -14,5 +14,16 @@
     "build": "pnpm --filter @openvidstudio/capture build && pnpm --filter @openvidstudio/mcp-server build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @openvidstudio/mcp-server test"
+  },
+  "pnpm": {
+    "overrides": {
+      "hono": ">=4.13.11 <5",
+      "proxy-addr": ">=2.0.8 <3",
+      "fast-uri": ">=3.1.8 <4",
+      "qs": ">=6.16.0 <7",
+      "ip-address": ">=10.7.1 <11",
+      "source-map-js": ">=1.2.2 <2",
+      "postcss-selector-parser": ">=7.1.6 <8"
+    }
   }
 }

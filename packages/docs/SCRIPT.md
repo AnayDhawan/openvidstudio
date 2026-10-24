@@ -96,6 +96,8 @@ applies: 2.3 to 2.9 words per second, checked by `validate_beats`). `check_scrip
 
 A lesson explains **one concept in up to two minutes**, and every lesson has the same shape so a viewer
 knows what is coming. A series (a channel, a course) keeps that shape constant; only the content changes.
+There are two shapes, chosen by the concept card's `arc`: `"seven-beat"` (the default, below) and `"story"`
+([the story arc](#the-story-arc)). A card without `arc` is a seven-beat lesson and is checked exactly as before.
 
 Start from a **concept card**, `src/videos/<name>/concept.json`:
 
@@ -140,6 +142,59 @@ a warning after 15 s, an error after 25 s) and `static-stretch` (frames that do 
 than 8 s: a warning). The thresholds are the options `diagramWarnSeconds`, `diagramErrorSeconds` and `staticSeconds`.
 A caption box marked `data-ovs-captions` (`LessonCaptions` does it) is the part ignored; otherwise the bottom 22 percent.
 
+### The story arc
+
+`"arc": "story"` is the story-first lesson. It is not the seven-beat arc: it opens on a real situation told as a
+problem, and it ends on a practice question the viewer answers in the comments. Six beats, in this order:
+
+| # | Beat | What it does |
+|---|---|---|
+| 1 | Situation | A real scene told as a problem (the `situation`), in the first beat |
+| 2 | The idea | The narrator (`character`) explains the idea in everyday words, terms defined at first use |
+| 3 | The formulas | The key formulas stated on screen, each said as its `spoken` form, in the card's order |
+| 4 | Apply | The formulas applied to the story's own numbers |
+| 5 | Watch out | One short "watch out": the common mistake or the assumption that breaks |
+| 6 | Practice | The original practice question, with a prompt to answer in the comments. End on the question |
+
+The extra card fields, all optional and only read for the story arc:
+
+```json
+{
+  "goal": "find what a jar of money grows to with compound interest",
+  "terms": ["interest"],
+  "example": "1000 rupees at five percent for three years",
+  "arc": "story",
+  "situation": "Maya saves money in a jar at the market",
+  "character": "Pixel",
+  "formulas": [
+    { "tex": "A = P(1+r)^n", "spoken": "A equals P times one plus r to the power n", "source": "IB data booklet" }
+  ],
+  "practiceQuestion": "How much is in a jar after three years at five percent?",
+  "answer": "1157.63"
+}
+```
+
+`formulas` are listed in the order they are stated: `tex` is what is on screen, `spoken` how it is said, `source`
+where it comes from. The pacing rules, sentence length, reading level, terms, `maxSeconds` and `reference` apply to
+both arcs. The story arc does not count beats: the six are the shape, not a limit, and a beat may take more than one
+scene. Its checks, in `check_script`, replace the seven-beat arc's closing-question check and the hook's "question or a
+number" warning (the "in this video" error stays):
+
+- `story-situation` (error): the first beat shares at least two content words with `situation` (all of them if the
+  situation has fewer). A warning if the card has no `situation`.
+- `story-formula` (error): each `formulas[].spoken` is in the narration, and in the order given. It is matched like an
+  `Equation`'s `spoken` string, ignoring case and punctuation; the formulas may fall in different beats.
+- `story-practice` (error): the last beat ends with the `practiceQuestion` (it need not be a question mark). A warning
+  if the card has no `practiceQuestion`.
+- `story-comment` (error): the last beat contains a prompt that matches `/comment/i`.
+- `story-subscribe` (warning): a beat says "like and subscribe".
+- `story-answer` (warning): the `answer` is in the narration. It is withheld until the pinned comment.
+
+For a story lesson `write_description` puts the practice question and "Drop your answer in the comments." in the
+description and writes the answer to `output/<name>-ANSWER.md`, the pinned comment (a line of working comes from an
+optional card field `answerWorking`). The config's `disclaimers` array is appended, each line once, at the end of
+every lesson description. See [SUPERNOVA.md](SUPERNOVA.md#the-description).
+
 ### Rules
 
 1. **Hook in the first sentence**: a question or a surprising fact, with a number if there is one. Never
@@ -180,7 +235,8 @@ question or does not hold a number (warning) or opens "in this video" (error), p
 whole lesson running over `maxSeconds` (error), and a card `reference` that the first beat does not say
 (error; a warning when `referenceSpoken` is missing, because then it cannot be checked). It counts and
 matches; it cannot tell you the explanation is good or the derivation is correct, so listen to it, and
-check the maths as above.
+check the maths as above. For `"arc": "story"` it adds the six `story-*` checks listed under [the story
+arc](#the-story-arc) and leaves out the closing-question check.
 
 ## No em dashes
 

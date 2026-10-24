@@ -61,6 +61,9 @@ NARRATION.md):
 
 This is a worked example of the format, not a lesson that has been built and listened to.
 
+A card can also set `"arc": "story"` for the story-first lesson, with `situation`, `character`, `formulas`,
+`practiceQuestion` and `answer`; see [SCRIPT.md](SCRIPT.md#the-story-arc).
+
 ## Design: Void + Spark
 
 The idea: **light is meaning.** Everything is dark and flat except the one thing the viewer must look at.
@@ -142,6 +145,19 @@ in `data-ovs-captions-timing="estimated"`. It stays out of the Reels safe zones 
 percent of a tall frame, below the top 14), works at 1920x1080, and its box is tagged `data-ovs-captions`, which
 `validate_scenes` ignores when it looks for a diagram or a static stretch. See API.md for the props.
 
+## Canvas explainers
+
+A lesson can also be an HTML canvas explainer (hand-drawn chalkboard, whiteboard, flat vector, a pixel-character look) turned
+into a video by `render_canvas_explainer`, with the same script gates: `beats.json` after `fit_beats` drives the beat times,
+the narration clips are mixed over the score, and the text is captioned. `validate_canvas_explainer` is its `validate_scenes`.
+See "Canvas explainers" in PIPELINE.md.
+
+Canvas explainers in a pixel style have a ready kit: `@openvidstudio/styles` has the recurring pixel narrator (idle, talk,
+point, think, celebrate), a small prop set, parallax, a perspective floor grid, fog and shadows, the accent per subject, a
+chip sound palette, and vertical 720x1280 layout helpers (`safeArea`, `fitText` with the role minimums, a caption band).
+It is plain 2D canvas and a pure function of `t`. Cropping a landscape layout to vertical is not offered: lay the lesson
+out vertically. See "Pixel narrator and depth kit" in [API.md](API.md#pixel-narrator-and-depth-kit-openvidstudiostyles).
+
 ## Reels safe zones
 
 Instagram draws its own interface over a reel, so keep key content (text, the part of a diagram being explained) out of the
@@ -153,6 +169,18 @@ from Meta's percentages for Reels ads). The bottom does not: sources give anywhe
 35% is for ads; 22% is a design choice for an organic reel and a minimum. If a lesson is also run as an ad, keep key content
 out of the bottom 35%. Meta publishes percentages, not pixels, and the interface changes, so look at a real upload before
 trusting any of these. Backgrounds can run to the edge; key content stays inside.
+
+## The description
+
+`write_description` writes `output/<name>-DESCRIPTION.md` for a lesson as for any video (chapters from the beats,
+credits, and one line saying the video is a constructed explanation, not footage). Two things come from the lesson's
+own files. If `concept.json` has a `practiceQuestion` and an `answer`, the description gets a "Practice question"
+section with the question and the line "Drop your answer in the comments.", and the answer is written to
+`output/<name>-ANSWER.md` instead, never into the description: the answer, and one line of working if the card has an
+optional `answerWorking`. Paste that file as the pinned comment. And the `disclaimers` array in
+`openvidstudio.config.json` (for example `["Constructed animation, not footage.", "Not affiliated with or endorsed by
+any exam board."]`) is appended, each line once, at the end of every lesson description. A project with none of these
+gets the same description as before. See [SCRIPT.md](SCRIPT.md#the-story-arc).
 
 ## Checks
 

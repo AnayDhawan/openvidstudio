@@ -31,6 +31,7 @@ jobs:
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck
       - run: pnpm --filter @openvidstudio/stem typecheck
+      - run: pnpm --filter @openvidstudio/styles typecheck
       # README's tool counts and packages/docs/TOOLS.md are generated from the tools the
       # server registers; this fails when either has drifted (fix: node scripts/generate-tool-docs.mjs).
       - run: node scripts/generate-tool-docs.mjs --check
@@ -60,6 +61,8 @@ jobs:
       # network blocked, so that regressing back to a network font loader fails CI
       # instead of surfacing as a support issue from someone's offline machine.
       - run: node scripts/offline-render-check.mjs
+      # The canvas explainer checks and the styles package draw in a real browser, so they run here with Chromium.
+      - run: node packages/mcp-server/scripts/manual-test.mjs validate-canvas-explainer styles-sprites styles-depth styles-layout
   plugin-validate:
     runs-on: ubuntu-latest
     steps:

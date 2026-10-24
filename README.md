@@ -71,7 +71,28 @@ then directed.
 
 ## Quick start
 
-openvidstudio runs as an MCP server. Add it to your MCP client's config (for Claude Code that is
+openvidstudio runs as an MCP server. How you add it depends on where you use your agent.
+
+**Claude Code, the Claude desktop app's Code tab, and Cowork:** install the plugin. It registers the
+server and the four openvidstudio skills together, and it updates with one command.
+
+```
+/plugin marketplace add AnayDhawan/openvidstudio
+/plugin install openvidstudio@openvidstudio
+```
+
+The first start installs the server once (about 330 MB, about a minute, in the background). Details,
+and what to do if you already added the server by hand, are in [the plugin's README](plugins/openvidstudio/README.md).
+
+**Claude Desktop (Chat tab), Cursor, VS Code:** one command writes the right config file, then restart
+the app. It never touches your other servers and keeps a backup. (`install` ships with the release after
+1.3.1; until then use the config block below.)
+
+```
+npx -y @openvidstudio/mcp-server install claude-desktop   # or: cursor, vscode
+```
+
+**Any other MCP client:** add the server to its config (for Claude Code without the plugin that is
 `.mcp.json`) and restart the client:
 
 ```json

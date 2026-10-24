@@ -14,11 +14,19 @@ Run `preflight`. It checks node, ffmpeg, Playwright's Chromium, whether the app 
 actually responding, and whether a narration engine exists. Each failure names the
 fix. Skipping this means a missing dependency surfaces after a long render.
 
-If the tools are not registered, the server is not installed. Point the user at this in their MCP config, then a client restart:
+If the tools are not registered, the server is not installed. Point the user at the route for their client, then a client restart:
+
+- Claude Code, the Claude desktop Code tab, Cowork: the plugin, `/plugin marketplace add AnayDhawan/openvidstudio` then `/plugin install openvidstudio@openvidstudio` (it registers the server and these skills together).
+- Claude Desktop (Chat tab), Cursor, VS Code: `npx -y @openvidstudio/mcp-server install claude-desktop` (or `cursor`, `vscode`), which writes the right config file.
+- Any other MCP client, in its MCP config:
 
 ```json
 { "mcpServers": { "openvidstudio": { "command": "npx", "args": ["-y", "@openvidstudio/mcp-server"] } } }
 ```
+
+Do not add the server by hand and also install the plugin: that gives two servers.
+
+The `docs/` files this skill names (`docs/PLANNING.md`, `docs/API.md`, `docs/STYLE.md`, `docs/PIPELINE.md`) live in the video's project. `init_project` copies them in, so they exist once a project has been scaffolded.
 
 ## The order
 

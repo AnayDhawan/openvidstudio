@@ -39,6 +39,8 @@ const TARGET_DIRS = [
   path.join(root, ".github", "skills"),
   path.join(root, ".opencode", "skills"),
   path.join(root, ".windsurf", "skills"),
+  // The Claude Code plugin (see plugins/openvidstudio). Generated, so the plugin can never ship stale skills.
+  path.join(root, "plugins", "openvidstudio", "skills"),
 ];
 
 function listFilesRecursive(dir) {

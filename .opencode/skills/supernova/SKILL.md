@@ -1,6 +1,6 @@
 ---
 name: supernova
-description: Use when making a short animated STEM lesson video (a maths, physics or computer science concept explained in up to two minutes, vertical, narrated) with openvidstudio, or when the user says "Supernova", "lesson video", "explain this concept as a reel" or "teaching video". Script first, always the same seven-beat arc: a concept card, a derived-and-verified script, then voice, scenes, review and finalize. Not for product demos (use openvidstudio or openvidstudio-director).
+description: Use when making a short animated STEM lesson video (a maths, physics or computer science concept explained in up to two minutes, vertical, narrated) with openvidstudio, or when the user says "Supernova", "lesson video", "explain this concept as a reel" or "teaching video". Script first, always the same seven-beat arc, built from a concept card and a derived-and-verified script, then voice, scenes, review and finalize. Not for product demos (use openvidstudio or openvidstudio-director).
 ---
 
 # supernova

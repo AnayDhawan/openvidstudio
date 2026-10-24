@@ -1,0 +1,23 @@
+{
+  "name": "openvidstudio",
+  "displayName": "openvidstudio",
+  "version": "1.0.0",
+  "description": "Code-based video generation. Every frame of your product is a real capture, never a generated mockup. The openvidstudio MCP server plus the skills that drive it: demo videos, director-mode films, and short STEM lessons.",
+  "author": {
+    "name": "Anay Dhawan",
+    "url": "https://github.com/AnayDhawan"
+  },
+  "homepage": "https://openvidstudio.vercel.app",
+  "repository": "https://github.com/AnayDhawan/openvidstudio",
+  "license": "Apache-2.0",
+  "keywords": [
+    "video",
+    "demo-video",
+    "remotion",
+    "playwright",
+    "mcp",
+    "screen-capture",
+    "narration",
+    "supernova"
+  ]
+}

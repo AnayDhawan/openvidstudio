@@ -10,9 +10,12 @@ for-profit companies with up to 3 employees; a larger company needs a separate R
 License ([remotion.pro](https://www.remotion.pro/license)) to render with it. See the README's
 License section.
 
-Install by adding `npx -y @openvidstudio/mcp-server` to your MCP client's config (command `npx`, args
-`-y` and `@openvidstudio/mcp-server`). To run from source instead, clone the repo, `pnpm install`, `pnpm build`,
-then point the client at `packages/mcp-server/dist/stdio.js`.
+Install in Claude Code (and the Claude desktop Code tab and Cowork) with the plugin: `/plugin marketplace add
+AnayDhawan/openvidstudio`, then `/plugin install openvidstudio@openvidstudio`. For any other MCP client add
+`npx -y @openvidstudio/mcp-server` to its config (command `npx`, args `-y` and `@openvidstudio/mcp-server`); the
+release after 1.3.1 adds `npx -y @openvidstudio/mcp-server install claude-desktop` (or `cursor`, `vscode`) to write that
+config for you. To run from source instead, clone the repo, `pnpm install`, `pnpm build`, then point the client at
+`packages/mcp-server/dist/stdio.js`.
 
 This file follows the [llms.txt](https://llmstxt.org/) convention: a short, stable,
 plain-language map of the project for language models and the people using them. Keep it

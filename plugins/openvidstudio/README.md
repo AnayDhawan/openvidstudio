@@ -39,8 +39,6 @@ Remove the manual `openvidstudio` entry from your `.mcp.json` or client config, 
 
 ## Other places
 
-The `install` command below ships with the next server release (1.4.0); until then use the config block in the last row.
-
 | Where you use Claude | How |
 |---|---|
 | Claude Code, the desktop Code tab, Cowork | This plugin |

@@ -85,8 +85,7 @@ The first start installs the server once (about 330 MB, about a minute, in the b
 and what to do if you already added the server by hand, are in [the plugin's README](plugins/openvidstudio/README.md).
 
 **Claude Desktop (Chat tab), Cursor, VS Code:** one command writes the right config file, then restart
-the app. It never touches your other servers and keeps a backup. (`install` ships with the release after
-1.3.1; until then use the config block below.)
+the app. It never touches your other servers and keeps a backup.
 
 ```
 npx -y @openvidstudio/mcp-server install claude-desktop   # or: cursor, vscode

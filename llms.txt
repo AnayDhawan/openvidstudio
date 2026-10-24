@@ -12,8 +12,7 @@ License section.
 
 Install in Claude Code (and the Claude desktop Code tab and Cowork) with the plugin: `/plugin marketplace add
 AnayDhawan/openvidstudio`, then `/plugin install openvidstudio@openvidstudio`. For any other MCP client add
-`npx -y @openvidstudio/mcp-server` to its config (command `npx`, args `-y` and `@openvidstudio/mcp-server`); the
-release after 1.3.1 adds `npx -y @openvidstudio/mcp-server install claude-desktop` (or `cursor`, `vscode`) to write that
+`npx -y @openvidstudio/mcp-server` to its config (command `npx`, args `-y` and `@openvidstudio/mcp-server`); `npx -y @openvidstudio/mcp-server install claude-desktop` (or `cursor`, `vscode`) writes that
 config for you. To run from source instead, clone the repo, `pnpm install`, `pnpm build`, then point the client at
 `packages/mcp-server/dist/stdio.js`.
 

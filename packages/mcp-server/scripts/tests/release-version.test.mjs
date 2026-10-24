@@ -15,12 +15,13 @@ console.log("\n== the server reports the version it ships as ==");
     capture: version("packages/capture"),
     core: version("packages/core"),
     stem: version("packages/stem"),
+    styles: version("packages/styles"),
     server: version("packages/mcp-server"),
   };
   const semver = /^\d+\.\d+\.\d+$/;
 
   check(`every package version is plain semver (${JSON.stringify(versions)})`, Object.values(versions).every((v) => semver.test(v)));
-  check("the five packages share one version", new Set(Object.values(versions)).size === 1);
+  check("the six packages share one version", new Set(Object.values(versions)).size === 1);
   check(
     `SERVER_VERSION (${SERVER_VERSION}) equals packages/mcp-server's own version (${versions.server})`,
     SERVER_VERSION === versions.server,

@@ -35,6 +35,9 @@ const text = (p) => fs.readFileSync(p, "utf8");
   const server = mcp.mcpServers?.openvidstudio;
   check(".mcp.json registers exactly one server, named openvidstudio", Object.keys(mcp.mcpServers ?? {}).join(",") === "openvidstudio");
   check("...started through the launcher with ${CLAUDE_PLUGIN_ROOT}, not a bare npx line", server?.command === "node" && server.args?.[0] === "${CLAUDE_PLUGIN_ROOT}/scripts/launch-mcp.mjs");
+  // Without an explicit type, a headless Claude Code session reports the plugin's server as failed and never starts it
+  // (found 2026-10-24 by running claude -p against the installed plugin); with it the server connects.
+  check('...with "type": "stdio" spelled out (headless sessions fail the server without it)', server?.type === "stdio");
   check("the launcher file exists", fs.existsSync(path.join(pluginDir, "scripts", "launch-mcp.mjs")));
 }
 

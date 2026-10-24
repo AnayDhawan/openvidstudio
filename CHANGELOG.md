@@ -7,6 +7,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-24
+
 ### Fixed
 
 - **The `supernova` skill now loads.** Its frontmatter description held an unquoted `: `, which is invalid YAML, so Claude Code dropped the skill silently. A test now checks that no skill description does this.

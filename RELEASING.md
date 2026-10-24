@@ -6,15 +6,15 @@ How a release goes out. The order matters: the Claude plugin pins an exact versi
 
 | Thing | Where | Moves with |
 |---|---|---|
-| The five packages (`capture`, `core`, `stem`, `mcp-server`, and the root) | each `package.json`, plus `SERVER_VERSION` | One number, `release-version` test enforces it |
+| The six packages (`capture`, `core`, `stem`, `styles`, `mcp-server`, and the root) | each `package.json`, plus `SERVER_VERSION` | One number, `release-version` test enforces it |
 | The server version the plugin runs | `PINNED_VERSION` in `plugins/openvidstudio/scripts/launch-mcp.mjs` | A separate, later change (step 6). Never ahead of the packages |
 | The plugin's own version | `plugins/openvidstudio/.claude-plugin/plugin.json` | Bumped whenever the plugin's files change: skills, launcher, manifest. Users get an update only when this changes |
 | The git tag | `vX.Y.Z` on main, and `openvidstudio--vA.B.C` for the plugin (`claude plugin tag`) | After the matching publish |
 
 ## Steps
 
-1. **Release PR.** Bump the five package versions and `SERVER_VERSION` together, move `[Unreleased]` in `CHANGELOG.md` under the new version, run `node scripts/generate-tool-docs.mjs`, `node scripts/sync-skills.mjs`, and the CI test list. Merge on green.
-2. **Publish to npm**, in this order: `capture`, `core`, `stem`, `mcp-server` (`pnpm publish` rewrites `workspace:*`). Use a granular token scoped to `@openvidstudio` with a short expiry, and revoke it right after. Verify with `npm view @openvidstudio/mcp-server version` and a clean `npm install --prefix /tmp/x @openvidstudio/mcp-server@X.Y.Z`.
+1. **Release PR.** Bump the six package versions and `SERVER_VERSION` together, move `[Unreleased]` in `CHANGELOG.md` under the new version, run `node scripts/generate-tool-docs.mjs`, `node scripts/sync-skills.mjs`, and the CI test list. Merge on green.
+2. **Publish to npm**, in this order: `capture`, `core`, `stem`, `styles`, `mcp-server` (`pnpm publish` rewrites `workspace:*`). Use a granular token scoped to `@openvidstudio` with a short expiry, and revoke it right after. Verify with `npm view @openvidstudio/mcp-server version` and a clean `npm install --prefix /tmp/x @openvidstudio/mcp-server@X.Y.Z`.
 3. **Tag and release** `vX.Y.Z` on the merge commit, with release notes that give the install commands (plugin, Claude Desktop, other clients).
 4. **Plugin bump PR**, only after step 2 is visible on npm: set `PINNED_VERSION` to the new version, bump the plugin's `version`, and update the plugin README if install steps changed. `claude plugin validate --strict ./plugins/openvidstudio` and `claude plugin validate .` must pass (CI runs both).
 5. **Merge, then `claude plugin tag`** from `plugins/openvidstudio` (add `--push`).

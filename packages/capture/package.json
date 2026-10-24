@@ -1,6 +1,6 @@
 {
   "name": "@openvidstudio/capture",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "description": "Zoom-compensated browser capture plus desktop, mobile, and terminal recording backends. No Remotion, no React, no video pipeline.",
   "license": "Apache-2.0",
   "engines": {

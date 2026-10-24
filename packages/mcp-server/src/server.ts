@@ -7,7 +7,7 @@ import type { OpenvidstudioConfig } from "./config";
 export * from "./api";
 
 export const SERVER_NAME = "openvidstudio";
-export const SERVER_VERSION = "1.3.1";
+export const SERVER_VERSION = "1.4.0";
 
 /**
  * Assembly only, mirrors pepiros/mcp/server.ts's shape: transport lives in the entry

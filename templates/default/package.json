@@ -15,8 +15,8 @@
     "@remotion/shapes": "4.0.534",
     "@remotion/tailwind-v4": "4.0.534",
     "@remotion/transitions": "4.0.534",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "remotion": "4.0.534",
     "tailwindcss": "4.3.3"
   },

@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The Claude plugin now pins server 1.4.0 and is version 1.1.0.** 1.4.0 is on npm, so a new plugin install runs the server with `install`, `fit_beats` and the canvas explainer tools.
+
 ## [1.4.0] - 2026-10-24
 
 ### Fixed

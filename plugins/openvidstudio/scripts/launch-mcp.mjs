@@ -20,7 +20,7 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** The server version this plugin release is built for. Bumped by the release, never by hand elsewhere. */
-export const PINNED_VERSION = "1.3.1";
+export const PINNED_VERSION = "1.4.0";
 export const PACKAGE = "@openvidstudio/mcp-server";
 
 const say = (msg) => process.stderr.write(`openvidstudio plugin: ${msg}\n`);

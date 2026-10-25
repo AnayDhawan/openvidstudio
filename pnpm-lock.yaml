@@ -12,6 +12,8 @@ overrides:
   ip-address: '>=10.7.1 <11'
   source-map-js: '>=1.2.2 <2'
   postcss-selector-parser: '>=7.1.6 <8'
+  body-parser: '>=2.4.0 <3'
+  zod: '>=4.6.6 <5'
 
 importers:
 
@@ -23,7 +25,7 @@ importers:
         specifier: ^1.64.0
         version: 1.64.1
       zod:
-        specifier: ^4.6.6
+        specifier: '>=4.6.6 <5'
         version: 4.6.7
     devDependencies:
       '@types/node':
@@ -81,7 +83,7 @@ importers:
         specifier: ^0.35.5
         version: 0.35.5(@types/node@26.6.5)
       zod:
-        specifier: ^4.6.6
+        specifier: '>=4.6.6 <5'
         version: 4.6.7
     devDependencies:
       '@types/node':
@@ -648,7 +650,7 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
-      zod: ^3.25 || ^4.0
+      zod: '>=4.6.6 <5'
     peerDependenciesMeta:
       '@cfworker/json-schema':
         optional: true
@@ -1341,8 +1343,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  body-parser@2.3.0:
-    resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
+  body-parser@2.4.0:
+    resolution: {integrity: sha512-Ifk1KcLrxaGt1occQagQNFNNOqRt1LFuehEnHHzB8Z6cRgIxRU1TBaiIsUiCdA+gy5PL7Y1IX31DNKkRmxtXjQ==}
     engines: {node: '>=18'}
 
   browserslist@4.28.8:
@@ -2341,10 +2343,7 @@ packages:
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
     peerDependencies:
-      zod: ^3.25.28 || ^4
-
-  zod@4.5.4:
-    resolution: {integrity: sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA==}
+      zod: '>=4.6.6 <5'
 
   zod@4.6.7:
     resolution: {integrity: sha512-g8W2D2kU6a8untc053fX1uVBKzM7yqAxW/3zwk83+6RyF2+SKOuV+c0wBDhUwzV1PaGapmZH+rmcUzPf+3CGwg==}
@@ -2917,7 +2916,7 @@ snapshots:
   '@remotion/elevenlabs@4.0.536':
     dependencies:
       '@remotion/captions': 4.0.536
-      zod: 4.5.4
+      zod: 4.6.7
 
   '@remotion/google-fonts@4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
@@ -2941,7 +2940,7 @@ snapshots:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       remotion: 4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      zod: 4.5.4
+      zod: 4.6.7
 
   '@remotion/motion-blur@4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
@@ -2952,7 +2951,7 @@ snapshots:
   '@remotion/openai-whisper@4.0.536':
     dependencies:
       '@remotion/captions': 4.0.536
-      zod: 4.5.4
+      zod: 4.6.7
 
   '@remotion/paths@4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
@@ -3008,7 +3007,7 @@ snapshots:
 
   '@remotion/studio-protocol@4.0.536':
     dependencies:
-      zod: 4.5.4
+      zod: 4.6.7
 
   '@remotion/studio-server@4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(typescript@7.0.2)':
     dependencies:
@@ -3027,7 +3026,7 @@ snapshots:
       recast: 0.23.21
       remotion: 4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       semver: 7.5.3
-      zod: 4.5.4
+      zod: 4.6.7
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@remotion/video-matting'
@@ -3086,7 +3085,7 @@ snapshots:
       react-dom: 19.3.1(react@19.3.1)
       remotion: 4.0.536(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       semver: 7.5.3
-      zod: 4.5.4
+      zod: 4.6.7
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -3560,7 +3559,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.20: {}
 
-  body-parser@2.3.0:
+  body-parser@2.4.0:
     dependencies:
       bytes: 3.1.2
       content-type: 2.1.0
@@ -3805,7 +3804,7 @@ snapshots:
   express@5.2.1:
     dependencies:
       accepts: 2.0.0
-      body-parser: 2.3.0
+      body-parser: 2.4.0
       content-disposition: 1.1.0
       content-type: 1.0.5
       cookie: 0.7.2
@@ -4588,7 +4587,5 @@ snapshots:
   zod-to-json-schema@3.25.2(zod@4.6.7):
     dependencies:
       zod: 4.6.7
-
-  zod@4.5.4: {}
 
   zod@4.6.7: {}

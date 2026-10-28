@@ -19,10 +19,10 @@
     "py"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@openvidstudio/capture": "workspace:*",
-    "@remotion/bundler": "4.0.536",
-    "@remotion/renderer": "4.0.536",
+    "@remotion/bundler": "4.0.538",
+    "@remotion/renderer": "4.0.538",
     "playwright": "^1.64.0",
     "sharp": "^0.35.5",
     "zod": "^4.6.6"

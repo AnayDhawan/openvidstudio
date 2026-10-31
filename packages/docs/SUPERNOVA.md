@@ -150,7 +150,7 @@ percent of a tall frame, below the top 14), works at 1920x1080, and its box is t
 A lesson can also be an HTML canvas explainer (hand-drawn chalkboard, whiteboard, flat vector, a pixel-character look) turned
 into a video by `render_canvas_explainer`, with the same script gates: `beats.json` after `fit_beats` drives the beat times,
 the narration clips are mixed over the score, and the text is captioned. `validate_canvas_explainer` is its `validate_scenes`.
-See "Canvas explainers" in PIPELINE.md.
+See "Canvas explainers" in PIPELINE.md, and [EXPLAINERS.md](EXPLAINERS.md) for the contract a file must meet, a working skeleton and a prompt to give another tool that generates one.
 
 Canvas explainers in a pixel style have a ready kit: `@openvidstudio/styles` has the recurring pixel narrator (idle, talk,
 point, think, celebrate), a small prop set, parallax, a perspective floor grid, fog and shadows, the accent per subject, a

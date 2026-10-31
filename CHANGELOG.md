@@ -7,9 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`EXPLAINERS.md`, the contract for a canvas explainer, with a working skeleton and a prompt for a generator.** One page with the four promises a file must make (`seek`, `DURATION`, `scoreSound`, `SOUND.renderOffline`), what the renderer injects (`OVS`, `BEATS`, `CAPTIONS`), the rules `validate_canvas_explainer` enforces (pure in `t`, nothing fetched, text sizes, safe areas, whole-number pixel scales at 1.5x, the arc, the sound), the steps from script to finished video, how to bundle `@openvidstudio/styles` into a hand-written file, and a paste-ready prompt for another tool. The `canvas-explainer-spec` test runs the page's skeleton through the validator at 720x1280 and 1080x1920 and through the renderer, so the example cannot go stale.
+- **The `supernova` skill covers the canvas route** (step 5b): validate, render with the beats and the narration, skip the Remotion scene steps, and the README and SUPERNOVA.md say there are two arcs and point at the canvas path.
+
 ### Changed
 
-- **The Claude plugin now pins server 1.4.0 and is version 1.1.0.** 1.4.0 is on npm, so a new plugin install runs the server with `install`, `fit_beats` and the canvas explainer tools.
+- **CI runs the canvas renderer, the voice-over mix and the spec test** (`render-canvas-explainer`, `canvas-voiceover`, `canvas-explainer-spec`) in the offline-render job, which has Chromium and ffmpeg. Until now only `validate-canvas-explainer` and the styles tests ran there.
+- **The Claude plugin now pins server 1.4.0 and is version 1.1.1.** 1.4.0 is on npm, so a new plugin install runs the server with `install`, `fit_beats` and the canvas explainer tools; 1.1.1 also carries the updated `supernova` skill.
 
 ## [1.4.0] - 2026-10-24
 

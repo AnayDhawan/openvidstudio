@@ -61,8 +61,8 @@ jobs:
       # network blocked, so that regressing back to a network font loader fails CI
       # instead of surfacing as a support issue from someone's offline machine.
       - run: node scripts/offline-render-check.mjs
-      # The canvas explainer checks and the styles package draw in a real browser, so they run here with Chromium.
-      - run: node packages/mcp-server/scripts/manual-test.mjs validate-canvas-explainer styles-sprites styles-depth styles-layout
+      # The canvas explainer checks, the renderer, the voice-over mix, the doc's skeleton and the styles package draw in a real browser, so they run here with Chromium and ffmpeg.
+      - run: node packages/mcp-server/scripts/manual-test.mjs validate-canvas-explainer render-canvas-explainer canvas-voiceover canvas-explainer-spec styles-sprites styles-depth styles-layout
   plugin-validate:
     runs-on: ubuntu-latest
     steps:

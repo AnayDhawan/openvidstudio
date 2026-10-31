@@ -97,6 +97,7 @@ the goal is a video that shows what a real product actually looks like.
 | `PRESETS.md` | Five fixed recipes over the same tools: a silent README GIF, a fast screen-recording cut, pure motion graphics, a capped two-minute demo, a full walkthrough |
 | `NARRATION.md` | Voice-over: engines, pace, word timings, music and sound effects, the score |
 | `SUPERNOVA.md` | Lesson videos: the concept card, the design system, the primitives, the voice, captions, safe zones |
+| `EXPLAINERS.md` | Canvas explainers: the contract an HTML canvas file must meet, the rules the validator enforces, a working skeleton and a prompt to hand to another tool that generates one |
 | `API.md` | Every `@openvidstudio/core` and `@openvidstudio/stem` primitive, with a rendered still |
 | `TOOLS.md` | Every MCP tool the server registers, one line each. Generated from the server |
 | `HIGGSFIELD.md` | AI b-roll tier protocol: prerequisites, the `hasHiggsfield` config gate, provenance scope, prompt-writing guidance, and how `import_higgsfield_clip` ingests a clip the calling agent already generated |

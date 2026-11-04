@@ -9,7 +9,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -30,6 +34,7 @@ jobs:
       - run: pnpm --filter @openvidstudio/capture typecheck
       - run: pnpm --filter @openvidstudio/mcp-server build
       - run: pnpm --filter @openvidstudio/mcp-server typecheck
+      - run: pnpm --filter @openvidstudio/core typecheck
       - run: pnpm --filter @openvidstudio/stem typecheck
       - run: pnpm --filter @openvidstudio/styles typecheck
       # README's tool counts and packages/docs/TOOLS.md are generated from the tools the
@@ -39,7 +44,11 @@ jobs:
       # (renders, browsers, ffmpeg, Python) run locally through `pnpm --filter @openvidstudio/mcp-server test`.
       - run: node packages/mcp-server/scripts/manual-test.mjs capture-argv-spaces plan-beats stitch-music tool-count release-version plan-shots claude-plugin plugin-launcher install-cli
   offline-render:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -52,7 +61,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @openvidstudio/capture build
       - run: pnpm --filter @openvidstudio/mcp-server build
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
       - run: pnpm --filter @openvidstudio/capture exec playwright install --with-deps chromium
       # A2: every scene imports the core index, so a @remotion/google-fonts loader
       # anywhere in it (TerminalReplay/RepoCta/ChecklistPanel used to have one each)

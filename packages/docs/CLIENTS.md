@@ -11,9 +11,9 @@ old file, and refuses to overwrite a file it cannot parse. Add `--print` to see 
 
 ## What has been checked
 
-- **The server:** the built server was started over stdio and queried with an MCP SDK client. It reported
-  `openvidstudio` 1.4.0 and listed **44 tools** (45 with the optional Higgsfield tier), `preflight` among them.
-  [TOOLS.md](TOOLS.md) has the current count and the list.
+- **The server:** on 2026-11-04 the built server (1.4.0) was started over stdio and queried with an MCP SDK client.
+  It listed 44 tools (45 with the optional Higgsfield tier), `preflight` among them. That is a dated record; the
+  current count and the list are in [TOOLS.md](TOOLS.md).
 - **The installer:** its file handling is covered by the `install-cli` test.
 - **The clients:** not run end to end. Each section says so. Treat the client-side steps as documented, not tested.
 
@@ -58,7 +58,7 @@ By hand, add to the `mcpServers` object (keep your other servers):
 ```
 
 - **Restart:** quit Claude Desktop completely and start it again.
-- **Verify:** the tools list shows 44 tools. Ask the agent to run `preflight`.
+- **Verify:** the client should list the openvidstudio tools (the count is in [TOOLS.md](TOOLS.md)). Ask the agent to run `preflight`.
 
 ## Cursor
 
@@ -85,7 +85,7 @@ By hand, add to the `mcpServers` object:
 ```
 
 - **Restart:** restart Cursor, or reload the window.
-- **Verify:** the MCP settings page lists `openvidstudio` with 44 tools. Ask the agent to run `preflight`.
+- **Verify:** the client should list the openvidstudio server and its tools (the count is in [TOOLS.md](TOOLS.md)). Ask the agent to run `preflight`.
 
 ## VS Code
 
@@ -109,8 +109,8 @@ By hand, in `.vscode/mcp.json`:
 ```
 
 - **Restart:** reload VS Code.
-- **Verify:** the MCP server list shows `openvidstudio` running (Command Palette, `MCP: List Servers`) with 44
-  tools. Ask the agent to run `preflight`.
+- **Verify:** the client should list the openvidstudio server and its tools (the count is in [TOOLS.md](TOOLS.md));
+  the Command Palette command `MCP: List Servers` shows the servers. Ask the agent to run `preflight`.
 
 ## Claude Code, the desktop Code tab and Cowork
 
@@ -139,14 +139,15 @@ Do not keep both: the plugin already registers the server. The plugin's first st
 the background; see [the plugin's README](https://github.com/AnayDhawan/openvidstudio/blob/main/plugins/openvidstudio/README.md).
 
 - **Restart:** start a new session.
-- **Verify:** `/mcp` in the session lists `openvidstudio` with 44 tools. Ask the agent to run `preflight`.
+- **Verify:** `/mcp` in the session should list the openvidstudio server and its tools (the count is in [TOOLS.md](TOOLS.md)). Ask the agent to run `preflight`.
 
 ## Other clients
 
-Any client that starts a stdio MCP server works with the block from "The command" above. The file location and the
-top-level key differ per client: most use `mcpServers`, VS Code uses `servers`. Find the MCP config file in the
-client's own docs, add the block, restart, and ask the agent to run `preflight`. Cline, Zed, Continue, Windsurf and
-GitHub Copilot are not covered here.
+Any client that starts a stdio MCP server should be able to run openvidstudio with the command and args from "The
+command" above; wrap them in the shape that client's docs show. The file location and the top-level key differ per
+client: VS Code uses `servers`, many others use `mcpServers`. Find the MCP config file in the client's own docs, add
+the block, restart, and ask the agent to run `preflight`. None of these other clients has been tried. Cline, Zed,
+Continue, Windsurf and GitHub Copilot are not covered here.
 
 To run from a clone instead of npm, build it (`pnpm install`, `pnpm build`) and point the client at the built entry:
 

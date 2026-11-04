@@ -91,6 +91,8 @@ the app. It never touches your other servers and keeps a backup.
 npx -y @openvidstudio/mcp-server install claude-desktop   # or: cursor, vscode
 ```
 
+Config file locations on each OS, the manual block and how to check it worked: [CLIENTS.md](packages/docs/CLIENTS.md).
+
 **Any other MCP client:** add the server to its config (for Claude Code without the plugin that is
 `.mcp.json`) and restart the client:
 

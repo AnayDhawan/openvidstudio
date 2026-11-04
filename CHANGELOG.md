@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`CLIENTS.md`, where the config goes for Claude Desktop, Cursor, VS Code and Claude Code (#123).** The file path on Windows, macOS and Linux, the one-line installer, the manual JSON block, the restart step and how to check the tool list, for each client `install` supports, plus the generic stdio block for anything else. The server side was checked over stdio (44 tools); the client side is documented, not yet run in each GUI client, and the page says so.
 - **`EXPLAINERS.md`, the contract for a canvas explainer, with a working skeleton and a prompt for a generator.** One page with the four promises a file must make (`seek`, `DURATION`, `scoreSound`, `SOUND.renderOffline`), what the renderer injects (`OVS`, `BEATS`, `CAPTIONS`), the rules `validate_canvas_explainer` enforces (pure in `t`, nothing fetched, text sizes, safe areas, whole-number pixel scales at 1.5x, the arc, the sound), the steps from script to finished video, how to bundle `@openvidstudio/styles` into a hand-written file, and a paste-ready prompt for another tool. The `canvas-explainer-spec` test runs the page's skeleton through the validator at 720x1280 and 1080x1920 and through the renderer, so the example cannot go stale.
 - **The `supernova` skill covers the canvas route** (step 5b): validate, render with the beats and the narration, skip the Remotion scene steps, and the README and SUPERNOVA.md say there are two arcs and point at the canvas path.
 

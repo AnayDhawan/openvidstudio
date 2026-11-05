@@ -7,6 +7,8 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-05
+
 ### Added
 
 - **`CLIENTS.md`, where the config goes for Claude Desktop, Cursor, VS Code and Claude Code (#123).** The file path on Windows, macOS and Linux, the one-line installer, the manual JSON block, the restart step and how to check the tool list, for each client `install` supports, plus the generic stdio block for anything else. The server side was checked over stdio (44 tools on 1.4.0); the client side is documented, not yet run in each GUI client, and the page says so.
@@ -17,6 +19,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **CI runs the canvas renderer, the voice-over mix and the spec test** (`render-canvas-explainer`, `canvas-voiceover`, `canvas-explainer-spec`) in the offline-render job, which has Chromium and ffmpeg. Until now only `validate-canvas-explainer` and the styles tests ran there.
 - **The Claude plugin now pins server 1.4.0 and is version 1.1.1.** 1.4.0 is on npm, so a new plugin install runs the server with `install`, `fit_beats` and the canvas explainer tools; 1.1.1 also carries the updated `supernova` skill.
+- **CI runs the test job and the offline render on Linux, Windows and macOS, and typechecks `@openvidstudio/core`.** ffmpeg installs per OS (apt, Chocolatey, Homebrew), and `fail-fast` is off so one platform failing does not hide the others. Both jobs ran on Linux only before, and `core` had no typecheck step of its own.
+- **Remotion and the `@remotion/*` packages move from 4.0.536 to 4.0.539 together,** in every manifest and the template, along with `@modelcontextprotocol/sdk` 1.32.2, `esbuild` 0.28.2 and `@types/node` 26.6.6. The same-version rule for the Remotion family still holds (`check-version-alignment`).
+
+### Security
+
+- **`body-parser` and `zod` are pinned past their advisories.** `pnpm.overrides` in the root `package.json` (and the same list in `pnpm-workspace.yaml`) now require `body-parser` 2.4.0 or later (denial of service on trailing bytes after a compressed body, reached through the MCP SDK's express) and `zod` 4.6.6 or later (memory exhaustion on oversized constrained collections, pinned by Remotion). The lockfile resolves 2.4.0 and 4.6.7.
+
+### Removed
+
+- **Thirteen Python wheels committed under `packages/mcp-server/` by mistake in the narration timings change (#114).** The package's `files` list is `dist`, `templates`, `docs` and `py`, so the wheels were never in a published npm package (the 1.3.1 and 1.4.0 tarballs hold none); they were in the repository from v1.2.0 to v1.4.0.
 
 ## [1.4.0] - 2026-10-24
 

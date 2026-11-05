@@ -28,7 +28,7 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Removed
 
-- **Thirteen Python wheels committed under `packages/mcp-server/` by mistake in the narration timings change (#114).** The package's `files` list is `dist`, `templates`, `docs` and `py`, so the wheels were never in the npm tarball; they only sat in the repository and the v1.4.0 tag.
+- **Thirteen Python wheels committed under `packages/mcp-server/` by mistake in the narration timings change (#114).** The package's `files` list is `dist`, `templates`, `docs` and `py`, so the wheels were never in a published npm package (the 1.3.1 and 1.4.0 tarballs hold none); they were in the repository from v1.2.0 to v1.4.0.
 
 ## [1.4.0] - 2026-10-24
 

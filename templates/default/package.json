@@ -9,20 +9,20 @@
   "dependencies": {
     "@openvidstudio/core": "workspace:*",
     "@openvidstudio/stem": "workspace:*",
-    "@remotion/cli": "4.0.539",
-    "@remotion/google-fonts": "4.0.539",
-    "@remotion/motion-blur": "4.0.539",
-    "@remotion/shapes": "4.0.539",
-    "@remotion/tailwind-v4": "4.0.539",
-    "@remotion/transitions": "4.0.539",
+    "@remotion/cli": "4.0.541",
+    "@remotion/google-fonts": "4.0.541",
+    "@remotion/motion-blur": "4.0.541",
+    "@remotion/shapes": "4.0.541",
+    "@remotion/tailwind-v4": "4.0.541",
+    "@remotion/transitions": "4.0.541",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "remotion": "4.0.539",
-    "tailwindcss": "4.3.3"
+    "remotion": "4.0.541",
+    "tailwindcss": "4.3.5"
   },
   "devDependencies": {
     "@types/react": "19.3.0",
-    "@types/web": "0.0.359",
+    "@types/web": "0.0.361",
     "typescript": "7.0.2"
   },
   "scripts": {

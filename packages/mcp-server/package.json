@@ -21,9 +21,9 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@openvidstudio/capture": "workspace:*",
-    "@remotion/bundler": "4.0.539",
-    "@remotion/renderer": "4.0.539",
-    "playwright": "^1.64.0",
+    "@remotion/bundler": "4.0.541",
+    "@remotion/renderer": "4.0.541",
+    "playwright": "^1.65.0",
     "sharp": "^0.35.5",
     "zod": "^4.6.6"
   },

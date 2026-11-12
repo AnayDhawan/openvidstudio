@@ -18,7 +18,7 @@
     "@remotion/motion-blur": "4.0.541",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "remotion": "4.0.539"
+    "remotion": "4.0.541"
   },
   "devDependencies": {
     "@fontsource/inter": "^5.3.0",
@@ -27,7 +27,7 @@
     "@types/react": "19.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "remotion": "4.0.539",
+    "remotion": "4.0.541",
     "typescript": "5.9.3"
   },
   "scripts": {

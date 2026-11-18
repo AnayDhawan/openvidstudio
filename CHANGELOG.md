@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-18
+
+Includes everything listed under 1.4.1 below, which was merged but never published to npm.
+
 ### Removed
 
 - **Supernova mode (STEM lessons) is no longer part of this repository.** Gone: `@openvidstudio/stem`, `@openvidstudio/styles`, the canvas explainer renderer, the tools `check_script`, `render_canvas_explainer` and `validate_canvas_explainer` (41 tools, 42 with the Higgsfield tier), the `mode: "supernova"` input of `init_project`, `plan_production`, `write_brief` and `validate_scenes`, `production.mode` and `disclaimers` in `openvidstudio.config.json`, the lesson branches of `write_description` and `validate_scenes`, the `"void-spark"` motif, the `supernova` skill and the SUPERNOVA and EXPLAINERS docs. Word timings from `generate_narration`, `fit_beats` and `useNarrationWords` stay. Published versions up to 1.4.1 are unchanged.

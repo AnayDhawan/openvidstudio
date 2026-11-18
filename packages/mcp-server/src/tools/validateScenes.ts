@@ -3,8 +3,7 @@ import * as path from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
-import { loadConfig, productionMode } from "../config";
-import { DEFAULT_ARC_THRESHOLDS, type ArcThresholds } from "../lessonArc";
+import { loadConfig } from "../config";
 import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { writeFactRecord } from "../facts";
@@ -40,20 +39,6 @@ export interface ValidateScenesInput {
   compositionId?: string;
   /** With render: limit the measurement to these beats. Static checks always cover every beat. */
   beatIds?: string[];
-  /** Lessons, with render: warn when the first drawn element is later than this many seconds. Default 15. */
-  diagramWarnSeconds?: number;
-  /** Lessons, with render: an error when the first drawn element is later than this. Default 25. */
-  diagramErrorSeconds?: number;
-  /** Lessons, with render: warn when nothing changes for longer than this. Default 8. */
-  staticSeconds?: number;
-}
-
-function arcThresholds(input: ValidateScenesInput): ArcThresholds {
-  return {
-    diagramWarnSeconds: input.diagramWarnSeconds ?? DEFAULT_ARC_THRESHOLDS.diagramWarnSeconds,
-    diagramErrorSeconds: input.diagramErrorSeconds ?? DEFAULT_ARC_THRESHOLDS.diagramErrorSeconds,
-    staticSeconds: input.staticSeconds ?? DEFAULT_ARC_THRESHOLDS.staticSeconds,
-  };
 }
 
 export interface SceneFinding {
@@ -71,8 +56,6 @@ export interface SceneFinding {
 }
 
 export interface ValidateScenesResult {
-  /** "supernova" when the project is a STEM lesson, whose numbers and glow are judged by lesson rules. */
-  mode?: "standard" | "supernova";
   ok: boolean;
   scenesChecked: number;
   findings: SceneFinding[];
@@ -199,23 +182,6 @@ export function typedNumbers(src: string): string[] {
   return [...new Set(found)];
 }
 
-/** A number as a comparable token: thousands separators dropped, so "1,200" and "1200" are the same. */
-const numberKey = (token: string) => token.replace(/,/g, "");
-
-/** The numbers a lesson's concept card and an Equation's TeX already account for. */
-export function lessonNumbers(example: string | undefined, src: string): Set<string> {
-  const allowed = new Set<string>();
-  const add = (text: string) => {
-    // Every run of digits, however it is attached: "36x" in TeX and "20m/s" in prose both account for 36 and 20.
-    for (const m of text.matchAll(/\d+(?:,\d{3})*(?:\.\d+)?/g)) allowed.add(numberKey(m[0]));
-  };
-  if (example) add(example);
-  // tex="...", tex={"..."}, tex={`...`}, tex={String.raw`...`}
-  for (const m of src.matchAll(/\btex\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:String\.raw)?\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)\s*\})/g)) {
-    add(m[1] ?? m[2] ?? m[3] ?? m[4] ?? m[5] ?? "");
-  }
-  return allowed;
-}
 
 function importsFacts(src: string): boolean {
   return /from\s+["'][^"']*facts(?:\.json)?["']/.test(src);
@@ -265,11 +231,6 @@ function expectedArtifact(
   return null;
 }
 
-/** True when the config or the beats file says this project is a Supernova lesson. */
-export function isLesson(projectRoot: string, beats: { production?: { mode?: string } }): boolean {
-  return beats.production?.mode === "supernova" || productionMode(loadConfig(projectRoot)) === "supernova";
-}
-
 function recordValidateScenes(input: ValidateScenesInput, result: ValidateScenesResult): void {
   writeFactRecord(resolveProjectRoot(input.projectRoot), {
     tool: "validate_scenes",
@@ -303,21 +264,9 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
   if (!fs.existsSync(beatsFile)) {
     throw new Error(`No beats.json at ${beatsFile}. Run write_beats_file first.`);
   }
-  const doc = JSON.parse(fs.readFileSync(beatsFile, "utf8")) as { beats: BeatLike[]; narration?: string; production?: { mode?: string } };
+  const doc = JSON.parse(fs.readFileSync(beatsFile, "utf8")) as { beats: BeatLike[]; narration?: string };
   const findings: SceneFinding[] = [];
   let checked = 0;
-  // A lesson (Supernova) is judged by its own rules: the numbers in an equation or a worked example are
-  // computed, not claims, and nothing in it is footage to disclose. The config or the beats file may say so.
-  const lesson = isLesson(projectRoot, doc);
-  let example: string | undefined;
-  if (lesson) {
-    try {
-      const card = JSON.parse(fs.readFileSync(path.join(videoDir, "concept.json"), "utf8")) as { example?: unknown };
-      if (typeof card.example === "string") example = card.example;
-    } catch {
-      // No concept card, or not valid JSON: only the Equations' own numbers are accounted for.
-    }
-  }
 
   for (const beat of doc.beats) {
     // A beat can point at a bespoke scene (C5's `scene` field); stitch_composition imports that
@@ -359,9 +308,8 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
       }
     }
 
-    // Motion. A frozen frame is a QC fail in STYLE.md. A lesson scene is flat on purpose (a Void with a
-    // Spark, a graph, an equation) and need not use CinematicScene, so the camera checks are product-demo rules.
-    if (!lesson && scales.length >= 2 && new Set(scales).size === 1) {
+    // Motion. A frozen frame is a QC fail in STYLE.md.
+    if (scales.length >= 2 && new Set(scales).size === 1) {
       const positions = new Set([...src.matchAll(/\bx:\s*(\d+),\s*y:\s*(\d+)/g)].map((m) => `${m[1]},${m[2]}`));
       if (positions.size <= 1) {
         findings.push({
@@ -372,7 +320,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
         });
       }
     }
-    if (!lesson && scales.length < 2 && !usesSelfManagedCamera(src)) {
+    if (scales.length < 2 && !usesSelfManagedCamera(src)) {
       findings.push({
         beatId: beat.id,
         scene: `${component}.tsx`,
@@ -410,13 +358,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
     // own copy without importing facts.json is asserting them from memory. A file can opt out of the
     // check with a `// ovs-numbers-ok: <reason>` comment (a step counter, a fixed price).
     if (!importsFacts(src) && !src.includes("ovs-numbers-ok")) {
-      let typed = typedNumbers(src);
-      // In a lesson a number is fine when the concept card's worked example or an Equation's TeX has it;
-      // one that appears nowhere is still flagged.
-      if (lesson) {
-        const allowed = lessonNumbers(example, src);
-        typed = typed.filter((t) => !allowed.has(numberKey(t)));
-      }
+      const typed = typedNumbers(src);
       if (typed.length > 0) {
         findings.push({
           beatId: beat.id,
@@ -462,7 +404,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
   }
 
   const tagged = findings.map((f): SceneFinding => ({ source: "static", ...f }));
-  return { mode: lesson ? "supernova" : "standard", ok: !tagged.some((f) => f.severity === "error"), scenesChecked: checked, findings: tagged };
+  return { ok: !tagged.some((f) => f.severity === "error"), scenesChecked: checked, findings: tagged };
 }
 
 /**
@@ -483,10 +425,8 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
   const doc = JSON.parse(fs.readFileSync(path.join(videoDir, "beats.json"), "utf8")) as {
     fps?: number;
     beats: { id: string; start: number; duration: number }[];
-    production?: { mode?: string };
   };
 
-  const lesson = isLesson(projectRoot, doc);
   let beats = doc.beats;
   if (input.beatIds && input.beatIds.length > 0) {
     const known = new Set(beats.map((b) => b.id));
@@ -504,15 +444,10 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
     fps: doc.fps ?? 30,
     minimums: readTypeMinimums(videoDir),
     deliberateHolds: readDeliberateHolds(videoDir),
-    glowBudget: lesson,
-    // The arc is about the whole lesson, so a run over a few beats (beatIds) does not judge it.
-    arc: lesson && beats.length === doc.beats.length ? arcThresholds(input) : undefined,
-    lessonSeconds: Math.max(0, ...doc.beats.map((b) => b.start + b.duration)) / (doc.fps ?? 30),
   });
 
   const findings = [...result.findings, ...rendered.findings];
   const full: ValidateScenesResult = {
-    mode: result.mode,
     ok: !findings.some((f) => f.severity === "error"),
     scenesChecked: result.scenesChecked,
     findings,
@@ -550,16 +485,7 @@ export function registerValidateScenes(server: McpServer): void {
         "needs longer to read than the beat lasts (3.5 words/sec plus 0.8s, the same budget validate_beats " +
         "applies), beats whose frames never change, em dashes in on-screen copy, text colour against the " +
         "pixels rendered behind it (WCAG 4.5:1, 3:1 for large text), text outside the title-safe area, and " +
-        "scene text that overlaps the chapter HUD. In a Supernova lesson (production mode supernova) the camera warnings (fewer than two keyframes, a camera that never moves) are dropped, " +
-        "and two checks change: " +
-        "a number typed into a scene passes when the concept card's worked example (concept.json) or an Equation's tex " +
-        "has it, and one that appears nowhere is still flagged, and render mode also counts the glowing elements in " +
-        "sampled frames (Void + Spark allows one at a time): more than one is a warning, more than two an error, " +
-        "except in a beat that holds a Nova. Render mode in a lesson also judges its arc from the frames it " +
-        "already samples (and only when every beat is measured): diagram-late, the first sampled frame with anything " +
-        "drawn beyond the background and the captions (a warning after 15 s, an error after 25 s), and static-stretch, " +
-        "a run of sampled frames that do not change, captions aside, for more than 8 s (a warning). The thresholds are " +
-        "the options diagramWarnSeconds, diagramErrorSeconds and staticSeconds. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
+        "scene text that overlaps the chapter HUD. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
         "recording played through OffthreadVideo) is reported as render-skipped, never as clean.",
       inputSchema: {
         projectRoot: z.string().optional(),
@@ -567,9 +493,6 @@ export function registerValidateScenes(server: McpServer): void {
         render: z.boolean().optional(),
         compositionId: z.string().optional(),
         beatIds: z.array(z.string()).optional(),
-        diagramWarnSeconds: z.number().positive().optional().describe("Lessons, render mode: warn when the first drawn element is later than this (default 15)."),
-        diagramErrorSeconds: z.number().positive().optional().describe("Lessons, render mode: error when the first drawn element is later than this (default 25)."),
-        staticSeconds: z.number().positive().optional().describe("Lessons, render mode: warn when nothing changes for longer than this (default 8)."),
       },
     },
     async (input) => runTool("validate_scenes", () => runValidateScenesFull(input)),

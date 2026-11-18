@@ -9,9 +9,8 @@ This plugin gives Claude the openvidstudio MCP tools and the skills that drive t
 | `openvidstudio` | A demo, launch video or walkthrough of your real running app, end to end |
 | `openvidstudio-director` | A directed film: a brief, a designed look, an original score, hand-built scenes, a review loop |
 | `bgmusic` | Finding and fitting a real music bed |
-| `supernova` | A short animated STEM lesson: one concept in up to two minutes, vertical, narrated |
 
-In a session they appear as `/openvidstudio:openvidstudio`, `/openvidstudio:supernova` and so on, and Claude loads them on its own when you ask for a demo video.
+In a session they appear as `/openvidstudio:openvidstudio`, `/openvidstudio:openvidstudio-director` and so on, and Claude loads them on its own when you ask for a demo video.
 
 ## Install
 

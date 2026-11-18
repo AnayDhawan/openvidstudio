@@ -90,10 +90,7 @@ One file per beat. **How a scene gets written depends on the creative level in t
 - **literal, or a tight time budget: use a template.** `scaffold_scene` in its default
   `"template"` mode emits a scene that renders as-is from the beat's own copy and duration.
 - Either way the scene passes STYLE.md's hard rules, and any number it shows comes from
-  `facts.json` (see Run records and facts below) or a capture, never from memory. In a
-  Supernova lesson the numbers are computed, not claimed: `validate_scenes` accepts a number that
-  is in the concept card's worked example (`concept.json`) or in an `Equation`'s `tex`, and still
-  flags one that appears nowhere.
+  `facts.json` (see Run records and facts below) or a capture, never from memory.
 - Bespoke scenes live anywhere under the video folder; point the beat at the file with
   `scene: "./scenes/Whatever.tsx"` and `stitch_composition` wires it.
 
@@ -341,33 +338,6 @@ read the render plus `beats.json`, so none of them can drift from the video:
   screen. It does not write the narration and does not install the manifest:
   both go through the approval gate in `PLANNING.md` §5.
 
-## Production mode: standard and supernova
-
-`production.mode` in `openvidstudio.config.json` is `"standard"` when it is absent, and that is every
-product video: real captures, a story, a creative level (peak, mid or literal). `"supernova"` is a
-different kind of production, a short STEM lesson that is written script first, narrated, and built
-from constructed pictures rather than captures. It is not a fourth creative level, so a lesson is not
-asked for one and is not planned on that scale.
-
-`init_project` with `mode: "supernova"` makes a lesson project: it stores the mode, defaults the frame
-to 1080x1920, vendors `@openvidstudio/stem` (with its display font, Space Grotesk, copied into
-`public/fonts/`) and adds the dependency. A standard project gets none of that: its files, config and
-`package.json` are exactly what they were. `@openvidstudio/stem` exports `supernovaDesignSystem(subject)`,
-the Void + Spark design system with one accent per subject (math, physics, cs, chemistry, biology):
-
-```ts
-import { supernovaDesignSystem } from "@openvidstudio/stem";
-export const design = supernovaDesignSystem("physics");
-```
-
-`validate_beats` reads `production.mode` (an unknown value is an error; a silent lesson is a warning),
-`write_brief` takes `mode` and needs no `creativeLevel` for a lesson (and no real or constructed split
-in its shot list), `plan_production` plans a lesson with its own arc, no capture time and no creative
-level, and `validate_scenes` and `write_description` follow it: numbers in a worked example or an
-equation pass, `validate_scenes` in render mode counts glowing elements (more than one is a warning,
-more than two an error, except in a beat with a Nova), and the description says in one line that the
-video is a constructed explanation instead of disclosing shots one by one.
-
 ## Native vertical (9:16)
 
 For Reels, Shorts and TikTok there are two ways to get a 1080x1920 file, and they are not
@@ -377,7 +347,7 @@ interchangeable.
 |---|---|---|
 | What it does | Renders the composition at 1080x1920 and lays every scene out for that frame | Crops a finished 1920x1080 render, one crop per beat |
 | Content wider than a phone | Designed to fit | Cut off: each crop is a 608x1080 slice, under a third of the frame width |
-| Use it when | The video exists for a phone: diagrams, equations, a lesson where the picture has to be seen whole | A 16:9 render already exists and what matters sits at the left, centre or right (a terminal's left margin, a centred panel) |
+| Use it when | The video exists for a phone: diagrams, equations, anything where the picture has to be seen whole | A 16:9 render already exists and what matters sits at the left, centre or right (a terminal's left margin, a centred panel) |
 
 `reformat_vertical` never re-lays anything out, so a diagram, a graph or a wide equation in
 the 16:9 version is cropped, not reflowed. If the picture is the content, render natively.
@@ -453,52 +423,6 @@ Each is checked at both sizes in `vertical.test.mjs`.
 
 Anything not on this list has not been checked at 1080x1920. Measure it with `validate_scenes`
 (`render: true`) and a still before trusting it in a vertical video.
-
-## Canvas explainers
-
-A second visual path next to Remotion scenes: one self-contained HTML file with a `<canvas>` (chalkboard, whiteboard,
-flat vector, a pixel narrator) that keeps three promises:
-
-| Promise | Meaning |
-|---|---|
-| `window.seek(t)` | Draws the frame at time `t`, in seconds, as a pure function of `t` |
-| `window.DURATION` | Its length in seconds |
-| `window.scoreSound(kit)` | Its Web Audio score, rendered offline through `window.SOUND.renderOffline(scoreSound, seconds, sampleRate, { voiceover })` |
-
-`render_canvas_explainer` loads the file in headless Chromium, waits for `document.fonts.ready`, walks
-`round(DURATION * fps)` frames (1280x720 at 30 fps; pass `width: 720, height: 1280` for a Reel, both even), pipes the
-canvas PNGs into ffmpeg (H.264, yuv420p), renders the score, and muxes the two. A file that does not expose the
-promises is refused with the missing ones named. The logic is `dist/canvasExplainer.js`, which also runs standalone:
-`node canvasExplainer.js --html explainer.html --out out.mp4 --width 720 --height 1280`. `async: true` returns a
-`jobId` for `job_status`, as `render_video` does. The result carries SHA-256 hashes of the first, middle and last
-frame: render twice and compare them to check that frames are a function of `t`. A file that calls `Math.random` is
-warned about.
-
-**Voice-over.** Pass `videoName` and the project's `beats.json` (after `generate_narration` and `fit_beats`) drives the
-render: before the first draw the renderer sets `window.BEATS`, an array of `{ id, start, end, text }` in seconds, and
-`window.DURATION` becomes the last beat's end (an explainer reads `BEATS` instead of constants). The narration clips
-`public/audio/vo/<beatId>.mp3` are mixed in at each beat's start, to the sample, over the score rendered with
-`{ voiceover: true }`, and the score is ducked `audio.duckDb` (default 9, never under 6) while a clip plays, eased down over
-40 ms and back over 250 ms. `narration: "none"` renders silent narration with the full-mix sound. `check_script` and
-`validate_beats` read the same `beats.json`, so the script gates apply unchanged.
-
-**Captions.** Burned in from each beat's text, in chunks that break at sentence ends (and at a comma after three words
-and at six words), timed from `<beatId>.words.json` when it exists and by word length across the clip when it does not,
-inside the safe areas (above the bottom 22% and below the top 14% of a tall canvas, 8% either way on a wide one). Done
-through `window.CAPTIONS.draw(ctx, t, opts)`, a helper the renderer injects: an explainer calls it at the end of
-`seek(t)` to caption in its own font and colours (`opts.font`, `color`, `background`, `position`), and the renderer calls it
-itself for one that does not. Chosen over an ASS subtitle pass in ffmpeg because that needs libass and system fonts, cannot match a
-canvas's pixel font, and draws outside the explainer's own frame; the helper keeps captions inside the pure-function-of-`t`
-promise and costs an explainer one line.
-
-**Checks.** `validate_canvas_explainer` (also a pre-flight inside the renderer, which refuses to render on an error;
-`validate: false` skips it) loads the file and samples frames through `seek`: a frame is the same drawn twice (error); text is at
-least 28px for labels, 44px for headlines and 64px for key numbers at 720 on the shorter side, scaled to the canvas, found by
-intercepting `fillText` and `strokeText` (warning below, error below half; the shorter side rather than the width, so a
-720x1280 Reel keeps the full minimums); no text in the top 14% or bottom 22% of a tall canvas except captions (warning); the arc
-through the code `validate_scenes` uses (first drawn element after 15 s a warning, after 25 s an error; 8 s of identical
-frames a warning); the sound scheduled into an offline context, with the most source nodes playing at once (warning above 3)
-and the peak level (warning at clipping); and `Math.random` in the source. Findings have `validate_scenes`' shape.
 
 ## Run records and facts
 

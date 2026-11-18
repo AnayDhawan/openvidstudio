@@ -17,7 +17,6 @@
     "playwright",
     "mcp",
     "screen-capture",
-    "narration",
-    "supernova"
+    "narration"
   ]
 }

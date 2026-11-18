@@ -16,7 +16,7 @@ const imgDir = path.join(monorepoRoot, "packages", "docs", "img", "api");
 const api = fs.readFileSync(path.join(monorepoRoot, "packages", "docs", "API.md"), "utf8").replace(/\r\n/g, "\n");
 
 console.log("\n== every still API.md embeds exists, is described and is small ==");
-const embeds = [...api.matchAll(/!\[([^\]]*)\]\(img\/(api|supernova)\/([^)]+\.png)\)/g)].map((m) => ({ alt: m[1], dir: m[2], file: m[3] }));
+const embeds = [...api.matchAll(/!\[([^\]]*)\]\(img\/(api)\/([^)]+\.png)\)/g)].map((m) => ({ alt: m[1], dir: m[2], file: m[3] }));
 check("API.md embeds stills", embeds.length > 20);
 check("every embedded still exists on disk", embeds.every((e) => fs.existsSync(path.join(monorepoRoot, "packages", "docs", "img", e.dir, e.file))));
 check("every embed has some alt text", embeds.every((e) => e.alt.trim().length > 0));

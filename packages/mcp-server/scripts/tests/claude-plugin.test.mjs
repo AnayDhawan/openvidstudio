@@ -63,13 +63,13 @@ const text = (p) => fs.readFileSync(p, "utf8");
 
   const skillsDir = path.join(pluginDir, "skills");
   const skills = fs.readdirSync(skillsDir);
-  check("the plugin ships the four owned skills", ["bgmusic", "openvidstudio", "openvidstudio-director", "supernova"].every((s) => skills.includes(s)));
+  check("the plugin ships the three owned skills", ["bgmusic", "openvidstudio", "openvidstudio-director"].every((s) => skills.includes(s)));
   check("each skill has a SKILL.md with a name and a description", skills.every((s) => {
     const t = text(path.join(skillsDir, s, "SKILL.md"));
     return new RegExp(`^---\\nname: ${s}\\n`).test(t.replace(/\r\n/g, "\n")) && /\ndescription: .{40,}/.test(t);
   }));
   // An unquoted ": " inside a description is invalid YAML: Claude Code then drops the skill's frontmatter and the
-  // skill silently does not load (supernova had exactly this until 2026-10-24).
+  // skill silently does not load.
   check("no skill's description holds an unquoted colon-space (invalid YAML, the skill would not load)", skills.every((s) => {
     const fm = /^---\n([\s\S]*?)\n---/.exec(text(path.join(skillsDir, s, "SKILL.md")).replace(/\r\n/g, "\n"));
     const desc = fm && /^description: (.*)$/m.exec(fm[1]);

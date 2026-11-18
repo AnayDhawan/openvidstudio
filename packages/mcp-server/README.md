@@ -11,8 +11,6 @@ video on your machine. Every frame of your product is a real capture, never a ge
 - **Director mode.** Ask for the peak or mid creative level and the agent writes a brief before it
   builds anything, then moves the camera on purpose, picks a transition for every cut and scores the
   film with original music that has no drums.
-- **Lessons (Supernova).** One maths, physics or computer science concept in up to two minutes,
-  vertical, always in the same seven beats, with formulas built line by line.
 
 ## Install
 
@@ -50,8 +48,7 @@ missing.
 ## Documentation
 
 The pipeline docs ship in this package (`docs/`) and are online at
-https://openvidstudio.vercel.app/docs. Start with `OVERVIEW.md`; `SUPERNOVA.md` and `SCRIPT.md` cover
-lessons, and `TOOLS.md` lists every tool.
+https://openvidstudio.vercel.app/docs. Start with `OVERVIEW.md`, and `TOOLS.md` lists every tool.
 
 - Source, issues and the changelog: https://github.com/AnayDhawan/openvidstudio
 - Site: https://openvidstudio.vercel.app

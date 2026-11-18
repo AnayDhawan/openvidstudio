@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// vertical: native 9:16 (1080x1920) groundwork. A STEM lesson for Reels has to render natively
+// vertical: native 9:16 (1080x1920) groundwork. A video for Reels has to render natively
 // vertical, not as a crop of a 16:9 render, so every primitive that assumed a 1920x1080 frame
 // is checked here against a real 1080x1920 composition, and against 1920x1080 for the
 // "landscape is unchanged" half. Frames are mounted in a real browser through the Remotion
@@ -161,7 +161,7 @@ const CTA_SCENE = `import React from "react";
 import { RepoCta } from "@openvidstudio/core";
 
 export const Cta: React.FC = () => (
-  <RepoCta owner="octo" name="lessons" description="Short STEM lessons, rendered natively for a phone." chips={["TypeScript", "MIT"]} titleText="Try it" />
+  <RepoCta owner="octo" name="lessons" description="Short videos, rendered natively for a phone." chips={["TypeScript", "MIT"]} titleText="Try it" />
 );
 `;
 

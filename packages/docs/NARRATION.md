@@ -67,7 +67,7 @@ every engine here, and for a launch video it is worth the hour.
 
 ## Word timings
 
-A scene that points at the word being spoken (a Supernova lesson's Spark landing on "slope" as the voice
+A scene that points at the word being spoken (a highlight landing on "slope" as the voice
 says it) needs to know when each word starts. With the `edge-tts` engine, `generate_narration` also writes
 `public/audio/vo/<beatId>.words.json` next to each clip (`public/audio/vo/<lang>/<beatId>.words.json` for
 another language):
@@ -101,13 +101,6 @@ const at = narration.frameOfWord(3);           // scene-local frame the fourth w
 
 `wordAt` gives the word being said, or in a pause the last one said (`speaking` is then false), and `null` before
 the first word. `available` is false for a beat with no timings.
-
-## Narration over a canvas explainer
-
-`render_canvas_explainer` with `videoName` mixes the clips `generate_narration` wrote into a canvas explainer's video: each
-clip starts at its beat's start, the score is rendered with the sound kit's `voiceover: true` mode and ducked at least 6 dB
-under the voice, and the beats' text is burned in as captions that break at sentence ends. Run `fit_beats` first so the beat
-times follow the voice. See "Canvas explainers" in PIPELINE.md.
 
 ## Silence is silent
 

@@ -1,7 +1,6 @@
-// Shared helpers for the stem primitive tests (Spark, Nova, Axes, Equation ...): a throwaway
-// supernova project at a given frame size, built from custom scenes, and a real browser mounted on
-// its composition so a test can seek a frame, read the DOM and read the pixels. Not a test file
-// (the runner only picks up *.test.mjs).
+// Shared helpers for tests that need a real browser on a stitched composition: a throwaway project at
+// a given frame size built from custom scenes, and a browser mounted on its composition so a test can
+// seek a frame, read the DOM and read the pixels. Not a test file (the runner only picks up *.test.mjs).
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -19,14 +18,14 @@ export const haveNodeModules = fs.existsSync(templateNodeModules);
 export { sharp, bridge };
 
 /**
- * A supernova project of `width` x `height` with one beat per scene. `scenes` maps a beat id to
+ * A project of `width` x `height` with one beat per scene. `scenes` maps a beat id to
  * { source, duration }; beats run end to end. Returns where each beat starts.
  */
-export function lessonProject({ prefix = "ovs-stem-", width, height, scenes, extraFiles = {}, mode = "supernova" }) {
+export function sceneProject({ prefix = "ovs-scenes-", width, height, scenes, extraFiles = {} }) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   for (let attempt = 1; ; attempt++) {
     try {
-      runInitProject({ name: "lesson", projectRoot: root, ...(mode === "supernova" ? { mode } : {}), videoConfig: { fps: 30, width, height } });
+      runInitProject({ name: "scenes", projectRoot: root, videoConfig: { fps: 30, width, height } });
       break;
     } catch (err) {
       if (attempt >= 3) throw err;
@@ -35,7 +34,7 @@ export function lessonProject({ prefix = "ovs-stem-", width, height, scenes, ext
     }
   }
   fs.symlinkSync(templateNodeModules, path.join(root, "node_modules"), "junction");
-  const videoDir = path.join(root, "src", "videos", "lesson");
+  const videoDir = path.join(root, "src", "videos", "scenes");
   const customDir = path.join(videoDir, "custom-scenes");
   fs.mkdirSync(customDir, { recursive: true });
   const beats = [];
@@ -46,13 +45,13 @@ export function lessonProject({ prefix = "ovs-stem-", width, height, scenes, ext
     beats.push({ id, start, duration, scene: `./custom-scenes/${component}.tsx` });
     start += duration;
   }
-  fs.writeFileSync(path.join(videoDir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", ...(mode === "supernova" ? { production: { mode } } : {}), beats }));
+  fs.writeFileSync(path.join(videoDir, "beats.json"), JSON.stringify({ fps: 30, narration: "none", beats }));
   for (const [rel, content] of Object.entries(extraFiles)) {
     const file = path.join(root, rel);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, content);
   }
-  const stitched = runStitchComposition({ projectRoot: root, videoName: "lesson" });
+  const stitched = runStitchComposition({ projectRoot: root, videoName: "scenes" });
   return { root, videoDir, stitched, beats, beatStart: Object.fromEntries(beats.map((b) => [b.id, b.start])), width, height };
 }
 
@@ -99,34 +98,8 @@ export async function inBrowser(project, fn) {
   }
 }
 
-export const luma = (img, x, y) => {
-  const i = (Math.round(y) * img.width + Math.round(x)) * img.channels;
-  return 0.2126 * img.data[i] + 0.7152 * img.data[i + 1] + 0.0722 * img.data[i + 2];
-};
 export const rgb = (img, x, y) => {
   const i = (Math.round(y) * img.width + Math.round(x)) * img.channels;
   return [img.data[i], img.data[i + 1], img.data[i + 2]];
 };
-/** Mean luma over the whole frame. */
-export const meanLuma = (img) => {
-  let sum = 0;
-  for (let i = 0; i < img.data.length; i += img.channels) sum += 0.2126 * img.data[i] + 0.7152 * img.data[i + 1] + 0.0722 * img.data[i + 2];
-  return sum / (img.data.length / img.channels);
-};
-/** Centroid of the pixels whose luma is above `threshold`, inside an optional box. */
-export function brightCentroid(img, threshold, box = { x: 0, y: 0, w: img.width, h: img.height }) {
-  let n = 0;
-  let sx = 0;
-  let sy = 0;
-  for (let y = Math.max(0, box.y); y < Math.min(img.height, box.y + box.h); y++) {
-    for (let x = Math.max(0, box.x); x < Math.min(img.width, box.x + box.w); x++) {
-      if (luma(img, x, y) > threshold) {
-        n++;
-        sx += x;
-        sy += y;
-      }
-    }
-  }
-  return n === 0 ? null : { x: sx / n, y: sy / n, n };
-}
 export const sameBytes = (a, b) => a.data.length === b.data.length && Buffer.compare(a.data, b.data) === 0;

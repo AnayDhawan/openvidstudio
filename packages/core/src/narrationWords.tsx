@@ -1,4 +1,4 @@
-// Word timings for the narration (Supernova). A scene that points at the word being spoken needs to
+// Word timings for the narration. A scene that points at the word being spoken needs to
 // know when each word starts. generate_narration writes public/audio/vo/<beatId>.words.json with
 // the edge-tts engine, and stitch_composition copies the files next to the composition (a scene bundle
 // can import JSON from src/ but not from public/) and hands them to the composition through

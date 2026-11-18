@@ -9,7 +9,7 @@
     {
       "name": "openvidstudio",
       "source": "./plugins/openvidstudio",
-      "description": "Code-based video generation. The openvidstudio MCP server plus the skills that drive it: demo videos, director-mode films, and short STEM lessons. Every frame of your product is a real capture."
+      "description": "Code-based video generation. The openvidstudio MCP server plus the skills that drive it: demo videos and director-mode films. Every frame of your product is a real capture."
     }
   ]
 }

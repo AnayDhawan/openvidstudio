@@ -8,7 +8,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { require, distDir, check, skip, finish } from "./_harness.mjs";
-import { lessonProject, inBrowser, haveNodeModules, rgb, sameBytes, sharp } from "./_stem.mjs";
+import { sceneProject, inBrowser, haveNodeModules, rgb, sameBytes, sharp } from "./_browser.mjs";
 
 const { runAddMotionPrimitive, runCatalogMotionPrimitives } = require(path.join(distDir, "tools", "motionPrimitives.js"));
 const BG = [217, 80, 63]; // #D9503F
@@ -51,13 +51,13 @@ const EXPECTED_ORDER = [0, 1, 4, 5, 3, 2];
 
 async function run(width, height) {
   console.log(`\n== ${width}x${height} ==`);
-  const project = lessonProject({ prefix: `ovs-collage-${width}x${height}-`, width, height, mode: "standard", scenes: { "collage-scene": { source: SCENE, duration: 150 } } });
+  const project = sceneProject({ prefix: `ovs-collage-${width}x${height}-`, width, height, scenes: { "collage-scene": { source: SCENE, duration: 150 } } });
   // A stand-in photo with real contrast: a dark left half, a light right half and a coloured disc across them.
   fs.mkdirSync(path.join(project.root, "public", "images"), { recursive: true });
   await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="100" height="200" fill="#101010"/><rect x="100" width="100" height="200" fill="#f4f4f4"/><circle cx="100" cy="100" r="50" fill="#ff5030" fill-opacity="0.8"/></svg>`))
     .png()
     .toFile(path.join(project.root, "public", "images", "photo.png"));
-  const added = runAddMotionPrimitive({ projectRoot: project.root, videoName: "lesson", name: "collage-broll" });
+  const added = runAddMotionPrimitive({ projectRoot: project.root, videoName: "scenes", name: "collage-broll" });
   check("add_motion_primitive installs it into the project", added.written === true && fs.existsSync(added.path) && added.componentName === "CollageBroll");
 
   await inBrowser(project, async ({ comp, page, seek, frame, errors }) => {

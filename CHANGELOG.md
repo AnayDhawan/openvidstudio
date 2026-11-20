@@ -7,6 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **The Claude plugin now pins server 2.0.0 and is version 1.2.0.** 2.0.0 is on npm, so a new plugin install runs a server without the removed Supernova tools, and the plugin no longer ships the `supernova` skill. The `mcp-server` build now starts from an empty `dist/`, because the 2.0.0 package still carried compiled files of the removed tools.
+
 ## [2.0.0] - 2026-11-18
 
 Includes everything listed under 1.4.1 below, which was merged but never published to npm.

@@ -62,4 +62,27 @@ console.log("\n== runPlanBeats with snapToBars ==");
   check("zero beats per bar is refused with a message", /beatsPerBar must be a whole number/.test(threw));
 }
 
+console.log("\n== runPlanBeats with the literal arc ==");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-plan-beats-literal-"));
+  const plan = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "literal", features: ["search", "share"] });
+  check("literal plans exactly one beat per feature, ids demo-<slug>", plan.beats.length === 2 && plan.beats.map((b) => b.id).join(",") === "demo-search,demo-share");
+  check("the plan reports the literal arc", plan.arc === "literal");
+  check("every literal beat is a screenshot", plan.beats.every((b) => b.captureMethod === "screenshot"));
+  check("every literal beat's purpose is 'Show <feature> working'", plan.beats[0].purpose === "Show search working" && plan.beats[1].purpose === "Show share working");
+  check("literal durations sum to targetDurationSeconds x fps", plan.beats.reduce((a, b) => a + b.duration, 0) === 60 * plan.fps && plan.totalFrames === 60 * plan.fps);
+  check("literal weights are equal, so two beats split the video evenly", plan.beats[0].duration === plan.beats[1].duration);
+  check("literal beats are contiguous from frame 0", plan.beats[0].start === 0 && plan.beats[1].start === plan.beats[0].duration);
+
+  const three = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "literal", features: ["a", "b", "c", "d"] });
+  check("four features give four beats, none dropped (the simple arc would cap demos at three)", three.beats.length === 4);
+
+  const emptyMessage = (input) => {
+    try { runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "literal", ...input }); } catch (e) { return String(e.message); }
+    return "";
+  };
+  check("literal with an empty features list throws a clear message", /literal arc needs at least one feature/.test(emptyMessage({ features: [] })));
+  check("literal with no features at all throws the same message", /literal arc needs at least one feature/.test(emptyMessage({})));
+}
+
 finish();

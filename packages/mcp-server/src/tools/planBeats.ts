@@ -18,7 +18,7 @@ import { runTool } from "./mcp";
 const PACE_MIN = 2.3;
 const PACE_MAX = 2.9;
 
-export type ArcName = "simple" | "packed" | "tutorial";
+export type ArcName = "simple" | "packed" | "tutorial" | "literal";
 
 export interface PlanBeatsInput {
   projectRoot?: string;
@@ -117,6 +117,22 @@ interface Slot {
 }
 
 function slotsFor(arc: ArcName, features: string[]): Slot[] {
+  if (arc === "literal") {
+    // Do exactly what was asked: one demo beat per named feature, equal weight, nothing added.
+    // No hook, problem, differentiator or CTA, and no cap on how many features get a beat.
+    if (features.length === 0) {
+      throw new Error(
+        "The literal arc needs at least one feature: it plans one beat per feature and adds nothing else. " +
+          "Pass features, or pick another arc (simple, packed, tutorial).",
+      );
+    }
+    return features.map((f, i) => ({
+      id: `demo-${slug(f) || i + 1}`,
+      weight: 1,
+      method: "screenshot" as const,
+      purpose: `Show ${f} working`,
+    }));
+  }
   const demo = features.length ? features : ["feature"];
   if (arc === "simple") {
     return [
@@ -281,15 +297,16 @@ export function registerPlanBeats(server: McpServer): void {
         "capture method and a narration word budget per beat. The budget is the range validate_beats will " +
         "actually accept, which matters because SCRIPT.md's 2.3 to 2.9 words per second reads like guidance " +
         "but is enforced as a hard floor and ceiling per beat, and first drafts are commonly rejected for " +
-        "being too sparse rather than too long. Writing to a stated number avoids that round trip. Three " +
+        "being too sparse rather than too long. Writing to a stated number avoids that round trip. Four " +
         "arcs: simple (single feature, hook to CTA), packed (one dense hero beat then one demo per claim), " +
-        "tutorial (prerequisites, install, setup, steps, recap). Output feeds straight into validate_beats " +
+        "tutorial (prerequisites, install, setup, steps, recap), literal (exactly one screenshot demo beat per " +
+        "feature, equal length, nothing added; needs at least one feature). Output feeds straight into validate_beats " +
         "once narration is written in. Pass snapToBars with the score's bpm when the video is cut to music, so " +
         "every boundary lands on a downbeat; the planned total then moves to the nearest whole bar.",
       inputSchema: {
         projectRoot: z.string().optional(),
         targetDurationSeconds: z.number().positive(),
-        arc: z.enum(["simple", "packed", "tutorial"]).optional(),
+        arc: z.enum(["simple", "packed", "tutorial", "literal"]).optional(),
         features: z.array(z.string()).optional(),
         appUrl: z.string().optional(),
         fps: z.number().positive().optional(),

@@ -15,7 +15,7 @@ old file, and refuses to overwrite a file it cannot parse. Add `--print` to see 
   It listed 44 tools (45 with the optional Higgsfield tier), `preflight` among them. That is a dated record; the
   current count and the list are in [TOOLS.md](TOOLS.md).
 - **The installer:** its file handling is covered by the `install-cli` test.
-- **The clients:** not run end to end. Each section says so. Treat the client-side steps as documented, not tested.
+- **The clients:** not run end to end (each section has a `Status:` line). Treat the client-side steps as documented, not tested. The tool count is in [TOOLS.md](TOOLS.md).
 
 ## The command
 
@@ -35,7 +35,7 @@ The installer picks the right one for the machine it runs on. The blocks below u
 
 ## Claude Desktop (Chat tab)
 
-Installer and config documented; not yet run end to end in this client.
+Status: not run end to end.
 
 | OS | Config file |
 | --- | --- |
@@ -58,11 +58,11 @@ By hand, add to the `mcpServers` object (keep your other servers):
 ```
 
 - **Restart:** quit Claude Desktop completely and start it again.
-- **Verify:** the client should list the openvidstudio tools (the count is in [TOOLS.md](TOOLS.md)). Ask the agent to run `preflight`.
+- **Verify:** the client lists the openvidstudio tools; ask the agent to run `preflight`.
 
 ## Cursor
 
-Installer and config documented; not yet run end to end in this client.
+Status: not run end to end.
 
 | OS | Config file (global) |
 | --- | --- |
@@ -85,11 +85,11 @@ By hand, add to the `mcpServers` object:
 ```
 
 - **Restart:** restart Cursor, or reload the window.
-- **Verify:** the client should list the openvidstudio server and its tools (the count is in [TOOLS.md](TOOLS.md)). Ask the agent to run `preflight`.
+- **Verify:** the client lists the openvidstudio tools; ask the agent to run `preflight`.
 
 ## VS Code
 
-Installer and config documented; not yet run end to end in this client.
+Status: not run end to end.
 
 The file is per workspace, the same on every OS: `.vscode/mcp.json` in the folder where you run the installer.
 VS Code keeps servers under `servers` (not `mcpServers`) and wants `"type": "stdio"`.
@@ -109,12 +109,12 @@ By hand, in `.vscode/mcp.json`:
 ```
 
 - **Restart:** reload VS Code.
-- **Verify:** the client should list the openvidstudio server and its tools (the count is in [TOOLS.md](TOOLS.md));
+- **Verify:** the client should list the openvidstudio server and its tools;
   the Command Palette command `MCP: List Servers` shows the servers. Ask the agent to run `preflight`.
 
 ## Claude Code, the desktop Code tab and Cowork
 
-Installer and config documented; not yet run end to end in this client.
+Status: not run end to end.
 
 No config file to edit. The installer prints the commands:
 
@@ -139,7 +139,7 @@ Do not keep both: the plugin already registers the server. The plugin's first st
 the background; see [the plugin's README](https://github.com/AnayDhawan/openvidstudio/blob/main/plugins/openvidstudio/README.md).
 
 - **Restart:** start a new session.
-- **Verify:** `/mcp` in the session should list the openvidstudio server and its tools (the count is in [TOOLS.md](TOOLS.md)). Ask the agent to run `preflight`.
+- **Verify:** `/mcp` in the session should list the openvidstudio server and its tools. Ask the agent to run `preflight`.
 
 ## Other clients
 

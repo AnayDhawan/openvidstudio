@@ -98,6 +98,8 @@ the goal is a video that shows what a real product actually looks like.
 | `NARRATION.md` | Voice-over: engines, pace, word timings, music and sound effects, the score |
 | `API.md` | Every `@openvidstudio/core` primitive, with a rendered still |
 | `TOOLS.md` | Every MCP tool the server registers, one line each. Generated from the server |
+| `CLIENTS.md` | Adding the server to Claude Desktop, Cursor, VS Code and Claude Code: the command, the config file per OS, restart, verify |
+| `PRIMITIVES.md` | How to add a primitive: a core component, or a catalog entry that `add_motion_primitive` writes into a project |
 | `HIGGSFIELD.md` | AI b-roll tier protocol: prerequisites, the `hasHiggsfield` config gate, provenance scope, prompt-writing guidance, and how `import_higgsfield_clip` ingests a clip the calling agent already generated |
 
 ## Two rules that changed on the way to being a public tool

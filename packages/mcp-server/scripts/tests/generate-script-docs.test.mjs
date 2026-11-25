@@ -207,6 +207,27 @@ console.log("\n== the AGENTS.md every scaffolded project gets names the scriptin
   check("the order block does not send a first-time user to plan_beats", !/plan_beats/.test(flow));
   check("the order block still gets from the approval gate to write_beats_file", /APPROVAL GATE -> write_beats_file/.test(flow));
   check("AGENTS.md names plan_beats and validate_beats only as the manual route", /manual route/i.test(agents) && /plan_beats/.test(agents));
+  check("the AGENTS.md order puts fit_beats before the scenes", flow.indexOf("fit_beats") >= 0 && flow.indexOf("fit_beats") < flow.indexOf("scenes"));
+}
+
+console.log("\n== the skills give the same narration order as AGENTS.md (#183) ==");
+{
+  const skills = path.join(monorepoRoot, ".claude", "skills");
+  const read = (rel) => fs.readFileSync(path.join(skills, rel), "utf8").replace(/\r\n/g, "\n");
+  const main = read(path.join("openvidstudio", "SKILL.md"));
+  const order = main.match(/## The order\n\n```\n([\s\S]*?)\n```/);
+  const flow = order ? flat(order[1]) : "";
+  check("the openvidstudio skill has a fenced order block", order !== null);
+  check("the skill order runs generate_narration then fit_beats then a regenerate before the scenes", /generate_narration -> fit_beats -> generate_narration \(overwrite\)/.test(flow) && flow.indexOf("fit_beats") < flow.indexOf("scenes"));
+  check("the skill order no longer puts generate_narration after validate_scenes", !/validate_scenes[^>]*-> (\[plan_sound_effects\] -> )?generate_narration/.test(flow));
+  const narration = main.slice(main.indexOf("## 6. Narration"), main.indexOf("## 6b."));
+  check("section 6 says fit_beats runs before scaffolding because it changes the durations scenes bake in", /fit_beats/.test(narration) && /before[^.]*scaffold/i.test(narration) && /durations/.test(narration));
+  const director = read(path.join("openvidstudio-director", "SKILL.md"));
+  const scenesAt = director.indexOf("## 9. Scenes");
+  const gatesAt = director.indexOf("## 10. Gates");
+  const narrationAt = director.indexOf("generate_narration");
+  check("the director skill runs generate_narration and fit_beats before section 9", narrationAt >= 0 && narrationAt < scenesAt && director.indexOf("fit_beats") < scenesAt);
+  check("the director gates section no longer runs generate_narration", !/generate_narration/.test(director.slice(gatesAt, director.indexOf("## 11."))));
 }
 
 finish();

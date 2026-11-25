@@ -33,9 +33,9 @@ The `docs/` files this skill names (`docs/PLANNING.md`, `docs/API.md`, `docs/STY
 ```
 preflight -> plan_production -> extract_brand -> write_brief -> generate_script (skeleton)
   -> [write VO] -> generate_script (with the draft) -> APPROVAL GATE -> write_beats_file
-  -> captures -> [compose_score] -> scenes -> render_stills -> validate_scenes
-  -> [plan_sound_effects] -> generate_narration -> stitch_composition -> render_video
-  -> finalize_video -> qc_extract_frames
+  -> captures -> generate_narration -> fit_beats -> generate_narration (overwrite) -> [compose_score]
+  -> scenes -> render_stills -> validate_scenes -> [plan_sound_effects] -> stitch_composition
+  -> render_video -> finalize_video -> qc_extract_frames
 ```
 
 `plan_beats` then `validate_beats` is the manual route to the same beats file (step 2).
@@ -174,6 +174,11 @@ Read `docs/API.md` for props. Do not read the library source.
 and clamps time-stretching to a range that stays natural rather than fitting clips to
 beats at any cost. When it says a beat does not fit, fix the script or the beat
 duration; do not stretch further.
+
+Run it on the provisional beats, then `fit_beats` to size each beat from the measured clips,
+then `generate_narration` again with `overwrite: true`. Do all three before scaffolding any
+scene: `fit_beats` changes the beat durations, and a scaffolded scene bakes its beat's
+duration into its camera keyframes.
 
 It uses edge-tts, which sends the text to Microsoft, unless you pass `engine: "omnivoice"`
 (local). It does not read `narration.engine` or `narration.voice` from the config, so

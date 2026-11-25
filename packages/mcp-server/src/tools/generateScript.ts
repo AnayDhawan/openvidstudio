@@ -110,19 +110,21 @@ function checkDraft(draft: ScriptDraft, level: CreativeLevel, beatIds: string[])
     throw new Error("draft.narration is required: an object of spoken lines keyed by beat id.");
   }
   const overrides = draft.visuals;
+
+  // At a level that allows no overrides, carrying draft.visuals at all is refused, an empty object included.
+  if (!LEVEL_SCRIPT_DEFAULTS[level].allowVisualOverrides && overrides !== undefined) {
+    const named = isPlainObject(overrides) ? Object.keys(overrides) : [];
+    throw new Error(
+      `draft.visuals ${named.length > 0 ? `names ${quoted(named)}` : "is present"}, but visual overrides are not allowed ` +
+        `at the ${level} level. This level does exactly what was specified and adds nothing, so send ` +
+        `draft.narration only, or raise creativeLevel to mid or peak to change a beat's visual.`,
+    );
+  }
+
   if (overrides !== undefined && !isPlainObject(overrides)) {
     throw new Error("draft.visuals must be an object keyed by beat id.");
   }
   const overrideIds = overrides ? Object.keys(overrides) : [];
-
-  // An empty visuals object overrides nothing, so it is not treated as an override.
-  if (!LEVEL_SCRIPT_DEFAULTS[level].allowVisualOverrides && overrideIds.length > 0) {
-    throw new Error(
-      `draft.visuals names ${quoted(overrideIds)}, but visual overrides are not allowed at the ${level} level. ` +
-        `This level does exactly what was specified and adds nothing, so send draft.narration only, ` +
-        `or raise creativeLevel to mid or peak to change a beat's visual.`,
-    );
-  }
 
   const known = new Set(beatIds);
   const unknown = [...new Set([...Object.keys(draft.narration), ...overrideIds])].filter((id) => !known.has(id));

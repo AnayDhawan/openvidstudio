@@ -116,7 +116,35 @@ interface Slot {
   purpose: string;
 }
 
+/**
+ * Every beat id must be unique or validate_beats rejects the file ("duplicate beat id"), and a
+ * draft keyed by beat id could not tell two beats apart. Two feature names collide when they
+ * slug to the same text: differing only in case or punctuation, or past slug()'s 24-character
+ * cut. The first beat keeps its plain id, so ids that were already unique never change; each
+ * later repeat gets -2, -3 and so on, skipping any suffixed id another slot already owns.
+ */
+function withUniqueIds(slots: Slot[]): Slot[] {
+  const taken = new Set(slots.map((s) => s.id));
+  const seen = new Set<string>();
+  return slots.map((slot) => {
+    if (!seen.has(slot.id)) {
+      seen.add(slot.id);
+      return slot;
+    }
+    let n = 2;
+    while (taken.has(`${slot.id}-${n}`)) n++;
+    const id = `${slot.id}-${n}`;
+    taken.add(id);
+    seen.add(id);
+    return { ...slot, id };
+  });
+}
+
 function slotsFor(arc: ArcName, features: string[]): Slot[] {
+  return withUniqueIds(buildSlots(arc, features));
+}
+
+function buildSlots(arc: ArcName, features: string[]): Slot[] {
   if (arc === "literal") {
     // Do exactly what was asked: one demo beat per named feature, equal weight, nothing added.
     // No hook, problem, differentiator or CTA, and no cap on how many features get a beat.

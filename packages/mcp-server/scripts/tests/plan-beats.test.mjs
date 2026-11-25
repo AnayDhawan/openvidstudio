@@ -74,8 +74,8 @@ console.log("\n== runPlanBeats with the literal arc ==");
   check("literal weights are equal, so two beats split the video evenly", plan.beats[0].duration === plan.beats[1].duration);
   check("literal beats are contiguous from frame 0", plan.beats[0].start === 0 && plan.beats[1].start === plan.beats[0].duration);
 
-  const three = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "literal", features: ["a", "b", "c", "d"] });
-  check("four features give four beats, none dropped (the simple arc would cap demos at three)", three.beats.length === 4);
+  const four = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "literal", features: ["a", "b", "c", "d"] });
+  check("four features give four beats, none dropped (the simple arc would cap demos at three)", four.beats.length === 4);
 
   const emptyMessage = (input) => {
     try { runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "literal", ...input }); } catch (e) { return String(e.message); }
@@ -83,6 +83,43 @@ console.log("\n== runPlanBeats with the literal arc ==");
   };
   check("literal with an empty features list throws a clear message", /literal arc needs at least one feature/.test(emptyMessage({ features: [] })));
   check("literal with no features at all throws the same message", /literal arc needs at least one feature/.test(emptyMessage({})));
+}
+
+console.log("\n== beat ids stay unique when feature names collide ==");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-plan-beats-ids-"));
+  const ids = (input) => runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, ...input }).beats.map((b) => b.id);
+  const unique = (list) => new Set(list).size === list.length;
+
+  // Two features that slug to the same id: "Search" and "search" lowercase to the same text.
+  const colliding = ["Search", "search"];
+  check("simple: the first colliding demo keeps demo-search, the second becomes demo-search-2", ids({ arc: "simple", features: colliding }).join(",") === "hook,problem,demo-search,demo-search-2,differentiator,cta");
+  check("packed: the same suffixing", ids({ arc: "packed", features: colliding }).join(",") === "hook,demo-search,demo-search-2,differentiator,cta");
+  check("tutorial: step-search then step-search-2", ids({ arc: "tutorial", features: colliding }).join(",") === "hook,prereqs,install,setup,step-search,step-search-2,result,recap,cta");
+  check("literal: demo-search then demo-search-2", ids({ arc: "literal", features: colliding }).join(",") === "demo-search,demo-search-2");
+  check("every arc returns unique ids for colliding features", ["simple", "packed", "tutorial", "literal"].every((arc) => unique(ids({ arc, features: colliding }))));
+
+  // slug() cuts at 24 characters, so two long names that differ only at the end collide too.
+  const long = ["Export report as PDF with watermark", "Export report as PDF with signature"];
+  check("names that differ only past the 24-character slug cut get distinct ids", ids({ arc: "literal", features: long }).join(",") === "demo-export-report-as-pdf-wit,demo-export-report-as-pdf-wit-2");
+
+  check("three colliding names count up in order: plain, -2, -3", ids({ arc: "literal", features: ["a", "A", "a"] }).join(",") === "demo-a,demo-a-2,demo-a-3");
+  check("a suffixed id never lands on an id another feature already owns", (() => {
+    const got = ids({ arc: "literal", features: ["a", "a", "a-2"] });
+    return unique(got) && got[0] === "demo-a" && got[2] === "demo-a-2";
+  })());
+
+  const plain = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "simple", features: colliding });
+  const apart = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "simple", features: ["Search", "Share"] });
+  check("only the id changes: timing, methods, purposes and budgets match a plan with distinct features", plain.beats.every((b, i) => b.start === apart.beats[i].start && b.duration === apart.beats[i].duration && b.captureMethod === apart.beats[i].captureMethod && JSON.stringify(b.wordBudget) === JSON.stringify(apart.beats[i].wordBudget)));
+
+  // Input that never collided must keep exactly the ids it always had.
+  check("simple ids without a collision are unchanged", ids({ arc: "simple", features: ["search", "share"] }).join(",") === "hook,problem,demo-search,demo-share,differentiator,cta");
+  check("packed ids without a collision are unchanged", ids({ arc: "packed", features: ["search", "share"] }).join(",") === "hook,demo-search,demo-share,differentiator,cta");
+  check("tutorial ids without a collision are unchanged", ids({ arc: "tutorial", features: ["search", "share"] }).join(",") === "hook,prereqs,install,setup,step-search,step-share,result,recap,cta");
+  check("literal ids without a collision are unchanged", ids({ arc: "literal", features: ["search", "share"] }).join(",") === "demo-search,demo-share");
+  check("the default arc with no features still plans demo-feature", ids({}).join(",") === "hook,problem,demo-feature,differentiator,cta");
+  check("a feature that slugs to nothing keeps its positional id", ids({ arc: "literal", features: ["!!!", "???"] }).join(",") === "demo-1,demo-2");
 }
 
 finish();

@@ -188,10 +188,32 @@ console.log("\n== literal level ==");
   check("a draft with visuals throws at literal", withVisuals.error instanceof Error);
   check("...saying visual overrides are not allowed at the literal level", /visual overrides are not allowed at the literal level/.test(withVisuals.error.message));
   const emptyVisuals = call(root, { ...brief, creativeLevel: "literal", draft: { ...draft, visuals: {} } });
-  check("an empty visuals object overrides nothing, so it is accepted at literal", emptyVisuals.error === undefined && emptyVisuals.result.validation.valid === true);
+  check("a draft that carries visuals at all throws at literal, even an empty object", emptyVisuals.error instanceof Error && /visual overrides are not allowed at the literal level/.test(emptyVisuals.error.message));
+  const midDraft = draftFrom(call(root, { ...brief, creativeLevel: "mid" }).result);
+  const emptyAtMid = call(root, { ...brief, creativeLevel: "mid", draft: { ...midDraft, visuals: {} } });
+  check("...while an empty visuals object is harmless at mid, where overrides are allowed", emptyAtMid.error === undefined && emptyAtMid.result.validation.valid === true);
 
   const noFeatures = call(root, { targetDurationSeconds: 60, creativeLevel: "literal" });
   check("literal with no features fails with plan_beats' clear message", noFeatures.error instanceof Error && /literal arc needs at least one feature/.test(noFeatures.error.message));
+}
+
+console.log("\n== feature names that collide ==");
+{
+  // slug() cuts at 24 characters, so these two slug to the same text.
+  const long = ["Export report as PDF with watermark", "Export report as PDF with signature"];
+  const first = "demo-export-report-as-pdf-wit";
+  const second = `${first}-2`;
+
+  const skeleton = call(root, { targetDurationSeconds: 60, creativeLevel: "literal", features: long });
+  check("two long feature names at literal give a skeleton with two distinct beat ids", skeleton.error === undefined && skeleton.result.beatsJson.beats.map((b) => b.id).join(",") === `${first},${second}`);
+  const draft = { narration: { [first]: words(skeleton.result.plan.beats[0].wordBudget.suggested), [second]: words(skeleton.result.plan.beats[1].wordBudget.suggested) } };
+  const validated = call(root, { targetDurationSeconds: 60, creativeLevel: "literal", features: long, draft });
+  check("a draft keyed by those two ids is valid", validated.error === undefined && validated.result?.validation.valid === true);
+  check("each beat gets its own line, not one line applied to both", validated.result?.beatsJson.beats[0].vo === draft.narration[first] && validated.result?.beatsJson.beats[1].vo === draft.narration[second] && validated.result?.validation.errors.every((e) => !/duplicate beat id/.test(e)));
+
+  const sameSlug = call(root, { targetDurationSeconds: 60, features: ["Search", "search"] });
+  check("Search and search at mid also get distinct ids", sameSlug.result.beatsJson.beats.map((b) => b.id).includes("demo-search") && sameSlug.result.beatsJson.beats.map((b) => b.id).includes("demo-search-2"));
+  check("the second id is accepted in a draft (it is not an unknown id)", call(root, { targetDurationSeconds: 60, features: ["Search", "search"], draft: draftFrom(sameSlug.result) }).result.validation.valid === true);
 }
 
 console.log("\n== the tool never writes ==");

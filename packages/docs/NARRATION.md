@@ -68,55 +68,15 @@ band is a rougher guide.
 `compositionId`, and then `validate_scenes` with `render: true` on the same composition. Each of the three
 passed with no errors, 3 of 3 beats measured and no `render-skipped` finding (a pass with skipped render checks
 is not a pass). The only findings were three `text-size` warnings per language, from the browser frame's
-address pill. Tool versions: `@openvidstudio/mcp-server` 2.0.0, edge-tts 7.3.1, Remotion 4.0.543.
+address pill. Tool versions: `@openvidstudio/mcp-server` 2.0.0, edge-tts 7.3.1, Remotion 4.0.543. All three cuts
+share one scene tree, so the Spanish and German passes measured the same scene tree as the Hindi one, with
+Hindi captions; see "What the cut per language does not do" under
+[Languages in a render](#languages-in-a-render).
 
 - Hindi: `hi-IN-MadhurNeural`, the base language of the test project (clips at `public/audio/vo/<beatId>.mp3`).
   Passed `validate_scenes` on `PolyDemo`.
 - Spanish: `es-ES-AlvaroNeural`, clips at `public/audio/vo/es/`. Passed `validate_scenes` on `PolyDemoEs`.
 - German: `de-DE-ChristophNeural`, clips at `public/audio/vo/de/`. Passed `validate_scenes` on `PolyDemoDe`.
-
-### Languages in a render
-
-One `beats.json` carries the base language in `vo` and the others in `voTranslations`. `generate_narration`
-takes `languages`, `baseLanguage` and `voices` (name the voice from the table for every language, or the
-English default reads the line). `stitch_composition` takes the same `languages` and `baseLanguage` and writes
-one composition per language over a single scene tree: `<Name>Demo` for the base language and
-`<Name>Demo<Lang>` for each other one (`PolyDemoEs`). `render_video` and `validate_scenes` pick the cut with
-`compositionId`.
-
-What the cut per language does not do, found while verifying the three languages above:
-
-- **Captions do not follow the language.** A caption is written into the scene file by `scaffold_scene` from
-  the base `vo`, and every language composition shares those scenes, so the Spanish cut of a Hindi project
-  shows the Hindi caption over Spanish narration. Only the audio changes per language. For captions in each
-  language, scaffold the scenes of a project whose base language is that language.
-- **`fit_beats` sizes against the base language only.** Its word count comes from `vo`, so the beat lengths
-  fit the base language's clips. The other languages share those lengths: check each language's `tempo` and
-  `needsAttention` in `generate_narration`'s per-language report, and lengthen a beat or shorten a line for any
-  that overrun. In the test project the Spanish and German clips fitted a Hindi-sized beat except one
-  Spanish line that ran 0.04 s past it.
-- **`validate_scenes` looks for narration at the base path only** (`public/audio/vo/<beatId>.mp3`), so a
-  missing `es` clip is reported by `stitch_composition` (`voBeatsMissing` per language), not by `validate_scenes`.
-
-### Captions in each script
-
-`Caption` draws with the stack `Inter, -apple-system, Segoe UI, Roboto, sans-serif`, and the template bundles
-the Latin subset of Inter only. Checked by rendering stills and asking Chrome which font drew each run
-(2026-11-25, Windows 11):
-
-| Script | Result |
-|---|---|
-| Spanish (`ñ á é í ó ú ü ¡ ¿`) | Correct. All 73 glyphs of the test line come from the bundled Inter. |
-| German (`ä ö ü ß Ä Ö`) | Correct, including a 34 letter compound word in a 640 px column. All 79 glyphs from Inter. |
-| Hindi (Devanagari) | Correct: conjuncts (`ज्ञ क्ष त्र ध्व द्यु श्र द्ध`), reph (`ऊर्जा`), nukta (`ज़`), matras and the danda all shaped, no empty boxes. Drawn by a **system** font (Nirmala UI on Windows), not a bundled one. |
-
-Hindi captions therefore depend on the machine having a Devanagari font. Windows and macOS ship one. A Linux
-machine needs one installed (for example the `fonts-noto-core` package) before a render, or the caption shows
-empty boxes. That case was not rendered here. Spanish and German need nothing beyond the bundled Inter.
-
-`captionLine` picks the first whole sentence of a long `vo` as the caption, and a sentence ends at `.`, `!`,
-`?`, or the Devanagari danda (`।`) or double danda (`॥`), so a long Hindi line is cut at the end of a sentence
-and not partway through the next one.
 
 Measured 2026-11-25 with edge-tts 7.3.1, on 12 parallel narration-style sentences of 10 to 30 words
 (`packages/mcp-server/scripts/fixtures/pace-corpus.json`), one synthesis per sentence at the voice's
@@ -162,6 +122,54 @@ the base `vo` and where the clips go, and without `voices` the edge-tts voice is
 `{ "hi": "hi-IN-MadhurNeural" }`; the band is measured for that voice and another voice may read faster or
 slower. If you choose another voice, `fit_beats` sizes the beats from its real clips, which is what to trust
 over the table.
+
+## Languages in a render
+
+One `beats.json` carries the base language in `vo` and the others in `voTranslations`. `generate_narration`
+takes `languages`, `baseLanguage` and `voices` (name the voice from the table for every language, or the
+English default reads the line). `stitch_composition` takes the same `languages` and `baseLanguage` and writes
+one composition per language over a single scene tree: `<Name>Demo` for the base language and
+`<Name>Demo<Lang>` for each other one (`PolyDemoEs`). `render_video` and `validate_scenes` pick the cut with
+`compositionId`.
+
+What the cut per language does not do, found while verifying the three languages in the table above:
+
+- **Captions do not follow the language.** A caption is written into the scene file by `scaffold_scene` from
+  the base `vo`, and every language composition shares those scenes, so the Spanish cut of a Hindi project
+  shows the Hindi caption over Spanish narration. Only the audio changes per language. For captions in each
+  language, scaffold the scenes of a project whose base language is that language. It also means the Spanish
+  and German `validate_scenes` passes in the table measured the same scene tree as the Hindi one, with Hindi
+  captions, over Spanish and German audio.
+- **`fit_beats` sizes against the base language only.** Its word count comes from `vo`, so the beat lengths
+  fit the base language's clips. The other languages share those lengths: check each language's `tempo` and
+  `needsAttention` in `generate_narration`'s per-language report, and lengthen a beat or shorten a line for any
+  that overrun. In the test project the Spanish and German clips fitted a Hindi-sized beat except one
+  Spanish line that ran 0.04 s past it.
+- **`validate_scenes` looks for narration at the base path only** (`public/audio/vo/<beatId>.mp3`), so a
+  missing `es` clip is reported by `stitch_composition` (`voBeatsMissing` per language), not by `validate_scenes`.
+
+### Captions in each script
+
+`Caption` draws with the stack `Inter, -apple-system, Segoe UI, Roboto, sans-serif`, and the template bundles
+the Latin subset of Inter only. Checked by rendering stills and asking Chrome which font drew each run
+(2026-11-25, Windows 11). The Spanish and German verdicts come from a separate six-beat project in which every
+caption was written in its own language, not from the Spanish and German cuts of the Hindi-base project (those
+cuts show the Hindi caption, see above):
+
+| Script | Result |
+|---|---|
+| Spanish (`ñ á é í ó ú ü ¡ ¿`) | Correct. All 73 glyphs of the test line come from the bundled Inter. |
+| German (`ä ö ü ß Ä Ö`) | Correct, including a 34 letter compound word in a 640 px column. All 79 glyphs from Inter. |
+| Hindi (Devanagari) | Correct: conjuncts (`ज्ञ क्ष त्र ध्व द्यु श्र द्ध`), reph (`ऊर्जा`), nukta (`ज़`), matras and the danda all shaped, no empty boxes. Drawn by a **system** font (Nirmala UI on Windows), not a bundled one. |
+
+Hindi captions therefore depend on the machine having a Devanagari font. Windows ships one (Nirmala UI, the
+one used here); macOS probably does too, but that was not checked. A Linux machine needs one installed (for
+example the `fonts-noto-core` package) before a render, or the caption shows empty boxes. That case was not
+rendered here. Spanish and German need nothing beyond the bundled Inter.
+
+`captionLine` picks the first whole sentence of a long `vo` as the caption, and a sentence ends at `.`, `!`,
+`?`, or the Devanagari danda (`।`) or double danda (`॥`), so a long Hindi line is cut at the end of a sentence
+and not partway through the next one.
 
 ## Engines
 
@@ -260,12 +268,17 @@ quoted, not measured here.
 
 **Rendered end to end.** On 2026-11-25 a 3-beat English project of 43 words took its narration from
 `generate_narration` with `engine: "omnivoice"` (the venv's `Scripts` directory on PATH, `HF_HUB_OFFLINE=1`).
-Three lines, 13.2 seconds of speech, took 730 seconds for the whole call, with the machine also busy building and
-testing, so that is a slower factor than the table above. `fit_beats` then resized the beats from the three
-clips (501 to 455 frames), and `stitch_composition`, `render_video` (draft) and `validate_scenes` with
-`render: true` ran on the result: 3 of 3 beats measured, no `render-skipped` finding, no errors. The mp4 is 15.2
-seconds with an AAC track. Without `refAudio` or `instruct` each line gets a voice of the model's choosing, and
-the speakers were not compared by ear.
+Three lines, 13.2 seconds of speech, took 730 seconds for the whole call, about 55 times real time. The machine
+was also busy building and testing, and the table above measured 38 to 39 times for the whole command on an
+idle machine. `fit_beats` then resized the beats from the three clips (501 to 455 frames), and
+`stitch_composition`, `render_video` (draft) and `validate_scenes` with `render: true` ran on the result: 3 of 3
+beats measured, no `render-skipped` finding, no errors. The mp4 is 15.2 seconds with an AAC track.
+
+The documented flow (generate, `fit_beats`, then regenerate with `overwrite: true`) was not completed for
+omnivoice here: regenerating would have cost another 12 minutes, so the clips were not re-synthesized after
+`fit_beats`. They sit at tempo 0.9 to 0.92 and still fit the shorter beats (clips of 4.53, 4.89 and 5.11 s in
+beats of 4.70, 4.93 and 5.53 s). Without `refAudio` or `instruct` each line gets a voice of the model's
+choosing, and the speakers were not compared by ear.
 
 **Choosing the voice.** With no `refAudio` and no `instruct`, the model picks a voice for each call and
 sampling is random by default, so lines can sound like different speakers. Set one of these for a

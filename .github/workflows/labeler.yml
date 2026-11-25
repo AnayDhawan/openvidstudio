@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   label:
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
       - uses: actions/labeler@v7

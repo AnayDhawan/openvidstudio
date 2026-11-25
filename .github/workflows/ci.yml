@@ -8,7 +8,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # Every job has a timeout so a hang costs minutes, not the 6 hour default. Each is about twice
+  # the slowest measured run: test 0.5 to 1.6 min, offline-render 2.2 to 15.7 min (Windows is
+  # the slow one), plugin-validate 0.2 min. scripts/tests/ci-timeouts.test.mjs keeps it true.
   test:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -42,6 +46,7 @@ jobs:
       # (renders, browsers, ffmpeg, Python) run locally through `pnpm --filter @openvidstudio/mcp-server test`.
       - run: node packages/mcp-server/scripts/manual-test.mjs capture-argv-spaces plan-beats stitch-music tool-count release-version plan-shots claude-plugin plugin-launcher install-cli generate-script language-pace
   offline-render:
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -74,6 +79,7 @@ jobs:
       # instead of surfacing as a support issue from someone's offline machine.
       - run: node scripts/offline-render-check.mjs
   plugin-validate:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

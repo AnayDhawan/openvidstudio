@@ -54,13 +54,14 @@ lists any line that cannot fit. Use `dryRun: true` to see the lengths first. The
 | `edge-tts` (default; `preflight` synthesizes one word to check it, because Microsoft refused 7.2.8 with a 403 in October 2026 and `pip install -U edge-tts` fixes it) | good | about a minute for five minutes of speech | no, sends text to Microsoft |
 | `say` (macOS) | fair | instant | yes |
 | `espeak` | poor | instant | yes |
-| `omnivoice` ([below](#omnivoice-local)) | not rated here; clones a voice, 600+ languages | about 35 times real time on an 8-core CPU, measured | yes |
+| `omnivoice` ([below](#omnivoice-local)) | not rated here; clones a voice, 600+ languages | slow on a CPU: measured at about 35 times real time on one 20-word line, 8-core CPU | yes |
 
 `edge-tts` needs `pip install edge-tts`. When a line comes back with "no usable audio", the warning ends with the last error line edge-tts printed.
 
-**If the text must not leave the machine**, use `omnivoice`, or `say` on macOS.
-OmniVoice on a CPU is slow (measured below: about 35 times real time, so about three
-hours of compute for five minutes of speech), so it suits an overnight run or a GPU, not a loop.
+**If the text must not leave the machine**, use `omnivoice` (and pass `engine: "omnivoice"`
+to `generate_narration`, see below), or `say` on macOS. OmniVoice on a CPU is slow: one
+20-word line took about 35 times its audio length to generate on the machine described
+below, so budget for long runs or use a GPU.
 
 **If you want it to sound genuinely good**, record it yourself. A real voice beats
 every engine here, and for a launch video it is worth the hour.
@@ -70,17 +71,24 @@ every engine here, and for a launch video it is worth the hour.
 `omnivoice` is a local neural model. The narration text never leaves the machine, it covers 600+
 languages with no per-language voice to pick, and it can clone one voice across every language of a
 video. Pass `engine: "omnivoice"` to `generate_narration`; the engine input is the only switch.
+`generate_narration` does not read `narration.engine` from `openvidstudio.config.json`, so without
+the input it uses `edge-tts` and sends the text to Microsoft, whatever the config says.
 
-**Requirements.** Python 3.10 or newer (the package's `requires-python`), PyTorch, and about 3 GB of
-disk for the model. Install into a fresh virtual environment:
+**Requirements.** Python 3.10 or newer (the package's `requires-python`; omnivoice also needs torch
+2.4 or newer), PyTorch, and about 3 GB of disk for the model. Install into a fresh virtual environment:
 
 ```
-pip install torch==2.8.0 torchaudio==2.8.0
+pip install torch torchaudio
 pip install omnivoice
 ```
 
-With an NVIDIA GPU, install the CUDA build of torch from pytorch.org in place of the first line. The
-OmniVoice README lists the Apple Silicon, Intel Arc and `uv` routes.
+Add `--index-url https://download.pytorch.org/whl/cpu` to the first line for the CPU-only build. The
+measured run below used a CPU-only build (torch 2.13.0+cpu) on Python 3.14.2.
+
+The OmniVoice README has no CPU section. Its pinned lines are two other options: Apple Silicon is
+`pip install torch==2.8.0 torchaudio==2.8.0`, and an NVIDIA GPU is
+`pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 --extra-index-url https://download.pytorch.org/whl/cu128`.
+It also lists the Intel Arc and `uv` routes.
 
 **PATH.** pip puts the `omnivoice-infer` launcher in the environment's `Scripts` directory on Windows
 and `bin` elsewhere. If you do not activate the environment, put that directory on PATH before the MCP
@@ -97,32 +105,42 @@ export PATH="/path/to/omnivoice/.venv/bin:$PATH"
 With no launcher on PATH, `generate_narration` runs `python -m omnivoice.cli.infer`, then `python3`, so
 an interpreter that has omnivoice installed also works.
 
-**Check it.** `preflight` with `engine: "omnivoice"` (or `narration.engine` set to `omnivoice` in
-`openvidstudio.config.json`) adds an `omnivoice` check. It passes when `omnivoice-infer` is on PATH or a
-python can import `omnivoice`, and otherwise fails without blocking and prints the install steps above.
-It does not load the model. With any other engine no `omnivoice` check runs.
+**Check it.** `preflight` with `engine: "omnivoice"` adds an `omnivoice` check. It passes when
+`omnivoice-infer` is on PATH or a python can import `omnivoice`, and otherwise fails without blocking
+and prints the install steps above. It does not load the model. With any other engine no `omnivoice`
+check runs. If you leave the input out and only `narration.engine` in the config says `omnivoice`,
+`preflight` still runs the check but adds a warning to its detail, because `generate_narration` does not
+read that setting and needs `engine: "omnivoice"` passed to it as well.
 
-**First run.** The first synthesis downloads `k2-fsa/OmniVoice` from Hugging Face, so it needs a
-network connection once. The cache (`~/.cache/huggingface/hub/models--k2-fsa--OmniVoice`) was
-3,267,472,413 bytes (3.27 GB) on the machine below. After that the engine ran with
-`HF_HUB_OFFLINE=1`.
+**First run.** The first synthesis downloads `k2-fsa/OmniVoice` from Hugging Face. The cache
+(`~/.cache/huggingface/hub/models--k2-fsa--OmniVoice`) was 3,267,472,413 bytes (3.27 GB) on the
+machine below. Later runs may still check Hugging Face for a newer version unless `HF_HUB_OFFLINE=1` is
+set; the measured runs below set it, and loaded the cached model with no network.
 
-**Speed on a CPU, measured.** One 20-word English line ("Today we will look at how a falling object
-speeds up as it drops toward the ground under gravity alone.") through `omnivoice-infer --model
-k2-fsa/OmniVoice --text ... --output ...`, with the environment's `Scripts` directory on PATH and
-nothing else heavy running. The machine: AMD Ryzen AI 7 350, 8 cores and 16 threads, no GPU, Windows 11,
-Python 3.14.2, torch 2.13.0+cpu (the CPU build, 8 torch threads), omnivoice 0.2.1.
+**Speed on a CPU, measured on one 20-word line.** The command, in PowerShell, with the environment's
+`Scripts` directory on PATH and nothing else heavy running:
+
+```
+$env:HF_HUB_OFFLINE = "1"
+$env:PYTHONUTF8 = "1"
+omnivoice-infer --model k2-fsa/OmniVoice --text "Today we will look at how a falling object speeds up as it drops toward the ground under gravity alone." --output out.wav
+```
+
+The machine: AMD Ryzen AI 7 350, 8 cores and 16 threads, no GPU, Windows 11, Python 3.14.2,
+torch 2.13.0+cpu (the CPU build, 8 torch threads), omnivoice 0.2.1.
 
 | Run | Whole command | Start-up and model load | Generation | Audio | Real-time factor (generation) | Real-time factor (whole command) |
 |---|---|---|---|---|---|---|
 | 1 | 223.79 s | 21.04 s | 202.75 s | 5.86 s | 34.60x | 38.19x |
 | 2, straight after | 219.71 s | 16.32 s | 203.39 s | 5.64 s | 36.06x | 38.95x |
 
-The two clips differ in length because sampling is random. A real-time factor of 35x means one second
-of speech takes 35 seconds to make, so a five minute video is about three hours of generation, plus
-16 to 21 seconds of start-up for every line, since each line is its own process. Treat it as an
-overnight job. Upstream's README quotes a real-time factor as low as 0.025 (40 times faster than real time) on a
-GPU; that figure is quoted, not measured here.
+The two clips differ in length because sampling is random. Only this one line length was measured, twice.
+Both runs spent about 203 s generating for 5.6 to 5.9 s of audio. Whether generation time scales with
+the length of the audio, or has a large fixed part, was not tested, so there is no figure here for a
+whole video: a per-video estimate would assume it scales, and that assumption is untested. Each line is
+its own process, and start-up and model load took 16 to 21 s of the whole command. Upstream's README
+quotes a real-time factor as low as 0.025 (40 times faster than real time) on a GPU; that figure is
+quoted, not measured here.
 
 **Choosing the voice.** With no `refAudio` and no `instruct`, the model picks a voice for each call and
 sampling is random by default, so lines can sound like different speakers. Set one of these for a

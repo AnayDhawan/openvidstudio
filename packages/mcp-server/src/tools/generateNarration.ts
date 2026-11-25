@@ -217,6 +217,18 @@ export function omnivoiceWavPath(out: string): string {
   return `${out}.wav`;
 }
 
+/**
+ * Moves the .wav omnivoice-infer wrote onto the clip path the rest of the pipeline reads (fit_beats and the
+ * ffmpeg fit step open <beatId>.raw, not the .wav). Returns false when there is no .wav, which is what a failed
+ * run leaves behind.
+ */
+export function claimOmnivoiceWav(out: string): boolean {
+  const wav = omnivoiceWavPath(out);
+  if (!fs.existsSync(wav)) return false;
+  fs.renameSync(wav, out);
+  return true;
+}
+
 /** Runs the first of omnivoiceCommands that can be started at all; a command that starts and fails is the answer. */
 function runOmnivoice(args: string[]): SpawnSyncReturns<string> {
   const [first, ...rest] = omnivoiceCommands(args);
@@ -354,10 +366,9 @@ function synthesize(
       // Zero-shot across 600+ languages, so the same call synthesizes every language with
       // no per-language voice to pick. With ref_audio it is the same cloned voice in all
       // of them, which is what makes a set of translations read as one narrator.
-      const wav = omnivoiceWavPath(out);
-      fs.rmSync(wav, { force: true });
+      fs.rmSync(omnivoiceWavPath(out), { force: true });
       r = runOmnivoice(omnivoiceArgs({ ...omni, voice, text, out }));
-      if (!r.error && fs.existsSync(wav)) fs.renameSync(wav, out);
+      if (!r.error) claimOmnivoiceWav(out);
     } else if (engine === "say") {
       r = spawnSync("say", ["-v", voice, "-o", out, "--data-format=LEF32@22050", text], {
         encoding: "utf8",

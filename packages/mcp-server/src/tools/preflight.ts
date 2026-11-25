@@ -155,14 +155,30 @@ async function runBenchmark(projectRoot: string, browserExecutable?: string): Pr
 }
 
 /**
- * What to run when OmniVoice is missing. The torch line is the README's CPU and Apple Silicon one; the
- * Python floor is pyproject.toml's requires-python. The model is fetched from Hugging Face on first use.
+ * What to run when OmniVoice is missing. The Python floor is pyproject.toml's requires-python (omnivoice also
+ * needs torch 2.4 or newer). The upstream README has no CPU section: its pinned torch==2.8.0 line is the Apple
+ * Silicon option and its +cu128 line with the extra index is the NVIDIA one. The CPU run measured for NARRATION.md
+ * used unpinned torch (2.13.0+cpu) on Python 3.14.2, so the plain install leads and the pinned lines are labelled.
+ * The model is fetched from Hugging Face on first use.
  */
 export const OMNIVOICE_INSTALL_FIX =
-  "Needs Python 3.10 or newer. In a fresh virtual environment run: pip install torch==2.8.0 torchaudio==2.8.0 " +
-  "(with an NVIDIA GPU, install the CUDA build from pytorch.org instead), then pip install omnivoice. " +
+  "Needs Python 3.10 or newer. In a fresh virtual environment run: pip install torch torchaudio " +
+  "(add --index-url https://download.pytorch.org/whl/cpu for the CPU-only build; the CPU run measured for these docs " +
+  "used torch 2.13.0+cpu on Python 3.14.2), then pip install omnivoice. " +
+  "Upstream's pinned options: on Apple Silicon, pip install torch==2.8.0 torchaudio==2.8.0; with an NVIDIA GPU, " +
+  "pip install torch==2.8.0+cu128 torchaudio==2.8.0+cu128 --extra-index-url https://download.pytorch.org/whl/cu128. " +
   "Put the environment's Scripts directory (Windows) or bin directory (macOS, Linux) on PATH so omnivoice-infer resolves. " +
-  "The first run downloads the k2-fsa/OmniVoice model (about 3 GB), so it needs a network connection once.";
+  "The first run downloads the k2-fsa/OmniVoice model (about 3 GB); later runs may still check Hugging Face for a " +
+  "newer version unless HF_HUB_OFFLINE=1 is set.";
+
+/**
+ * generate_narration takes its engine from its own input and never reads narration.engine, so a check that
+ * passed because of the config alone would let the text go to the default engine's service while the user
+ * believes it stays on the machine.
+ */
+const OMNIVOICE_CONFIG_ONLY_WARNING =
+  ' Note: narration.engine is "omnivoice" in openvidstudio.config.json, but generate_narration does not read the ' +
+  'config. Call it with engine: "omnivoice", or it uses edge-tts and sends the text to Microsoft.';
 
 export interface OmnivoiceProbe {
   ok: boolean;
@@ -383,7 +399,7 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
     checks.push({
       name: "omnivoice",
       ok: omnivoice.ok,
-      detail: omnivoice.detail,
+      detail: input.engine === undefined ? `${omnivoice.detail}.${OMNIVOICE_CONFIG_ONLY_WARNING}` : omnivoice.detail,
       fix: omnivoice.ok ? undefined : OMNIVOICE_INSTALL_FIX,
       blocking: false,
     });
@@ -455,10 +471,12 @@ export function registerPreflight(server: McpServer): void {
         "steps later, often after a long render has already started. When the narration engine is edge-tts, it " +
         "also speaks one short word to a temp file (the edge-tts check), because Microsoft refuses some client " +
         "versions with a 403 and the command existing proves nothing; a failure shows the installed version, " +
-        "the error line and pip install -U edge-tts. Pass engine: \"omnivoice\" (or set narration.engine in the " +
-        "config) to check for the local OmniVoice engine instead: it looks for omnivoice-infer on PATH, then for " +
-        "a python that can import omnivoice, and adds an omnivoice check whose fix is the install command and " +
-        "the Python requirement (the first run downloads the model). Narration is reported as non blocking, " +
+        "the error line and pip install -U edge-tts. Pass engine: \"omnivoice\" to check for the local OmniVoice " +
+        "engine instead: it looks for omnivoice-infer on PATH, then for a python that can import omnivoice, and " +
+        "adds an omnivoice check whose fix is the install command and the Python requirement (the first run " +
+        "downloads the model). Without the input, narration.engine in the config picks the engine for these " +
+        "checks, but generate_narration does not read that setting: it must be called with engine: \"omnivoice\" " +
+        "too, or it uses edge-tts and sends the text to Microsoft. Narration is reported as non blocking, " +
         "since a silent video still renders. Pass benchmark: true to also render ~60 frames of a fixed " +
         "benchmark composition (init_project seeds it, so this works even before any real video is planned) " +
         "and report real frames/sec plus CPU count in benchmarkResult -- off by default since it costs a " +

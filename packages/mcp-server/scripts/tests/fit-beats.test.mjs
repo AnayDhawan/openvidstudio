@@ -154,7 +154,7 @@ if (spawnSync("ffmpeg", ["-version"]).status !== 0 || spawnSync("ffprobe", ["-ve
   fs.mkdirSync(wavRawDir, { recursive: true });
   spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "sine=frequency=300:duration=4.1", "-ar", "24000", "-f", "wav", path.join(wavRawDir, "hook.raw"), "-y"]);
   const wavFit = runFitBeats({ projectRoot: wavProject.root, videoName: "lesson", dryRun: true }).beats[0];
-  check("a WAV clip kept as .raw is measured exactly like an MP3 one", wavFit.source === "raw-clip" && Math.abs(wavFit.after - by.hook.after) <= 1 &&Math.abs(wavFit.spokenSeconds - 4.1) < 0.1);
+  check("a WAV clip kept as .raw is measured exactly like an MP3 one", wavFit.source === "raw-clip" && Math.abs(wavFit.after - by.hook.after) <= 1 && Math.abs(wavFit.spokenSeconds - 4.1) < 0.1);
   void file;
 }
 

@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { require, distDir, check, skip, finish } from "./_harness.mjs";
 
 const { loadConfig, writeConfig } = require(path.join(distDir, "config.js"));
-const { omnivoiceCommands, omnivoiceArgs, omnivoiceWavPath } =require(path.join(distDir, "tools", "generateNarration.js"));
+const { omnivoiceCommands, omnivoiceArgs, omnivoiceWavPath, claimOmnivoiceWav } = require(path.join(distDir, "tools", "generateNarration.js"));
 
 const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-fake-omni-"));
 if (process.platform === "win32") {
@@ -86,6 +86,12 @@ console.log("\n== preflight: engine omnivoice finds omnivoice-infer on PATH ==")
   check("the narration check looks for omnivoice-infer, not a binary called omnivoice, and passes", narration?.ok === true && /omnivoice/.test(narration?.detail ?? ""));
   check("the narration check passes with no edge-tts fix text", narration?.fix === undefined);
   check("config narration.engine omnivoice adds the check with no engine input", byName(s.config, "omnivoice")?.ok === true);
+  // generate_narration never reads narration.engine, so a green check from the config alone would let the text
+  // go to Microsoft's service while the user believes it stays local.
+  const fromConfig = byName(s.config, "omnivoice")?.detail ?? "";
+  check("an engine that came from the config says generate_narration does not read it", /generate_narration does not read/.test(fromConfig) && fromConfig.includes('engine: "omnivoice"'));
+  check("and says what happens otherwise", /edge-tts/.test(fromConfig) && /Microsoft/.test(fromConfig));
+  check("no such warning when the engine was passed as input", !/does not read/.test(omni?.detail ?? ""));
   check("the engine input overrides the config engine (edge-tts input, omnivoice config: no omnivoice check)", byName(s["input-over-config"], "omnivoice") === undefined);
   check("and the narration check then follows the input engine", /edge-tts/.test(byName(s["input-over-config"], "narration")?.detail ?? ""));
   check("no omnivoice check for the default engine, even with omnivoice-infer installed", byName(s.default, "omnivoice") === undefined);
@@ -105,6 +111,12 @@ if (onPath("omnivoice-infer") || pythonImportsOmnivoice()) {
   check("the fix has the install command", /pip install omnivoice/.test(omni?.fix ?? ""));
   check("the fix names the Python requirement", /3\.10/.test(omni?.fix ?? ""));
   check("the fix says the first run downloads the model", /first run/i.test(omni?.fix ?? "") && /download/i.test(omni?.fix ?? ""));
+  // Upstream's pinned torch lines are its Apple Silicon (torch==2.8.0) and NVIDIA (+cu128) options, not a CPU route,
+  // and the measured CPU machine runs torch 2.13.0 on Python 3.14, so the fix leads with the unpinned install.
+  const fix = omni?.fix ?? "";
+  check("the fix leads with an unpinned torch install", fix.includes("pip install torch torchaudio") && fix.indexOf("pip install torch torchaudio") < fix.indexOf("torch==2.8.0"));
+  check("the fix gives the CPU-only index", fix.includes("https://download.pytorch.org/whl/cpu"));
+  check("the pinned lines are labelled as upstream's Apple Silicon and NVIDIA options", /Apple Silicon/.test(fix) && /NVIDIA/.test(fix) && fix.includes("torch==2.8.0+cu128"));
   const narration = byName(s, "narration");
   check("the narration check fails too, and does not suggest edge-tts", narration?.ok === false && !/edge-tts/.test(`${narration?.detail} ${narration?.fix}`));
   check("the narration check is not blocking either", narration?.blocking === false);
@@ -136,6 +148,21 @@ console.log("\n== preflight and synthesis run OmniVoice the same way ==");
   check("the .wav sits next to the clip it becomes", path.dirname(omnivoiceWavPath(clip)) === path.dirname(clip));
   const cloned = omnivoiceArgs({ voice: "m", text: "t", out: "o.raw", refAudio: "ref.wav", refText: "ref line", instruct: "male" });
   check("a reference clip, its text and an instruction are passed through", cloned.join("|").includes("--ref_audio|ref.wav|--ref_text|ref line|--instruct|male"));
+}
+
+console.log("\n== the .wav omnivoice-infer writes becomes the clip the pipeline reads ==");
+{
+  // Without this move every omnivoice beat is missing: the CLI writes <clip>.wav, and fit_beats and the ffmpeg fit
+  // step read <clip> itself. No ffmpeg or Python needed, only files.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-omni-claim-"));
+  const clip = path.join(dir, "one.raw");
+  fs.writeFileSync(omnivoiceWavPath(clip), "RIFF-pretend-wav");
+  check("it reports that it moved a .wav", claimOmnivoiceWav(clip) === true);
+  check("the clip now has the wav's bytes", fs.existsSync(clip) && fs.readFileSync(clip, "utf8") === "RIFF-pretend-wav");
+  check("no .wav is left beside it", !fs.existsSync(omnivoiceWavPath(clip)));
+  const none = path.join(dir, "two.raw");
+  check("with no .wav (the CLI failed) it moves nothing and says so", claimOmnivoiceWav(none) === false && !fs.existsSync(none));
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 fs.rmSync(fakeBin, { recursive: true, force: true });

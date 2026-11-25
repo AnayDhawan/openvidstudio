@@ -14,7 +14,7 @@ import { chromium, type Page } from "playwright";
  * can't afford. Everything below is built on @remotion/bundler + @remotion/renderer's
  * public, documented SSR API (bundle -> selectComposition -> renderStill), pinned in this
  * package's package.json to the exact version templates/default's @remotion/cli uses
- * (4.0.534) so the bundler/renderer this package drives never drifts from the version the
+ * (4.0.543) so the bundler/renderer this package drives never drifts from the version the
  * scaffolded project's compositions were authored against.
  */
 
@@ -202,21 +202,30 @@ export async function serveBundleDirectory(
 }
 
 /**
- * Bundle-format version `@remotion/renderer` 4.0.534 requires (see its real
+ * Bundle-format version `@remotion/renderer` 4.0.543 requires (see its real
  * set-props-and-env.js: it throws "Incompatible site" when window.siteVersion does not
  * equal this). Not the npm package semver -- Remotion bumps this independently when the
  * generated bundle's contract changes. Only used here as a sanity check before trusting
  * the rest of the hand-rolled protocol below; since this package bundles the project
  * itself with the exact @remotion/bundler version pinned alongside @remotion/renderer,
  * this should always match in practice.
+ *
+ * It went from "11" (4.0.534) to "12" (4.0.543) because the renderer started toggling
+ * window.remotion_setMediaEnabled before every seek and sets two effect-backend globals
+ * (window.remotion_preferredEffectBackend, window.remotion_disableWebGpuEffects). The
+ * bridge does not need either: the bundle reads its initial media flags from
+ * window.remotion_videoEnabled / remotion_audioEnabled, which the init script below sets
+ * to the same values renderStill passes (video on, audio off), and the effect globals
+ * default to "auto" and off when undefined. Bump this only after re-reading the new
+ * version's dist files named in RemotionBridgeProtocolError, never to silence the guard.
  */
-const REQUIRED_SITE_VERSION = "11";
+const REQUIRED_SITE_VERSION = "12";
 
 export class RemotionBridgeProtocolError extends Error {
   constructor(message: string) {
     super(
       `${message} This project's render-based inspection relies on @remotion/renderer's internal bundle-seek ` +
-        "protocol (window.remotion_*), verified against the installed @remotion/renderer@4.0.534 source (make-page, set-props-and-env, select-composition byte-identical to 4.0.524; seek-to-frame differs only in how it awaits document.fonts.ready), not " +
+        "protocol (window.remotion_*), verified against the installed @remotion/renderer@4.0.543 source (make-page, set-props-and-env, select-composition and seek-to-frame differ from 4.0.534 only by effect-backend and media-enabled plumbing this bridge does not need), not " +
         "a published API. If @remotion/bundler or @remotion/renderer were upgraded in packages/mcp-server/" +
         "package.json, re-verify this protocol against the new version's dist/{make-page,seek-to-frame,set-" +
         "props-and-env}.js before trusting its output again.",
@@ -238,7 +247,7 @@ export class RemotionBridgeProtocolError extends Error {
  * my own page.evaluate() against a specific frame's real DOM." This instead reimplements
  * the minimum of the package's own internal mount/seek contract, verified by reading its
  * real installed source (not guessed from memory) at:
- *   node_modules/.pnpm/@remotion+renderer@4.0.534 (dot star) /node_modules/@remotion/renderer/dist/
+ *   node_modules/.pnpm/@remotion+renderer@4.0.543 (dot star) /node_modules/@remotion/renderer/dist/
  *     {set-props-and-env,make-page,seek-to-frame}.js
  * The sequence:
  *   1. before navigation, set the window globals the bundle's boot code reads

@@ -49,9 +49,9 @@ export interface RenderVideoInput {
    * Brand-lock gate escape hatch (default false): render_video refuses to run unless
    * src/brand.ts exists (written by extract_brand, even when most of its tokens stayed
    * at the openvidstudio default -- the point is that extract_brand ran and made an
-   * honest attempt, not that every token resolved). Pass true only when the project
-   * deliberately has no brand to extract, e.g. rendering a demo about openvidstudio
-   * itself. This is a fail-closed default, not a hard law: it exists so a video never
+   * honest attempt, not that every token resolved). Pass true when filming a live site
+   * or a product with no repo to read, or when the project deliberately has no brand to
+   * extract, e.g. rendering a demo about openvidstudio itself. This is a fail-closed default, not a hard law: it exists so a video never
    * ships wearing openvidstudio's own navy/Inter look by accident, the single loudest
    * "this looks like a template" signal (see extractBrand.ts).
    */
@@ -551,8 +551,8 @@ export function registerRenderVideo(server: McpServer): void {
         "is not a TTY and a piped render otherwise writes an empty log for its entire run, leaving no way " +
         "to tell progress from a hang. BRAND-LOCK GATE: refuses to run unless src/brand.ts exists (written " +
         "by extract_brand), so a video never ships wearing openvidstudio's own default look by accident. " +
-        "Run extract_brand against the repo being filmed first; pass skipBrandLock: true only when the " +
-        "project deliberately has no brand to extract. Returns the render's captured stdout/stderr, how " +
+        "Run extract_brand against the repo being filmed first; pass skipBrandLock: true when you are filming a " +
+        "live site or a product with no repo to read, or when the project deliberately has no brand to extract. Returns the render's captured stdout/stderr, how " +
         "long it took, and brandLocked (whether src/brand.ts existed at render time). Pass incremental to render "
         + "each beat to its own cached segment under output/segments/<videoName>/ and concatenate them with "
         + "ffmpeg under stream copy, re-rendering only the beats whose inputs actually changed. A segment is "

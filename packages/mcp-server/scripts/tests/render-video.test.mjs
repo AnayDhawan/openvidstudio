@@ -410,6 +410,8 @@ console.log("\n== Part 10: render_video's brand-lock gate ==");
   check("the gate message names the repo being filmed as the extract_brand source", /sourceRepo/.test(gateMessage) && /repo being filmed/.test(gateMessage));
   check("the gate message says the project root is the source only when the video lives in that repo", /only when the video lives in that repo/.test(gateMessage));
   check("the gate message says what to do when there is no repo to read, a live site", /live site/.test(gateMessage) && /skipBrandLock: true/.test(gateMessage));
+  const gateDescription = require(path.join(distDir, "server.js")).createMcpServer()._registeredTools.render_video.description.replace(/\s+/g, " ");
+  check("the render_video description offers skipBrandLock for a live site or a product with no repo, like the refusal", /skipBrandLock: true[^.]*live site/.test(gateDescription) && /no repo/.test(gateDescription));
 }
 
 console.log("\n== Part 10b: missing narration is reported, not silent ==");

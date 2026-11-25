@@ -70,6 +70,17 @@ capture path in this project encodes with crf 18 and `-tune stillimage` instead.
    targetH * zoom)`. Verify again: `innerWidth/innerHeight` should now
    equal `targetW/targetH` exactly. This is the size you actually wanted,
    once compensated.
+
+   The tools read `window.devicePixelRatio` in step 1 as well, because a
+   browser zoom moves `innerWidth` and `devicePixelRatio` by the same factor
+   (`requestedWidth / innerWidth` equals `devicePixelRatio / deviceScaleFactor`).
+   When the two readings disagree, the page is in a state a viewport change
+   cannot fix (a device scale factor that was not applied, or one forced on
+   the browser), and the call fails with a `ViewportDesyncError` that lists
+   what was measured. `capture_screen_recording` repeats the check on the page
+   it is about to record, before the recording does anything: `innerWidth`
+   must be back on the request and `devicePixelRatio` must sit at
+   `deviceScaleFactor * zoom`.
 3. Interact with the page (click, select, scroll) to reach the exact state
    the beat needs, in this same compensated viewport.
 4. Take a full-viewport screenshot (`scale: "css"`, no `fullPage`, no

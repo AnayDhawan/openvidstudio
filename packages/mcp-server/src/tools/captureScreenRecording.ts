@@ -13,6 +13,7 @@ import {
   writeCursorSidecar,
   writeSettleSidecar,
   detectAndCompensateZoom,
+  assertViewportBeforeRecording,
   installDeterminism,
   interactionSchema,
   launchChromium,
@@ -322,7 +323,8 @@ async function captureScreenRecording(
       const probePage = await probeContext.newPage();
       await probePage.setViewportSize(target);
       await probePage.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
-      const compensation = await detectAndCompensateZoom(probePage, target);
+      // The probe context is created with no deviceScaleFactor, so its pixel ratio is 1 by construction.
+      const compensation = await detectAndCompensateZoom(probePage, target, { deviceScaleFactor: 1 });
       zoom = compensation.zoom;
       compensatedViewport = compensation.viewport;
     } finally {
@@ -361,6 +363,10 @@ async function captureScreenRecording(
         // at load and caches the result.
         if (input.deterministic) await installDeterminism(page);
         await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
+        // The recording is already running here. Check the page it is recording is the one that was
+        // probed (right innerWidth, and a devicePixelRatio that fits the measured zoom), so a desync
+        // ends the call with a clear error rather than a clip at the wrong size.
+        await assertViewportBeforeRecording(page, target, { deviceScaleFactor, zoom });
         // Settle BEFORE the interactions, not after: the recording is already running, so
         // this is what keeps the opening seconds of the clip from being the page still
         // loading rather than the product working.

@@ -242,6 +242,34 @@ export interface ZoomCompensation {
   zoom: number;
   /** The last-measured `[window.innerWidth, window.innerHeight]`. */
   effective: Viewport;
+  /** `window.devicePixelRatio` as read before compensation. Only present when a device scale factor was given. */
+  devicePixelRatio?: number;
+}
+
+export interface ZoomCheckOptions {
+  /**
+   * The device scale factor the page's context was created with. When given, `window.devicePixelRatio`
+   * is read too and has to agree with `innerWidth` about the zoom: a page that reports a different
+   * zoom from its width than from its pixel ratio is not one a frame can be trusted from.
+   */
+  deviceScaleFactor?: number;
+}
+
+/**
+ * Thrown before anything is captured when what the page reports (`innerWidth`, `devicePixelRatio`)
+ * does not fit what was requested and cannot be explained as a consistent zoom. Carries the
+ * measurements so a caller can show them.
+ */
+export class ViewportDesyncError extends Error {
+  constructor(
+    message: string,
+    public readonly target: Viewport,
+    public readonly measured: { innerWidth: number; innerHeight: number; devicePixelRatio: number },
+    public readonly deviceScaleFactor: number,
+  ) {
+    super(message);
+    this.name = "ViewportDesyncError";
+  }
 }
 
 /**
@@ -274,6 +302,102 @@ async function measureEffectiveViewport(page: Page): Promise<Viewport> {
   return { width, height };
 }
 
+async function readDevicePixelRatio(page: Page): Promise<number> {
+  return page.evaluate(() => window.devicePixelRatio);
+}
+
+function describeReading(
+  target: Viewport,
+  deviceScaleFactor: number,
+  m: { innerWidth: number; innerHeight: number; devicePixelRatio: number },
+): string {
+  return (
+    `requested ${target.width}x${target.height} at device scale ${deviceScaleFactor}, but the page reports ` +
+    `innerWidth ${m.innerWidth}, innerHeight ${m.innerHeight} and devicePixelRatio ${m.devicePixelRatio}`
+  );
+}
+
+/**
+ * Before any compensation: `innerWidth` and `devicePixelRatio` are two independent readings of the
+ * same browser zoom. A real per-origin zoom of z shows as `target / innerWidth = z` and
+ * `devicePixelRatio / deviceScaleFactor = z` together. When they disagree the page is in a state
+ * compensating the viewport cannot fix (an emulated device scale that was not applied, a forced
+ * scale factor on the browser), and every pixel measurement after it would be wrong.
+ */
+export function judgeZoomSignals(opts: {
+  target: Viewport;
+  deviceScaleFactor: number;
+  innerWidth: number;
+  innerHeight: number;
+  devicePixelRatio: number;
+}): string | null {
+  const zoomByWidth = opts.target.width / opts.innerWidth;
+  const zoomByDpr = opts.devicePixelRatio / opts.deviceScaleFactor;
+  if (Math.abs(zoomByWidth - zoomByDpr) <= ZOOM_EPSILON * Math.max(zoomByWidth, zoomByDpr)) return null;
+  const m = { innerWidth: opts.innerWidth, innerHeight: opts.innerHeight, devicePixelRatio: opts.devicePixelRatio };
+  return (
+    `Viewport desync before capture: ${describeReading(opts.target, opts.deviceScaleFactor, m)}. innerWidth ` +
+    `implies a zoom of ${zoomByWidth.toFixed(3)} but devicePixelRatio implies ${zoomByDpr.toFixed(3)}. A ` +
+    `browser zoom moves both by the same factor, so this is something else (a device scale factor that was ` +
+    `not applied, or a scale factor forced on the browser) and shrinking or growing the viewport cannot ` +
+    `correct it. Frames from this page would not be the size the request asked for -- see ` +
+    `packages/docs/CAPTURE.md, "The zoom-desync bug".`
+  );
+}
+
+/**
+ * After compensation, against a page that is about to be captured: the compensated viewport has
+ * to put `innerWidth`/`innerHeight` back on the request, and `devicePixelRatio` has to still sit at
+ * `deviceScaleFactor * zoom`, the zoom measured earlier. Anything else means the page the capture
+ * is about to run on is not the page that was probed.
+ */
+export function judgeCompensatedViewport(opts: {
+  target: Viewport;
+  deviceScaleFactor: number;
+  zoom: number;
+  innerWidth: number;
+  innerHeight: number;
+  devicePixelRatio: number;
+}): string | null {
+  const m = { innerWidth: opts.innerWidth, innerHeight: opts.innerHeight, devicePixelRatio: opts.devicePixelRatio };
+  const problems: string[] = [];
+  if (
+    relativeDiff(opts.innerWidth, opts.target.width) > ZOOM_EPSILON ||
+    relativeDiff(opts.innerHeight, opts.target.height) > ZOOM_EPSILON
+  ) {
+    problems.push(`innerWidth x innerHeight is ${opts.innerWidth}x${opts.innerHeight}, not the requested ${opts.target.width}x${opts.target.height}`);
+  }
+  const expectedDpr = opts.deviceScaleFactor * opts.zoom;
+  if (Math.abs(opts.devicePixelRatio - expectedDpr) > ZOOM_EPSILON * expectedDpr) {
+    problems.push(
+      `devicePixelRatio is ${opts.devicePixelRatio}, but device scale ${opts.deviceScaleFactor} at the measured zoom ` +
+        `${opts.zoom.toFixed(3)} should give ${expectedDpr.toFixed(3)}`,
+    );
+  }
+  if (problems.length === 0) return null;
+  return (
+    `Viewport desync at the start of recording: ${describeReading(opts.target, opts.deviceScaleFactor, m)}. ` +
+    `${problems.join("; ")}. The recording would not be the size the request asked for, so it was not started -- ` +
+    `see packages/docs/CAPTURE.md, "The zoom-desync bug".`
+  );
+}
+
+/**
+ * Reads `innerWidth`, `innerHeight` and `devicePixelRatio` from the page that is about to be recorded
+ * and throws ViewportDesyncError if they do not match the compensated request. Call it after
+ * navigation and before the recording does anything, so a desync costs a clear error and not a clip.
+ */
+export async function assertViewportBeforeRecording(
+  page: Page,
+  target: Viewport,
+  opts: { deviceScaleFactor: number; zoom: number },
+): Promise<void> {
+  const [innerWidth, innerHeight] = await page.evaluate(() => [window.innerWidth, window.innerHeight] as [number, number]);
+  const devicePixelRatio = await readDevicePixelRatio(page);
+  const problem = judgeCompensatedViewport({ target, ...opts, innerWidth, innerHeight, devicePixelRatio });
+  if (problem) throw new ViewportDesyncError(problem, target, { innerWidth, innerHeight, devicePixelRatio }, opts.deviceScaleFactor);
+}
+
 function relativeDiff(actual: number, target: number): number {
   return Math.abs(actual - target) / target;
 }
@@ -290,12 +414,36 @@ function relativeDiff(actual: number, target: number): number {
  * `target` within `ZOOM_EPSILON`, throws `ZoomCompensationError` rather than
  * silently proceeding.
  */
-export async function detectAndCompensateZoom(page: Page, target: Viewport): Promise<ZoomCompensation> {
+export async function detectAndCompensateZoom(
+  page: Page,
+  target: Viewport,
+  opts: ZoomCheckOptions = {},
+): Promise<ZoomCompensation> {
   const firstMeasurement = await measureEffectiveViewport(page);
   const zoom = target.width / firstMeasurement.width;
 
+  let devicePixelRatio: number | undefined;
+  if (opts.deviceScaleFactor !== undefined) {
+    devicePixelRatio = await readDevicePixelRatio(page);
+    const problem = judgeZoomSignals({
+      target,
+      deviceScaleFactor: opts.deviceScaleFactor,
+      innerWidth: firstMeasurement.width,
+      innerHeight: firstMeasurement.height,
+      devicePixelRatio,
+    });
+    if (problem) {
+      throw new ViewportDesyncError(
+        problem,
+        target,
+        { innerWidth: firstMeasurement.width, innerHeight: firstMeasurement.height, devicePixelRatio },
+        opts.deviceScaleFactor,
+      );
+    }
+  }
+
   if (Math.abs(zoom - 1) <= ZOOM_EPSILON) {
-    return { viewport: target, zoom, effective: firstMeasurement };
+    return { viewport: target, zoom, effective: firstMeasurement, ...(devicePixelRatio !== undefined ? { devicePixelRatio } : {}) };
   }
 
   const compensated: Viewport = {
@@ -313,7 +461,7 @@ export async function detectAndCompensateZoom(page: Page, target: Viewport): Pro
     throw new ZoomCompensationError(target, zoom, secondMeasurement);
   }
 
-  return { viewport: compensated, zoom, effective: secondMeasurement };
+  return { viewport: compensated, zoom, effective: secondMeasurement, ...(devicePixelRatio !== undefined ? { devicePixelRatio } : {}) };
 }
 
 const BROWSER_NOT_INSTALLED_RE = /Executable doesn't exist at/;

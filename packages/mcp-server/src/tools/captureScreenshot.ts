@@ -314,7 +314,7 @@ async function captureScreenshot(input: CaptureScreenshotInput): Promise<Capture
       // explicit opt-in override for the beat that actually needs it.
       await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
 
-      const { zoom, viewport: compensatedViewport } = await detectAndCompensateZoom(page, target);
+      const { zoom, viewport: compensatedViewport } = await detectAndCompensateZoom(page, target, { deviceScaleFactor });
 
       const cursorPoints = await replayInteractions(page, input.interactions);
 

@@ -684,7 +684,8 @@ export function registerStitchComposition(server: McpServer): void {
         "duration moves; nothing is emitted when no beat has a transition), a VO Audio layer " +
         "per beat only where public/audio/vo/<beatId>.mp3 actually exists on disk, and a looping " +
         "full-duration music bed layer if public/audio/music-bed.mp3 exists. The scaffold ships an ambient " +
-        "music-bed.mp3 with no pulse to cut against; compose_score writes an original arc-matched score to the " +
+        "bed at public/sfx/music-bed.mp3 with no pulse to cut against, but this tool only picks a bed up from " +
+        "public/audio/music-bed.mp3, so copy it there (create public/audio first); compose_score writes an original arc-matched score to the " +
         "same name, with an exact cue grid next to it (plan_music_cues produces one for any other track), so " +
         "scene cuts can land on a beat instead of an arbitrary second. Also (re)registers the " +
         "composition in src/Root.tsx (via an internal src/videos/.registry.json this tool owns), without " +

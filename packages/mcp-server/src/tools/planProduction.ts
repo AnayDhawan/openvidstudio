@@ -120,7 +120,9 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     qcRounds: 2,
     customFraction: 0.3,
     arc: "hook, problem, demo x2-3, differentiator, cta (PIPELINE.md's Simple demo arc)",
-    scoreStrategy: "the built-in ambient music-bed.mp3 or a CC0 track via find_music_bed",
+    scoreStrategy:
+      "the built-in ambient music-bed.mp3 (it ships at public/sfx/music-bed.mp3; copy it to public/audio/music-bed.mp3, " +
+      "the only place stitch_composition reads a bed from) or a CC0 track via find_music_bed",
     authoringSecondsPerBeat: 35,
     scoreSeconds: 20,
     renderWeight: 2,
@@ -129,7 +131,9 @@ const LEVEL_PROFILES: Record<CreativeLevel, LevelProfile> = {
     qcRounds: 1,
     customFraction: 0,
     arc: "exactly the beats specified, nothing added",
-    scoreStrategy: "whatever beats.json/the brief specifies; the built-in music-bed.mp3 if unstated",
+    scoreStrategy:
+      "whatever beats.json/the brief specifies; the built-in music-bed.mp3 if unstated (it ships at public/sfx/music-bed.mp3; " +
+      "copy it to public/audio/music-bed.mp3, the only place stitch_composition reads a bed from)",
     authoringSecondsPerBeat: 10,
     scoreSeconds: 0,
     renderWeight: 1,

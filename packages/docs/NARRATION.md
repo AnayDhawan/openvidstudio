@@ -401,7 +401,7 @@ Keep it quiet. It sits under narration, and 0.16 is already at the edge of notic
 when a voice is speaking over it.
 
 To put the built-in bed under a whole stitched video instead, copy `public/sfx/music-bed.mp3` to
-`public/audio/music-bed.mp3`. `stitch_composition` only looks at that path, and when the file is
+`public/audio/music-bed.mp3`, creating `public/audio` if it does not exist. `stitch_composition` only looks at that path, and when the file is
 absent it returns `musicBedFound: false` with no warning, so a video that was meant to have music
 renders without any.
 

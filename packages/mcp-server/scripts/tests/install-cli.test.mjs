@@ -105,6 +105,22 @@ const read = (f) => JSON.parse(fs.readFileSync(f, "utf8"));
 }
 
 {
+  // The printed `claude mcp add` fallback has to be a command that runs on the platform it is printed for (#187).
+  const addLine = (r) => r.lines.find((l) => l.includes("claude mcp add"));
+  const posix = addLine(runInstall(["claude-code"], mac(path.join(tmp, "cc-posix"))));
+  const linux = addLine(runInstall(["claude-code"], { platform: "linux", home: tmp, cwd: tmp, ...stamp }));
+  const windows = addLine(runInstall(["claude-code"], win(path.join(tmp, "cc-win"), path.join(tmp, "cc-win", "AppData", "Roaming"))));
+
+  check("macOS prints npx directly", posix?.trim() === "claude mcp add openvidstudio -- npx -y @openvidstudio/mcp-server");
+  check("Linux prints npx directly", linux?.trim() === "claude mcp add openvidstudio -- npx -y @openvidstudio/mcp-server");
+  check("win32 prints the cmd /c form", windows?.trim() === "claude mcp add openvidstudio -- cmd /c npx -y @openvidstudio/mcp-server");
+  check("the win32 line is not the bare npx form that fails there", !/-- npx /.test(windows ?? ""));
+  // The printed command and the config entry written for other clients come from one place.
+  const entry = serverCommand("win32");
+  check("...and matches the command the config-file clients get on win32", windows?.includes([entry.command, ...entry.args].join(" ")) === true);
+}
+
+{
   // Flags and mistakes.
   const home = path.join(tmp, "flags");
   const dry = runInstall(["cursor", "--dry-run"], mac(home));

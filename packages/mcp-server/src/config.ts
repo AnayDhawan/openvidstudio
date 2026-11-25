@@ -24,7 +24,7 @@ export interface CaptureConfig {
 }
 
 export interface NarrationConfig {
-  engine: "edge-tts" | "say" | "espeak";
+  engine: "edge-tts" | "say" | "espeak" | "omnivoice";
   voice: string;
 }
 

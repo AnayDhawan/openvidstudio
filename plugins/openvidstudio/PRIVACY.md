@@ -14,6 +14,7 @@ openvidstudio runs on your machine. This page says what leaves it. It describes 
 | The server package and its dependencies | npm (`registry.npmjs.org`) | The first time the plugin starts, and when a new plugin version pins a new server version |
 | Browser downloads | Playwright and Remotion's download hosts | When Chromium is installed for capture or render, if you do not already have one |
 | Narration text | Microsoft's speech service, through the `edge-tts` Python package | Only when you run `generate_narration` with the default engine. The text of the narration is sent so a voice can be made. The audio comes back and is saved locally |
+| OmniVoice model files | Hugging Face, through the `omnivoice` Python package | Only the first time you run `generate_narration` with engine `omnivoice`. Nothing about your project is sent, and the narration text stays on your machine |
 | Music search queries and downloads | GitHub (`api.github.com`, `raw.githubusercontent.com`) | Only when you run `find_music_bed` or `import_music_bed` |
 | Sound effect search queries | Freesound, only if you give the tool an API key | Only when you run `plan_sound_effects` with a key |
 | Higgsfield requests | Higgsfield, through your own connection | Only if you enable the optional b-roll tier |

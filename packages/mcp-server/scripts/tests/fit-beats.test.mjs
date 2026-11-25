@@ -146,6 +146,15 @@ if (spawnSync("ffmpeg", ["-version"]).status !== 0 || spawnSync("ffprobe", ["-ve
   check("a fitted clip is the fallback, and is said to be an estimate", by.pic.source === "final-clip" && /estimate/.test(by.pic.note ?? ""));
   check("a beat with neither is skipped", by.numbers.status === "skipped");
   check("a passed-in length wins over a clip on disk", runFitBeats({ projectRoot: root, videoName: "lesson", spokenSeconds: { hook: 3.0 }, dryRun: true }).beats[0].source === "report");
+  // The voice does not matter, only the measured clip. omnivoice writes a WAV where edge-tts writes an MP3, and both
+  // are kept as <beatId>.raw, so the same beat must fit the same from either container.
+  const wavDoc = beatsDoc([139, 46, 162, 196]);
+  const wavProject = project(wavDoc);
+  const wavRawDir = path.join(wavProject.root, ".openvidstudio", "narration");
+  fs.mkdirSync(wavRawDir, { recursive: true });
+  spawnSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "sine=frequency=300:duration=4.1", "-ar", "24000", "-f", "wav", path.join(wavRawDir, "hook.raw"), "-y"]);
+  const wavFit = runFitBeats({ projectRoot: wavProject.root, videoName: "lesson", dryRun: true }).beats[0];
+  check("a WAV clip kept as .raw is measured exactly like an MP3 one", wavFit.source === "raw-clip" && Math.abs(wavFit.after - by.hook.after) <= 1 &&Math.abs(wavFit.spokenSeconds - 4.1) < 0.1);
   void file;
 }
 

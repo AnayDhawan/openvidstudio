@@ -189,6 +189,53 @@ interface OmnivoiceOptions {
   instruct?: string;
 }
 
+export interface OmnivoiceCommand {
+  command: string;
+  args: string[];
+}
+
+/**
+ * The commands that can run OmniVoice, in the order synthesis tries them: the omnivoice-infer launcher
+ * (the pip install puts it on PATH, a venv's Scripts or bin directory when the venv is not activated),
+ * then the module entrypoint through python and python3. Preflight probes the same list, so a machine it
+ * reports as ready is one synthesis can actually run.
+ */
+export function omnivoiceCommands(args: string[]): OmnivoiceCommand[] {
+  return [
+    { command: "omnivoice-infer", args },
+    { command: "python", args: ["-m", "omnivoice.cli.infer", ...args] },
+    { command: "python3", args: ["-m", "omnivoice.cli.infer", ...args] },
+  ];
+}
+
+/**
+ * omnivoice-infer writes with soundfile, which takes the format from the file extension and has no default
+ * for ".raw", the extension the working clips use (fit_beats reads <beatId>.raw). So the CLI writes a .wav
+ * next to the clip and synthesis moves it into place.
+ */
+export function omnivoiceWavPath(out: string): string {
+  return `${out}.wav`;
+}
+
+/** Runs the first of omnivoiceCommands that can be started at all; a command that starts and fails is the answer. */
+function runOmnivoice(args: string[]): SpawnSyncReturns<string> {
+  const [first, ...rest] = omnivoiceCommands(args);
+  let r = spawnSync(first.command, first.args, { encoding: "utf8" });
+  for (const next of rest) {
+    if (!r.error) break;
+    r = spawnSync(next.command, next.args, { encoding: "utf8" });
+  }
+  return r;
+}
+
+export function omnivoiceArgs(opts: OmnivoiceOptions & { voice: string; text: string; out: string }): string[] {
+  const args = ["--model", opts.voice, "--text", opts.text, "--output", omnivoiceWavPath(opts.out)];
+  if (opts.refAudio) args.push("--ref_audio", opts.refAudio);
+  if (opts.refText) args.push("--ref_text", opts.refText);
+  if (opts.instruct) args.push("--instruct", opts.instruct);
+  return args;
+}
+
 let edgePython: string | null | undefined;
 
 /**
@@ -307,14 +354,10 @@ function synthesize(
       // Zero-shot across 600+ languages, so the same call synthesizes every language with
       // no per-language voice to pick. With ref_audio it is the same cloned voice in all
       // of them, which is what makes a set of translations read as one narrator.
-      const args = ["--model", voice, "--text", text, "--output", out];
-      if (omni.refAudio) args.push("--ref_audio", omni.refAudio);
-      if (omni.refText) args.push("--ref_text", omni.refText);
-      if (omni.instruct) args.push("--instruct", omni.instruct);
-      r = spawnSync("omnivoice-infer", args, { encoding: "utf8" });
-      if (r.error) {
-        r = spawnSync("python", ["-m", "omnivoice.cli.infer", ...args], { encoding: "utf8" });
-      }
+      const wav = omnivoiceWavPath(out);
+      fs.rmSync(wav, { force: true });
+      r = runOmnivoice(omnivoiceArgs({ ...omni, voice, text, out }));
+      if (!r.error && fs.existsSync(wav)) fs.renameSync(wav, out);
     } else if (engine === "say") {
       r = spawnSync("say", ["-v", voice, "-o", out, "--data-format=LEF32@22050", text], {
         encoding: "utf8",

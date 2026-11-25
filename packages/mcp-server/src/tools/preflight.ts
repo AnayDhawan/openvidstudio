@@ -7,7 +7,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { chromium, resolvedPlaywrightVersion } from "@openvidstudio/capture";
 import { resolveProjectRoot, spawnCapture } from "../util";
 import { loadConfig } from "../config";
-import { probeEdgeTts } from "./generateNarration";
+import { omnivoiceCommands, probeEdgeTts, type NarrationEngine } from "./generateNarration";
 import { PREFLIGHT_BENCHMARK_COMPOSITION_ID } from "./stitchComposition";
 import { runTool } from "./mcp";
 
@@ -31,6 +31,12 @@ export interface PreflightInput {
    * it actually needs a measured fps to base a time estimate on.
    */
   benchmark?: boolean;
+  /**
+   * The narration engine to check for, overriding narration.engine in openvidstudio.config.json. It is the
+   * same switch generate_narration takes, so a caller can ask "could I narrate with omnivoice here?" without
+   * editing the config first.
+   */
+  engine?: NarrationEngine;
 }
 
 export interface BenchmarkResult {
@@ -145,6 +151,52 @@ async function runBenchmark(projectRoot: string, browserExecutable?: string): Pr
     fps: Number((BENCHMARK_FRAMES / seconds).toFixed(2)),
     cpuCount,
     bundleSeconds: Number(Math.max(0, wallSeconds - seconds).toFixed(1)),
+  };
+}
+
+/**
+ * What to run when OmniVoice is missing. The torch line is the README's CPU and Apple Silicon one; the
+ * Python floor is pyproject.toml's requires-python. The model is fetched from Hugging Face on first use.
+ */
+export const OMNIVOICE_INSTALL_FIX =
+  "Needs Python 3.10 or newer. In a fresh virtual environment run: pip install torch==2.8.0 torchaudio==2.8.0 " +
+  "(with an NVIDIA GPU, install the CUDA build from pytorch.org instead), then pip install omnivoice. " +
+  "Put the environment's Scripts directory (Windows) or bin directory (macOS, Linux) on PATH so omnivoice-infer resolves. " +
+  "The first run downloads the k2-fsa/OmniVoice model (about 3 GB), so it needs a network connection once.";
+
+export interface OmnivoiceProbe {
+  ok: boolean;
+  detail: string;
+}
+
+/**
+ * Looks for OmniVoice the way synthesis will run it (omnivoice-infer first, then python and python3 with the
+ * module entrypoint, see omnivoiceCommands). It does not run the model: importing torch takes seconds, and the
+ * launcher existing is what separates "installed" from "not installed". The python import only happens when the
+ * launcher is not on PATH.
+ */
+export function probeOmnivoice(): OmnivoiceProbe {
+  const [launcher, ...fallbacks] = omnivoiceCommands([]);
+  const found = which(launcher.command);
+  if (found) return { ok: true, detail: `${launcher.command} found at ${found}` };
+  const reachable: string[] = [];
+  for (const fallback of fallbacks) {
+    const r = spawnSync(fallback.command, ["-c", "import omnivoice"], { encoding: "utf8", timeout: 120000 });
+    if (r.error) continue;
+    reachable.push(fallback.command);
+    if (r.status === 0) {
+      return {
+        ok: true,
+        detail: `${launcher.command} is not on PATH, but ${fallback.command} can import omnivoice (narration runs ${fallback.command} -m omnivoice.cli.infer)`,
+      };
+    }
+  }
+  return {
+    ok: false,
+    detail:
+      reachable.length > 0
+        ? `${launcher.command} is not on PATH and ${reachable.join(" and ")} cannot import omnivoice`
+        : `${launcher.command} is not on PATH and there is no python or python3 to import omnivoice from`,
   };
 }
 
@@ -312,20 +364,35 @@ export async function runPreflight(input: PreflightInput): Promise<PreflightResu
     blocking: true,
   });
 
-  const narrationCmd = config.narration.engine === "edge-tts" ? "edge-tts" : config.narration.engine;
-  const narration = Boolean(which(narrationCmd)) || Boolean(which("python"));
+  // The engine input wins over the config file, the same way generate_narration's own engine input does.
+  const engine = input.engine ?? config.narration.engine;
+
+  // OmniVoice's launcher is omnivoice-infer, not a binary named after the engine, and a bare python on PATH
+  // proves nothing about it, so it is probed on its own terms (see probeOmnivoice).
+  const omnivoice = engine === "omnivoice" ? probeOmnivoice() : null;
+  const narration = omnivoice ? omnivoice.ok : Boolean(which(engine)) || Boolean(which("python"));
   checks.push({
     name: "narration",
     ok: narration,
-    detail: narration ? `${config.narration.engine} available` : `${config.narration.engine} not found`,
-    fix: narration ? undefined : "pip install edge-tts",
+    detail: narration ? `${engine} available` : `${engine} not found`,
+    fix: narration ? undefined : omnivoice ? "See the omnivoice check." : "pip install edge-tts",
     blocking: false,
   });
+
+  if (omnivoice) {
+    checks.push({
+      name: "omnivoice",
+      ok: omnivoice.ok,
+      detail: omnivoice.detail,
+      fix: omnivoice.ok ? undefined : OMNIVOICE_INSTALL_FIX,
+      blocking: false,
+    });
+  }
 
   // Having edge-tts installed does not mean it can synthesize: Microsoft's service refuses some client
   // versions with a 403, and the first symptom is a narration run that fails on every beat. So speak one
   // word. Skipped for any other engine, and when the command is missing (the narration check above says so).
-  if (config.narration.engine === "edge-tts" && narration) {
+  if (engine === "edge-tts" && narration) {
     const probe = probeEdgeTts();
     checks.push({
       name: "edge-tts",
@@ -388,7 +455,10 @@ export function registerPreflight(server: McpServer): void {
         "steps later, often after a long render has already started. When the narration engine is edge-tts, it " +
         "also speaks one short word to a temp file (the edge-tts check), because Microsoft refuses some client " +
         "versions with a 403 and the command existing proves nothing; a failure shows the installed version, " +
-        "the error line and pip install -U edge-tts. Narration is reported as non blocking, " +
+        "the error line and pip install -U edge-tts. Pass engine: \"omnivoice\" (or set narration.engine in the " +
+        "config) to check for the local OmniVoice engine instead: it looks for omnivoice-infer on PATH, then for " +
+        "a python that can import omnivoice, and adds an omnivoice check whose fix is the install command and " +
+        "the Python requirement (the first run downloads the model). Narration is reported as non blocking, " +
         "since a silent video still renders. Pass benchmark: true to also render ~60 frames of a fixed " +
         "benchmark composition (init_project seeds it, so this works even before any real video is planned) " +
         "and report real frames/sec plus CPU count in benchmarkResult -- off by default since it costs a " +
@@ -398,6 +468,7 @@ export function registerPreflight(server: McpServer): void {
         projectRoot: z.string().optional(),
         appUrl: z.string().optional(),
         benchmark: z.boolean().optional(),
+        engine: z.enum(["edge-tts", "say", "espeak", "omnivoice"]).optional(),
       },
     },
     async (input) => runTool("preflight", () => runPreflight(input)),

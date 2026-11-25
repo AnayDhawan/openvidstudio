@@ -150,10 +150,14 @@ and hands you the mp4.
 | Chromium | whatever `playwright install` pulls | The browser capture actually drives | yes |
 | Your app | running, reachable | Capture points at a real URL | yes |
 | edge-tts | any current, Python 3.8+ | Narration | no |
+| OmniVoice | Python 3.10+, about 3 GB model download on first use | Optional local narration (`engine: "omnivoice"`) | no |
 | numpy, scipy, soundfile, pyloudnorm, matplotlib | any current, Python 3.8+ | `compose_score`, the original-score tool | no |
 
-`preflight` checks every row. Only the Node version is enforced numerically; the rest are presence
-checks.
+`preflight` checks every row (the OmniVoice row when you pass `engine: "omnivoice"`). Only the Node
+version is enforced numerically; the rest are presence checks.
+
+The default narration engine, `edge-tts`, sends the narration text to Microsoft's speech service. The
+`omnivoice` engine keeps the text on your machine: see [NARRATION.md](packages/docs/NARRATION.md).
 
 ```bash
 # Windows. Reopen the terminal after installing ffmpeg, winget only puts it on PATH for new shells.

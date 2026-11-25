@@ -45,8 +45,11 @@ product cannot show something, build a labelled sample, film it for real, and di
 
 ## 5. Beats and the approval gate
 
-- `plan_beats`, with `snapToBars` and the score's bpm when the video is cut to music.
-- Write narration to each beat's word budget. `validate_beats`.
+- `generate_script`, with `snapToBars` and the score's bpm when the video is cut to music. With no
+  `draft` it returns the skeleton and a word budget per beat.
+- Write narration to each beat's word budget, then call `generate_script` again with the same inputs
+  and `draft: { narration }`. It validates and returns the full `beatsJson`; it never writes.
+  (`plan_beats` then `validate_beats` is the manual route to the same file.)
 - **Show the full beats file and wait for an explicit yes.** Then `write_beats_file`.
 - Done when `beats.json` is on disk.
 

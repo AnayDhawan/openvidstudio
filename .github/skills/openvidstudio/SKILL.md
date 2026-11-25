@@ -31,11 +31,14 @@ The `docs/` files this skill names (`docs/PLANNING.md`, `docs/API.md`, `docs/STY
 ## The order
 
 ```
-preflight -> plan_production -> extract_brand -> write_brief -> plan_beats -> [write VO]
-  -> validate_beats -> APPROVAL GATE -> write_beats_file -> captures -> [compose_score]
-  -> scenes -> render_stills -> validate_scenes -> [plan_sound_effects] -> generate_narration
-  -> stitch_composition -> render_video -> finalize_video -> qc_extract_frames
+preflight -> plan_production -> extract_brand -> write_brief -> generate_script (skeleton)
+  -> [write VO] -> generate_script (with the draft) -> APPROVAL GATE -> write_beats_file
+  -> captures -> [compose_score] -> scenes -> render_stills -> validate_scenes
+  -> [plan_sound_effects] -> generate_narration -> stitch_composition -> render_video
+  -> finalize_video -> qc_extract_frames
 ```
+
+`plan_beats` then `validate_beats` is the manual route to the same beats file (step 2).
 
 For peak and mid, the process in full (brief, design system, score, bespoke scenes, review
 rounds) is the `openvidstudio-director` skill. This skill is the shorter path and the tool
@@ -102,15 +105,23 @@ Use `monoStack()` and `uiStack()` instead.
 
 ## 2. Plan the beats
 
-`plan_beats` with the target duration and the features. It returns a contiguous
-skeleton with a capture method and a **word budget per beat**.
+`generate_script` with the target duration, the features, the app URL and the creative
+level. With no `draft` it returns the skeleton: a contiguous plan with a capture method and
+a **word budget per beat**, and a `beatsJson` with no lines in it yet.
 
-Write the narration to that budget. `validate_beats` enforces 2.3 to 2.9 words per
-second as a hard floor *and* ceiling per beat, so a line can be rejected for being
-too sparse. Writing to the stated number avoids the round trip.
+Write the narration to those budgets, then call it again with the same inputs plus
+`draft: { narration: { "<beatId>": "<line>" } }`. It merges the lines, runs
+`validate_beats`, and returns the full `beatsJson` and the validation result. It never
+writes a file. At the `literal` level it refuses `draft.visuals`. `docs/PLANNING.md` §4.10
+has the flow and a worked example.
 
-Every `screenshot` beat also needs `visual.url` and `visual.interactions` (an array,
-possibly empty). No other doc states this up front.
+`validate_beats` enforces 2.3 to 2.9 words per second (the language's measured band when
+`language` is set) as a hard floor *and* ceiling per beat, so a line can be rejected for
+being too sparse. Writing to the stated number avoids the round trip.
+
+The manual route gives the same file: `plan_beats` for the skeleton, assemble the beats by
+hand, then `validate_beats`. Every `screenshot` beat then needs `visual.url` and
+`visual.interactions` (an array, possibly empty); `generate_script` fills both in.
 
 ## 3. The approval gate
 
@@ -163,6 +174,10 @@ Read `docs/API.md` for props. Do not read the library source.
 and clamps time-stretching to a range that stays natural rather than fitting clips to
 beats at any cost. When it says a beat does not fit, fix the script or the beat
 duration; do not stretch further.
+
+It uses edge-tts, which sends the text to Microsoft, unless you pass `engine: "omnivoice"`
+(local). It does not read `narration.engine` or `narration.voice` from the config, so
+editing the config does not switch the engine.
 
 ## 6b. Sound, only if the built-ins do not cover it
 

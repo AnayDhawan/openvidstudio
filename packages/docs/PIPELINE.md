@@ -49,7 +49,16 @@ Create `<video>/beats.json`:
   that's the only one that needs `scaffold_scene --overwrite`, not the whole video.
   `render_video` still re-renders the full composition regardless (Remotion has no
   partial-render mode), so treat that as a single go/no-go signal, not per-beat.
-- Two beat arcs, pick by product complexity:
+- **Recommended: `generate_script`.** One call with the brief returns the beat skeleton for an arc, with a
+  word budget per beat. Write the narration to those budgets and call it again with `draft`: it merges the
+  lines, runs `validate_beats` and returns the full `beatsJson` with the result, which is what the human
+  approves before `write_beats_file`. It writes nothing itself. `PLANNING.md` §4.10 has the full flow and a
+  before and after example.
+- **The manual route.** `plan_beats` for the same skeleton, then assemble `beats.json` by hand with the
+  narration, `validate_beats`, the approval gate and `write_beats_file`. Same arcs, same result; use it
+  when you want to build the file yourself.
+- Four beat arcs (`simple`, `packed`, `tutorial`, `literal`), pick by product complexity. The ids each one
+  plans, and the rule for two features that collide, are in `PLANNING.md` §4.10 and `API.md`:
   - **Simple demo** (single core feature): hook (8s), problem (11s), demo
     x2-3 (12-14s each), differentiator (10s), cta (9s). 60-75s total.
   - **Packed-hook, multi-feature**: one dense ~15s hero beat whose VO
@@ -63,6 +72,15 @@ Create `<video>/beats.json`:
     budget ~10-20s/demo beat and check the running total as you add
     beats, don't let it creep past the brief's stated limit "for
     completeness."
+  - **Tutorial** (`tutorial`): hook, prerequisites, install, setup, one
+    step per feature, the finished result, a recap card, cta. For a video
+    the viewer follows along with: each step beat is a screenshot of its
+    feature.
+  - **Literal** (`literal`): one screenshot beat per feature, all the same
+    length, and nothing else: no hook, problem or cta. For a brief that
+    must be done exactly as specified (`creativeLevel: "literal"` always
+    plans it). It needs at least one feature and has no cap on how many;
+    refine the beats after `write_beats_file`.
 - **Vary the shot lengths.** Four or more beats whose longest is under 2.5 times
   the shortest read as a metronome: a cut on the same count however much the
   content changes. `validate_beats` says so as a warning (never an error, and
@@ -466,7 +484,7 @@ VO specifically, silently omits the layer with no warning:
 |---|---|---|---|
 | Screenshot | `public/images/<beatId>.png` | `capture_screenshot` | the `real-screenshot` scene `scaffold_scene` generates |
 | Recording / Higgsfield clip | `public/video/<beatId>.mp4` | `capture_screen_recording` / `import_higgsfield_clip` | the `real-recording` / `higgsfield-clip` scene `scaffold_scene` generates |
-| VO narration | `public/audio/vo/<beatId>.mp3` | (dev-provided, e.g. an edge-tts run) | `stitch_composition`, only if the file exists at this exact path when it runs |
+| VO narration | `public/audio/vo/<beatId>.mp3` | `generate_narration` (edge-tts unless `engine` is passed; it does not read `narration.engine` from the config), or dev-provided | `stitch_composition`, only if the file exists at this exact path when it runs |
 | Music bed | `public/audio/music-bed.mp3` | (dev-provided) | `stitch_composition`, only if the file exists at this exact path when it runs |
 | Built-in SFX | `public/sfx/<name>.{wav,mp3}` | `scripts/gen-sfx.sh`, ships with the template | `@openvidstudio/core`'s `sfx.tsx` helpers |
 | Imported SFX / music | `public/imported_audios/<id>.<ext>` | dropped in by hand, or `plan_sound_effects` (Freesound provider) | scenes, via `staticFile("imported_audios/<id>.<ext>")` |

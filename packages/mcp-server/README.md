@@ -41,8 +41,9 @@ missing.
 | Node.js | 20 | Runs the server |
 | ffmpeg | 4.0 | Sound effects, audio checks, pulling frames back out of a render |
 | Chromium (via Playwright) | current | The browser capture drives |
-| Your app, running | reachable URL | Demos and director mode. A lesson needs no app |
-| edge-tts | 7.3 or newer, Python 3.8+ | Narration. Required for lessons |
+| Your app, running | reachable URL | Demos and director mode |
+| edge-tts | 7.3 or newer, Python 3.8+ | Narration. It is the default engine and sends the text to Microsoft's speech service |
+| OmniVoice | Python 3.10+, about 3 GB model download on first use | Optional local narration. Pass `engine: "omnivoice"` to `generate_narration`; the config does not switch it |
 | numpy, scipy, soundfile, pyloudnorm, matplotlib | current, Python 3.8+ | `compose_score`, the original-score tool |
 
 ## Documentation

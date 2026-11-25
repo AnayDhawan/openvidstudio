@@ -7,6 +7,11 @@ material instead, the per-feature capture-method decision tree, the full
 `captureMethod` field spec, and the mandatory approval gate before anything
 gets written to disk.
 
+Once the intake is done, the recommended way to a drafted `beats.json` is `generate_script` (§4.10): one
+call returns the skeleton and its word budgets, and a second call with your narration returns a validated
+draft for the human. Hand-planning with `plan_beats` and `validate_beats` is the manual route, kept in
+§4.10 next to it.
+
 ## 0. Creative level and time budget (added 2026-10, ask this first)
 
 Before §1's fixed questions, before drafting anything: ask two questions.
@@ -377,12 +382,255 @@ dev approval. Show the dev both files in full and get explicit approval
 before calling it, merged into the same approval pass as `beats.json`
 itself (§5): one sign-off covering the brief and the beats, not two.
 
+## 4.10. One call from a brief to an approval-ready beats.json (generate_script)
+
+Once the capture-method decisions (§3) and the brief (§4.9) are made, `generate_script` is the
+recommended way to reach the approval gate. It folds `plan_beats`, the by-hand merge of your
+narration and `validate_beats` into one call. The server never calls a model, so it cannot write the
+narration: you write it, to the word budgets the tool hands back. The older multi-step route stays
+documented below as the manual route, and both end in the same `beatsJson`.
+
+1. Call `generate_script` with the brief fields (`targetDurationSeconds`, `features`, `appUrl`,
+   `creativeLevel`, and `arc`, `language` or `snapToBars` when you need them) and no `draft`. It returns
+   `stage: "skeleton"`: the `plan_beats` plan (beat ids, frame timing, capture method, purpose and a
+   `wordBudget` per beat) and `beatsJson`, a beats.json with every beat's `start`, `duration` and `visual`
+   filled in and no `vo` yet.
+2. Write one line of narration per beat, aiming at that beat's `wordBudget.suggested`.
+3. Call it again with the same brief fields plus `draft: { narration: { "<beatId>": "<line>" } }`. It
+   returns `stage: "validated"`: `beatsJson` with your lines merged in, and `validation`, the
+   `validate_beats` result. If `valid` is false, fix `validation.errors` and call again.
+4. Show the human the full `beatsJson` and get explicit approval (§5). Only then call `write_beats_file`.
+   `generate_script` never writes anything, `beats.json` included.
+
+The call is stateless, so send the same brief fields both times: beat ids depend on them. A draft that
+names an id the skeleton lacks throws, and the message names every unknown id. A beat left out of
+`draft.narration` does not throw: the result is `valid: false` with the validator's own error for that
+beat. `draft.visuals`, an object keyed by beat id, is shallow-merged over that beat's default visual (a
+screenshot beat's is `{ captureMethod: "screenshot", url: <appUrl>, interactions: [] }`, any other beat's
+is `{ captureMethod }`). Run `plan_production` first, as §0 says: `generate_script` does not call it.
+
+The creative level (the `creativeLevel` input, else `production.creativeLevel` in
+`openvidstudio.config.json`, else `mid`) picks the arc and what a draft may change:
+
+| Level | Arc planned | `draft.visuals` |
+|---|---|---|
+| `literal` | `literal`, always | refused |
+| `mid` | `simple` | allowed |
+| `peak` | `packed` | allowed |
+
+An `arc` input overrides the level's arc, except at `literal`.
+
+### The four arcs
+
+`plan_beats` and `generate_script` plan one of four arcs. Lengths come from fixed weights, so the arc and
+the target duration decide every beat's frames.
+
+| Arc | Beats, in order | Ids | Notes |
+|---|---|---|---|
+| `simple` | hook, problem, one demo per feature, differentiator, cta | `hook`, `problem`, `demo-<slug>`, `differentiator`, `cta` | At most three demo beats: features past the third are dropped. |
+| `packed` | one dense hook, one demo per feature, differentiator, cta | `hook`, `demo-<slug>`, `differentiator`, `cta` | No cap on features. |
+| `tutorial` | hook, prereqs, install, setup, one step per feature, result, recap, cta | `hook`, `prereqs`, `install`, `setup`, `step-<slug>`, `result`, `recap`, `cta` | No cap on features. |
+| `literal` | one screenshot demo beat per feature, all the same length | `demo-<slug>` | Needs at least one feature, no cap on features, and nothing else is added. |
+
+The `<slug>` is made from the feature name. The full rule, and what happens when two features collide, is
+under `plan_beats` in [API.md](API.md#mcp-tools-for-the-scripting-flow).
+
+**The `literal` level.** It does exactly what was specified, so `generate_script` behaves differently there:
+
+- It refuses `draft.visuals`, an empty object included. Every beat is a screenshot of `appUrl` with no
+  interactions, so the beats are refined after `write_beats_file`, by editing beats.json (§4's field spec;
+  `diff_beats` says what the edit re-runs).
+- `validate_beats` warns that shot lengths are nearly uniform for any plan of four or more features,
+  because literal beats are equal by design. It is a warning, never an error (§4.5), and a deliberately
+  even video can ignore it.
+- A beat too short for any whole number of words is named in the skeleton's `notes` (its minimum is above
+  its maximum), because no narration can pass for it. Raise `targetDurationSeconds` or plan fewer features.
+
+### The same video both ways
+
+The example is Loomcard from §6: 60 seconds at the `mid` level, English, two features (`review` and
+`schedule`). The `simple` arc plans six beats at 30 fps, and the budgets are the same whichever route you take:
+
+| Beat | Frames | Seconds | Words accepted | Suggested |
+|---|---|---|---|---|
+| hook | 225 | 7.5 | 18-21 | 20 |
+| problem | 309 | 10.3 | 24-29 | 27 |
+| demo-review | 366 | 12.2 | 29-35 | 32 |
+| demo-schedule | 366 | 12.2 | 29-35 | 32 |
+| differentiator | 281 | 9.37 | 22-27 | 25 |
+| cta | 253 | 8.43 | 20-24 | 22 |
+
+**Before, the manual route.** Four steps by hand:
+
+1. `plan_beats`, which returns that table:
+
+```json
+{
+  "targetDurationSeconds": 60,
+  "arc": "simple",
+  "features": [
+    "review",
+    "schedule"
+  ],
+  "appUrl": "https://app.loomcard.example/review"
+}
+```
+
+2. Write a line for each beat, then assemble beats.json yourself: copy `id`, `start` and `duration` from each
+   planned beat, add the line as `vo`, give each `screenshot` beat `url` and `interactions: []` and every other
+   beat only its `captureMethod`, and add `fps` and `production.creativeLevel`. Skipping the `url` and
+   `interactions` on a screenshot beat is the usual first rejection.
+3. `validate_beats` with that object, then fix whatever it rejects and run it again.
+4. The approval gate (§5), then `write_beats_file`.
+
+**After, `generate_script`.** The first call is the brief and nothing else, and returns the skeleton: the
+same plan and table, plus the `beatsJson` with no lines in it.
+
+```json
+{
+  "targetDurationSeconds": 60,
+  "creativeLevel": "mid",
+  "features": [
+    "review",
+    "schedule"
+  ],
+  "appUrl": "https://app.loomcard.example/review"
+}
+```
+
+The second call adds the lines, each written to its suggested budget (20, 27, 32, 32, 25 and 22 words):
+
+```json
+{
+  "targetDurationSeconds": 60,
+  "creativeLevel": "mid",
+  "features": [
+    "review",
+    "schedule"
+  ],
+  "appUrl": "https://app.loomcard.example/review",
+  "draft": {
+    "narration": {
+      "hook": "Loomcard turns your notes into spaced-repetition flashcards, and schedules every review so the answers are still there on interview day.",
+      "problem": "Most flashcard apps show every card on the same fixed timer, so you waste time on cards you know and meet the hard ones far too late.",
+      "demo-review": "Flip a card, then rate how sure you were from one to five. Loomcard stores that confidence with the answer, and the next card appears as soon as you choose a rating.",
+      "demo-schedule": "That confidence score sets your next review date straight away, so easy cards quietly fade into the background while hard ones come around sooner and keep coming back until they finally stick.",
+      "differentiator": "Nothing here needs setup. Paste your notes in, pick the topics you are interviewing for, and Loomcard builds the whole deck for you in seconds.",
+      "cta": "Loomcard is free and open source. Star it, try it, or send a pull request when you find something we should fix."
+    }
+  }
+}
+```
+
+It returns `stage: "validated"`. The `validation` is:
+
+```json
+{
+  "valid": true,
+  "errors": [],
+  "warnings": [
+    "Shot lengths are nearly uniform: across 6 beats the longest (\"demo-review\", 366 frames, 12.2s) is only 1.63x the shortest (\"hook\", 225 frames, 7.5s). Evenly sized shots read as a metronome. Give the strongest beat one long hold, and make another a short punch of a second or two, so the longest is at least 2.5x the shortest. This is a note, not an error."
+  ]
+}
+```
+
+The warning comes from §4.5's pacing check, and the skeleton of every arc draws it once it has four or more beats: the `simple`, `packed` and
+`tutorial` weights keep the longest beat at 1.6 to 1.9 times the shortest, and `literal` beats are equal
+(`snapToBars` rounds to whole bars and can change that). It is a note, not an error, so the file still
+validates and `write_beats_file` still writes it. Change the lengths before approval if the story wants one
+long hold and one short punch.
+
+**The result, both ways.** The object assembled by hand in the manual route and the `beatsJson` of the second
+`generate_script` call are the same object. It is what the human is shown at the approval gate:
+
+```json
+{
+  "fps": 30,
+  "production": {
+    "creativeLevel": "mid"
+  },
+  "beats": [
+    {
+      "id": "hook",
+      "start": 0,
+      "duration": 225,
+      "vo": "Loomcard turns your notes into spaced-repetition flashcards, and schedules every review so the answers are still there on interview day.",
+      "visual": {
+        "captureMethod": "screenshot",
+        "url": "https://app.loomcard.example/review",
+        "interactions": []
+      }
+    },
+    {
+      "id": "problem",
+      "start": 225,
+      "duration": 309,
+      "vo": "Most flashcard apps show every card on the same fixed timer, so you waste time on cards you know and meet the hard ones far too late.",
+      "visual": {
+        "captureMethod": "dom-demo"
+      }
+    },
+    {
+      "id": "demo-review",
+      "start": 534,
+      "duration": 366,
+      "vo": "Flip a card, then rate how sure you were from one to five. Loomcard stores that confidence with the answer, and the next card appears as soon as you choose a rating.",
+      "visual": {
+        "captureMethod": "screenshot",
+        "url": "https://app.loomcard.example/review",
+        "interactions": []
+      }
+    },
+    {
+      "id": "demo-schedule",
+      "start": 900,
+      "duration": 366,
+      "vo": "That confidence score sets your next review date straight away, so easy cards quietly fade into the background while hard ones come around sooner and keep coming back until they finally stick.",
+      "visual": {
+        "captureMethod": "screenshot",
+        "url": "https://app.loomcard.example/review",
+        "interactions": []
+      }
+    },
+    {
+      "id": "differentiator",
+      "start": 1266,
+      "duration": 281,
+      "vo": "Nothing here needs setup. Paste your notes in, pick the topics you are interviewing for, and Loomcard builds the whole deck for you in seconds.",
+      "visual": {
+        "captureMethod": "dom-demo"
+      }
+    },
+    {
+      "id": "cta",
+      "start": 1547,
+      "duration": 253,
+      "vo": "Loomcard is free and open source. Star it, try it, or send a pull request when you find something we should fix.",
+      "visual": {
+        "captureMethod": "dom-demo"
+      }
+    }
+  ]
+}
+```
+
+The `generate-script-docs` test runs both routes on this input, checks that the two objects are equal, and
+checks that each JSON block in this section is the real input or output, so the example cannot drift from
+the tool.
+
+**The narration engine.** The lines written here are spoken later by `generate_narration`. It uses
+`edge-tts` unless you pass `engine: "omnivoice"`, and `edge-tts` sends the text to Microsoft's speech
+service. `generate_narration` does not read `narration.engine` or `narration.voice` from
+`openvidstudio.config.json`, even though `init_project` writes both there, so editing the config does not
+change the engine. If the text must stay on the machine, pass the input (NARRATION.md, "OmniVoice (local)").
+
 ## 5. The mandatory approval gate
 
 Once every beat has a decided `captureMethod` and the full `beats.json` is
 drafted (and, per §4.9, the brief alongside it): show the dev the full
 file or files, not a summary, and get explicit approval before persisting
-any of it. This applies even to a small, obviously fine-looking draft.
+any of it. This applies even to a small, obviously fine-looking draft, and to one from `generate_script`
+whose `validation.valid` is true: that is the validator's answer, not the human's.
 
 The `write_beats_file` and `write_brief` MCP tools will refuse to write
 anything `validate_beats`/`validate_brief` hasn't passed, but that's

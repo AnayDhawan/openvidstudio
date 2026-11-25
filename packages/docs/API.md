@@ -878,3 +878,137 @@ A piece is `{ src | shape, x, y, width, aspect?, rotation?, tone?, role? }`: `x`
 frame (so it follows the frame size); `src` is an image (`staticFile(...)`) cut out in halftone; `shape` is
 `"card"`, `"circle"`, `"person"` or `"arrow"`; `tone` is `"halftone"` (default), `"red"`, `"blue"`, `"yellow"`,
 `"green"` or `"cream"`; `role` says when it arrives (default `"structure"`).
+
+## MCP tools for the scripting flow
+
+The rest of this file is the reference for `@openvidstudio/core`. [TOOLS.md](TOOLS.md) lists every MCP tool with a
+one-line purpose, and each tool's own description (what a client shows an agent) has the rest. The seven tools
+below are here because their inputs and results changed with `generate_script`, the per-language pace bands and
+the OmniVoice engine, and an agent writing a script needs those fields in one place. Each table lists only the
+inputs that matter to that flow. The flow itself, with a worked example, is in [PLANNING.md](PLANNING.md)
+section 4.10.
+
+### `generate_script`
+
+One call from a brief to a beats.json draft. It never calls a model, so it does not write the narration: you do,
+to the word budgets it returns. It never writes a file either, `beats.json` included, so the approval gate and
+`write_beats_file` are unchanged.
+
+| Input | Notes |
+|---|---|
+| `projectRoot` | The project to read `openvidstudio.config.json` from. Defaults to the current one. |
+| `targetDurationSeconds` | Required. The video's length. |
+| `arc` | `simple`, `packed`, `tutorial` or `literal`. Defaults to the creative level's arc. Ignored at the `literal` level, which always plans the `literal` arc (a note says so). |
+| `features` | One demo beat per feature. Required at the `literal` level. |
+| `appUrl` | Where screenshot beats point. Defaults to `capture.appUrl` in the config. |
+| `fps` | Defaults to `videoConfig.fps` in the config, else 30. |
+| `creativeLevel` | `peak`, `mid` or `literal`. Defaults to `production.creativeLevel` in the config, else `mid`. It picks the arc (`packed`, `simple`, `literal`) and whether `draft.visuals` is allowed (it is not at `literal`). |
+| `snapToBars` | `{ bpm, beatsPerBar? }`, as in `plan_beats`: every beat boundary lands on a downbeat. |
+| `language` | A BCP-47 tag, for narration that is not English. The word budgets use that language's pace band, and it is written to `beatsJson.language` so validation holds the draft to the same band. See "Pace by language" in [NARRATION.md](NARRATION.md). |
+| `draft` | `{ narration, visuals? }`. `narration` maps beat id to the spoken line. `visuals` maps beat id to fields that are shallow-merged over that beat's default visual. Leave `draft` out to get the skeleton. |
+
+A screenshot beat's default visual is `{ captureMethod: "screenshot", url: <appUrl>, interactions: [] }`, which
+is what `validate_beats` requires, and any other beat's is `{ captureMethod }`.
+
+Result fields:
+
+- `stage`: `"skeleton"` without a draft, `"validated"` with one.
+- `creativeLevel` and `defaults`: the level that applied and its `{ arc, allowVisualOverrides, review }`.
+  `review` is one sentence on what the human should check at that level.
+- `plan`: the `plan_beats` result the skeleton was built from: word budgets, purposes, snapped bars.
+- `beatsJson`: a full beats.json draft. At the skeleton stage no beat has a `vo`. It carries `language` only
+  when the input did.
+- `validation`: `{ valid, errors, warnings }`, the `validate_beats` result. Present only at the validated stage.
+- `notes` and `next`: the plan's notes plus the level's review sentence, and what to do next. A beat too short for
+  any whole number of words is named in `notes`, because no narration can pass for it.
+
+What throws, and what does not. A draft that names beat ids the skeleton lacks throws and lists every unknown
+id; so do the `literal` arc with no features, `draft.visuals` at the `literal` level (an empty object too) and a
+`language` written without spaces. A draft that merges but fails validation does not throw: it returns
+`valid: false` with the validator's errors, and a beat with no narration line is one of them.
+
+### `plan_beats`
+
+The skeleton `generate_script` starts from, for the manual route: beat ids, frame timing, capture method, purpose
+and a `wordBudget` of `{ min, max, suggested }` words per beat.
+
+| Input | Notes |
+|---|---|
+| `arc` | `simple`, `packed`, `tutorial` or `literal`. `literal` plans one screenshot demo beat per feature, all the same length, and adds nothing else. It needs at least one feature. |
+| `features` | One demo beat per feature (`step` beats in `tutorial`). |
+| `language` | A BCP-47 tag. The budgets use that language's measured pace band (`hi`, `es`, `de`); any other language gets the English band and a note, and `zh`, `ja`, `th` and the other spaceless scripts are refused. |
+| `snapToBars` | `{ bpm, beatsPerBar? }`. Every beat becomes a whole number of bars, and each planned beat reports `startBar` and `bars`. |
+
+Result fields beyond the beats: `language` (`"en"` when none was given), `paceBand` (`{ min, max, measured }`;
+`measured: false` means the English band is a stand-in and a note says so) and `notes`.
+
+Beat ids:
+
+- A demo beat's id is `demo-<slug>` (`step-<slug>` in `tutorial`). The slug is the feature name in lower case,
+  every run of other characters turned into one hyphen, hyphens trimmed from both ends, then cut at 24
+  characters. A feature whose slug is empty gets its 1-based position instead.
+- Ids are unique, because `validate_beats` rejects a duplicate and a draft is keyed by id. When two features give
+  the same id (names that differ only in case or punctuation, or that share their first 24 characters), the
+  first keeps the plain id and each later repeat gets `-2`, `-3` and so on. Ids that were already unique do not
+  change.
+- `simple` plans at most three demo beats, so features past the third are dropped. `packed`, `tutorial` and
+  `literal` have no cap.
+
+### `validate_beats`
+
+| Input | Notes |
+|---|---|
+| `beatsJson` | The draft, as an object. A top-level `language` in it (a BCP-47 tag) picks the pace band every beat's `vo` is held to; absent means English, 2.3-2.9 words/sec. An unmeasured language is held to the English band with one warning, and a spaceless script is not pace-checked, with a warning that says why. |
+
+Each `voTranslations` line is checked against its own tag's band, as a warning. With four or more beats it also
+warns when the longest beat is under 2.5 times the shortest. Warnings never make a draft invalid.
+
+### `fit_beats`
+
+| Input | Notes |
+|---|---|
+| `language` | The language the narration is in, which picks the pace band the beats are sized into. Defaults to the top-level `language` in beats.json, else English. |
+
+Each beat is sized from its measured clip, then clamped into that band, so the clips decide the length only
+inside it. A line that cannot fit even at the clamp is listed in `unfittable`. Result fields beyond the beats:
+`language`, `paceBand` (`{ min, max, measured }`, the band the beats were sized into) and `notes`, which holds
+anything that belongs to no single beat, such as the `language` input disagreeing with beats.json.
+
+### `preflight`
+
+| Input | Notes |
+|---|---|
+| `engine` | `edge-tts`, `say`, `espeak` or `omnivoice`. Overrides `narration.engine` in the config for the checks. |
+
+With `engine: "omnivoice"` an `omnivoice` check is added. It does not block and it does not load the model: it
+passes when `omnivoice-infer` is on PATH or a python can import `omnivoice`, and otherwise fails with the install
+steps. With any other engine no `omnivoice` check runs. A config that says `omnivoice` also runs the check when
+the input is left out, and the check's detail then warns that `generate_narration` does not read the config.
+
+### `generate_narration`
+
+| Input | Notes |
+|---|---|
+| `engine` | `edge-tts` (the default), `say`, `espeak` or `omnivoice`. The input is the only switch. |
+| `baseLanguage` | The language `vo` is written in. Defaults to `en`. |
+| `languages` | The languages to narrate. The base language writes to `public/audio/vo/<beatId>.mp3` and every other one to `public/audio/vo/<lang>/<beatId>.mp3`, from each beat's `voTranslations`. |
+| `voices` | A voice per language, keyed by the language tag spelled exactly as in the run. A key is read only when the language it names is being generated, so `{ "hi": ... }` applies when `baseLanguage` is `hi` or `languages` includes `hi`. |
+
+`generate_narration` does not read `narration.engine` or `narration.voice` from `openvidstudio.config.json`, even
+though `init_project` writes both there. Without `engine: "omnivoice"` it uses `edge-tts`, which sends the text to
+Microsoft's speech service, whatever the config says.
+
+Captions do not follow the language. They are baked from the base-language `vo` by `scaffold_scene`, so every
+language cut shows the base-language caption, and a project whose base language is that language gets captions in
+that language. Only the audio changes per language (NARRATION.md, "Languages in a render").
+
+### `stitch_composition`
+
+| Input | Notes |
+|---|---|
+| `languages` | One composition per language over a single scene tree: `<Name>Demo` for the base language and `<Name>Demo<Lang>` for each other one. |
+| `baseLanguage` | The language `vo` is written in. Defaults to `en`. |
+
+The scenes are shared, so the captions are baked from the base-language `vo` and every language cut shows the
+base-language caption. A project whose base language is that language gets captions in that language. Only the
+narration audio changes per language.

@@ -7,9 +7,25 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`generate_script`, one call from a brief to a beats.json draft (#178).** Tool 42 (43 with the Higgsfield tier). Without a `draft` it returns the `plan_beats` skeleton with a word budget per beat and a `beatsJson` with every beat's timing and visual filled in; with `draft: { narration, visuals? }` it merges the agent's lines into that skeleton and returns the `validate_beats` result next to the full `beatsJson`. The server still calls no model and the tool writes nothing: the human approval gate and `write_beats_file` are unchanged. The creative level picks the arc (`literal`, `simple` or `packed`), and at `literal` a draft may not carry `visuals`. PLANNING.md section 4.10 has the flow and a before and after example that a test runs.
+- **A `literal` arc in `plan_beats` (#178).** One screenshot demo beat per feature, all the same length, and nothing else: no hook, problem or call to action. It needs at least one feature and has no cap on how many. `creativeLevel: "literal"` always plans it.
+- **`preflight` takes `engine`, and checks for OmniVoice (#180).** With `engine: "omnivoice"` (or a config whose `narration.engine` is `omnivoice`) it adds a non-blocking `omnivoice` check: `omnivoice-infer` on PATH or a python that can import `omnivoice`, and the install steps when neither is there. A config-only trigger adds a warning, because `generate_narration` does not read `narration.engine` or `narration.voice` from the config and needs `engine: "omnivoice"` passed to it. NARRATION.md has the requirements and a measured CPU run.
+- **Per-language pace bands, measured from real audio (#181).** Hindi 1.8-2.3, Spanish 2.2-2.7 and German 1.8-2.3 words/sec, each on one voice, against English's unchanged 2.3-2.9. `plan_beats`, `validate_beats`, `fit_beats` and `generate_script` take a `language` (`beats.json` carries it as a top-level `language`), and any other language gets the English band with a warning. Spaceless scripts (`zh`, `ja`, `th` and the rest) are refused rather than guessed. `fit_beats` reports the `language`, `paceBand` and `notes` it used.
+
 ### Changed
 
+- **The `generate_narration` and `stitch_composition` descriptions say captions stay in the base language (#182).** A caption is baked from the base-language `vo`, so every language cut shows the base-language caption and only the audio changes. NARRATION.md has said so since the render checks.
+
 - **The Claude plugin now pins server 2.0.0 and is version 1.2.0.** 2.0.0 is on npm, so a new plugin install runs a server without the removed Supernova tools, and the plugin no longer ships the `supernova` skill. The `mcp-server` build now starts from an empty `dist/`, because the 2.0.0 package still carried compiled files of the removed tools.
+
+### Fixed
+
+- **The Remotion bridge accepts bundle `siteVersion` 12 (Remotion 4.0.543).** The Remotion bump to 4.0.543 (#175) made bundles report 12 where the guard in `remotionBridge.ts` still required 11, so every render-based path threw `RemotionBridgeProtocolError` (`validate_scenes` showed it as `render-skipped` warnings) and eight test files failed or crashed. The bridge's protocol was diffed between 4.0.534 and 4.0.543 and nothing it measures changed, so only the guard moved.
+- **`plan_beats` no longer returns the same beat id twice (#178).** Two features whose names slug alike (differing only in case or punctuation, or sharing their first 24 characters) both became `demo-<slug>`, which `validate_beats` rejects and a `generate_script` draft cannot key. The first keeps the plain id and each later repeat gets `-2`, `-3`, and ids that were already unique do not change.
+- **OmniVoice narration now produces clips (#180).** `omnivoice-infer` cannot write a `.raw` output, so a `generate_narration` run with `engine: "omnivoice"` produced no clips. The clip is now written as `.wav` and renamed onto the path the rest of the pipeline reads.
+- **A Hindi caption ends at the danda (#181).** `captionLine` picked the first sentence of a long `vo` at `.`, `!` and `?` only, so a Hindi line was cut partway into the next sentence. A sentence also ends at `।` and `॥`.
 
 ## [2.0.0] - 2026-11-18
 

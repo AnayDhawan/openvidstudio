@@ -176,6 +176,14 @@ Method-specific fields:
 | `dom-demo` | none | the beat's visual is authored directly in its scene file, no capture step |
 | `higgsfield` | `higgsfieldPrompt` | the AI-generation prompt for the b-roll clip; must not request on-screen product text or real UI |
 
+A `screenshot` or `recording` beat can also carry `shows`: a non-empty array of CSS selectors for what the
+beat is meant to show on screen once its `interactions` have run (`"shows": ["#cart", ".order-total"]`).
+Nothing captures from it. It is the beat's claim about the page, and `validate_scenes` with `intent: true`
+opens the page again and checks it: the capture was taken of the beat's `url`, every selector in
+`interactions` exists when its step runs, and every selector in `shows` is visible at the end. A page that
+changed fails that beat with the missing selector named. A beat that `brief.json`'s shot list marks
+`real: false` has no page behind it and is skipped.
+
 See section 6 below for a concrete `beats.json` fragment with one full,
 working example of each of these four shapes.
 

@@ -4,10 +4,11 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, pascalCase } from "../util";
 import { loadConfig } from "../config";
-import { settleSidecarPath, type SettleReport } from "@openvidstudio/capture";
+import { settleSidecarPath, type Interaction, type SettleReport } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { writeFactRecord } from "../facts";
 import { resolveCompositionId } from "./renderStills";
+import { runIntentChecks, type BeatIntentResult } from "./validateScenesIntent";
 import { readDeliberateHolds, readTypeMinimums, runRenderChecks } from "./validateScenesRender";
 
 /**
@@ -37,8 +38,17 @@ export interface ValidateScenesInput {
   render?: boolean;
   /** With render: overrides the composition id resolved from src/videos/.registry.json. */
   compositionId?: string;
-  /** With render: limit the measurement to these beats. Static checks always cover every beat. */
+  /** With render or intent: limit the measurement to these beats. Static checks always cover every beat. */
   beatIds?: string[];
+  /**
+   * Also open each browser-captured beat's page again and check it still is what the beat says: the
+   * capture's url matches the beat's, every selector in the beat's click path exists when its step
+   * runs, and every selector in `visual.shows` is visible at the end. Needs the product running at
+   * the beat's url. Drift is reported per beat, naming the missing selector.
+   */
+  intent?: boolean;
+  /** With intent: how long each selector gets to appear, in ms. Defaults to 4000. */
+  intentTimeoutMs?: number;
 }
 
 export interface SceneFinding {
@@ -46,11 +56,12 @@ export interface SceneFinding {
   scene: string;
   severity: "error" | "warning";
   message: string;
-  /** Which pass produced this: reading the source, or measuring the real render. */
-  source?: "static" | "render";
+  /** Which pass produced this: reading the source, measuring the real render, or re-opening the page. */
+  source?: "static" | "render" | "intent";
   /**
    * For render findings, which check: crop, text-size, reading-time, dead-frames, em-dash,
-   * contrast, safe-area, hud-overlap or render-skipped.
+   * contrast, safe-area, hud-overlap or render-skipped. For intent findings: intent (drift from
+   * what the beat says) or intent-skipped (the page could not be checked).
    */
   check?: string;
 }
@@ -67,13 +78,26 @@ export interface ValidateScenesResult {
     bundleMs: number;
     totalMs: number;
   };
+  /** Present only when intent mode ran: one entry per beat, with what drifted or why it was skipped. */
+  intent?: {
+    beatsChecked: number;
+    drifted: string[];
+    beats: BeatIntentResult[];
+  };
 }
 
 interface BeatLike {
   id: string;
   /** A bespoke scene path relative to the video directory (C5), replacing scenes/<Pascal>.tsx. */
   scene?: string;
-  visual?: { captureMethod?: string; source?: string; assetPath?: string };
+  visual?: {
+    captureMethod?: string;
+    source?: string;
+    assetPath?: string;
+    url?: string;
+    interactions?: Interaction[];
+    shows?: string[];
+  };
   artifacts?: { screenshotPath?: string; recordingPath?: string; terminalPath?: string };
   // (expectedArtifact below resolves these into the one path this beat actually needs.)
 }
@@ -239,10 +263,12 @@ function recordValidateScenes(input: ValidateScenesInput, result: ValidateScenes
       ok: result.ok,
       scenesChecked: result.scenesChecked,
       renderMode: result.render !== undefined,
+      intentMode: result.intent !== undefined,
       errors: result.findings.filter((f) => f.severity === "error").length,
       warnings: result.findings.filter((f) => f.severity === "warning").length,
       findings: result.findings,
       ...(result.render ? { render: result.render } : {}),
+      ...(result.intent ? { intent: { beatsChecked: result.intent.beatsChecked, drifted: result.intent.drifted } } : {}),
     },
   });
 }
@@ -414,7 +440,7 @@ function staticPass(input: ValidateScenesInput): ValidateScenesResult {
  */
 export async function runValidateScenesFull(input: ValidateScenesInput): Promise<ValidateScenesResult> {
   const result = staticPass(input);
-  if (!input.render) {
+  if (!input.render && !input.intent) {
     recordValidateScenes(input, result);
     return result;
   }
@@ -424,7 +450,7 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
   const videoDir = path.join(projectRoot, "src", "videos", videoName);
   const doc = JSON.parse(fs.readFileSync(path.join(videoDir, "beats.json"), "utf8")) as {
     fps?: number;
-    beats: { id: string; start: number; duration: number }[];
+    beats: (BeatLike & { start: number; duration: number })[];
   };
 
   let beats = doc.beats;
@@ -435,30 +461,42 @@ export async function runValidateScenesFull(input: ValidateScenesInput): Promise
     const wanted = new Set(input.beatIds);
     beats = beats.filter((b) => wanted.has(b.id));
   }
-  const compositionId = resolveCompositionId(projectRoot, videoName, input.compositionId);
-  const rendered = await runRenderChecks({
-    projectRoot,
-    videoName,
-    compositionId,
-    beats,
-    fps: doc.fps ?? 30,
-    minimums: readTypeMinimums(videoDir),
-    deliberateHolds: readDeliberateHolds(videoDir),
-  });
 
-  const findings = [...result.findings, ...rendered.findings];
-  const full: ValidateScenesResult = {
-    ok: !findings.some((f) => f.severity === "error"),
-    scenesChecked: result.scenesChecked,
-    findings,
-    render: {
+  const findings = [...result.findings];
+  const full: ValidateScenesResult = { ok: true, scenesChecked: result.scenesChecked, findings };
+
+  if (input.render) {
+    const compositionId = resolveCompositionId(projectRoot, videoName, input.compositionId);
+    const rendered = await runRenderChecks({
+      projectRoot,
+      videoName,
+      compositionId,
+      beats,
+      fps: doc.fps ?? 30,
+      minimums: readTypeMinimums(videoDir),
+      deliberateHolds: readDeliberateHolds(videoDir),
+    });
+    findings.push(...rendered.findings);
+    full.render = {
       compositionId,
       beatsMeasured: rendered.beatsMeasured,
       beatsSkipped: rendered.beatsSkipped,
       bundleMs: rendered.bundleMs,
       totalMs: rendered.totalMs,
-    },
-  };
+    };
+  }
+
+  if (input.intent) {
+    const intent = await runIntentChecks({ projectRoot, videoDir, beats, selectorTimeoutMs: input.intentTimeoutMs });
+    findings.push(...intent.findings);
+    full.intent = {
+      beatsChecked: intent.beatsChecked,
+      drifted: intent.beats.filter((b) => b.status === "drifted").map((b) => b.beatId),
+      beats: intent.beats,
+    };
+  }
+
+  full.ok = !findings.some((f) => f.severity === "error");
   recordValidateScenes(input, full);
   return full;
 }
@@ -486,13 +524,21 @@ export function registerValidateScenes(server: McpServer): void {
         "applies), beats whose frames never change, em dashes in on-screen copy, text colour against the " +
         "pixels rendered behind it (WCAG 4.5:1, 3:1 for large text), text outside the title-safe area, and " +
         "scene text that overlaps the chapter HUD. Needs stitch_composition to have run. A beat that cannot be mounted (a screen " +
-        "recording played through OffthreadVideo) is reported as render-skipped, never as clean.",
+        "recording played through OffthreadVideo) is reported as render-skipped, never as clean. Pass intent: true " +
+        "to also open each browser-captured beat's page again and check it still is what the beat says: the " +
+        "capture was taken of the url the beat names, every selector in the beat's click path exists when its " +
+        "step runs, and every selector in the beat's visual.shows is visible at the end. A beat whose page " +
+        "changed fails with the missing selector named, per beat. Needs the product running at the beat's url; a " +
+        "page that cannot be opened is reported as intent-skipped, not as drift. Beats the brief's shot list " +
+        "marks real: false, and beats that are not browser captures, are skipped with the reason.",
       inputSchema: {
         projectRoot: z.string().optional(),
         videoName: z.string().min(1),
         render: z.boolean().optional(),
         compositionId: z.string().optional(),
         beatIds: z.array(z.string()).optional(),
+        intent: z.boolean().optional(),
+        intentTimeoutMs: z.number().int().positive().optional(),
       },
     },
     async (input) => runTool("validate_scenes", () => runValidateScenesFull(input)),

@@ -289,6 +289,16 @@ console.log("\n== one brief at each creative level (#179) ==");
   }
 }
 
+console.log("\n== beats too short for any narration ==");
+{
+  // At 4 s the simple arc has beats under a second, where no whole number of words fits the pace band.
+  const tiny = call(root, { targetDurationSeconds: 4, features: ["search"] }).result;
+  const impossible = tiny.plan.beats.filter((b) => b.wordBudget.min > b.wordBudget.max);
+  check("a 4 s skeleton has beats with an empty word budget", impossible.length > 0);
+  check("the skeleton's notes name every such beat and say no narration can pass", impossible.every((b) => tiny.notes.some((n) => n.includes(`"${b.id}"`) && /no narration can pass/.test(n))));
+  check("a 60 s skeleton carries no such note", !call(root, brief).result.notes.some((n) => /no narration can pass/.test(n)));
+}
+
 console.log("\n== the tool never writes ==");
 {
   check("the project listing and file contents were identical before and after every call above", writes.length === 0);

@@ -4,13 +4,15 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment } from "../util";
 import { runTool } from "./mcp";
-import { MAX_PACE, MIN_PACE, validateBeatsLogic, wordCount, type ValidateBeatsResult } from "./validateBeats";
+import { validateBeatsLogic, wordCount, type ValidateBeatsResult } from "./validateBeats";
+import { paceBandFor } from "../languagePace";
 import { probeDuration, TEMPO_CEIL } from "./generateNarration";
 
 /**
  * Sizes each beat from the measured voice. A real voice does not read at the pace a word count predicts
  * (plain prose is about 3 words per second, number-heavy lines about 2.2), and validate_beats wants 2.3 to
- * 2.9 words per second over the beat, so a beat sized by words alone overruns or sits half empty. The fix
+ * 2.9 words per second over the beat (the English band; the language of beats.json picks another, see
+ * languagePace.ts), so a beat sized by words alone overruns or sits half empty. The fix
  * used to be a manual loop: provisional beats, generate_narration, read every spokenSeconds, compute new
  * lengths in a script, rewrite beats.json, generate again. This is that loop's middle.
  *
@@ -29,6 +31,8 @@ export interface FitBeatsInput {
   narration?: { written?: { beatId: string; spokenSeconds: number; language?: string }[] };
   /** Seconds of silence after the spoken line. Default 0.5. */
   padSeconds?: number;
+  /** The language the narration is in, which picks the pace band. Default: the `language` in beats.json, else English. */
+  language?: string;
   /** Return the proposed durations without writing beats.json. */
   dryRun?: boolean;
 }
@@ -61,8 +65,13 @@ export interface FitBeatsResult {
   /** Total frames before and after. */
   framesBefore: number;
   framesAfter: number;
+  /** The language the beats were sized for, and the words/sec band that gave the pace window. */
+  language: string;
+  paceBand: { min: number; max: number; measured: boolean };
   /** validate_beats run on the fitted beats. */
   validation: ValidateBeatsResult;
+  /** Things to know about the run that belong to no single beat. Empty when there is nothing to say. */
+  notes: string[];
 }
 
 interface BeatDoc {
@@ -73,9 +82,15 @@ interface BeatDoc {
 }
 
 /** Pure: the frames a line of `words` words, said in `spoken` seconds, should get. */
-export function fitFrames(words: number, spoken: number, fps: number, pad: number): { frames: number; clampedTo?: "min" | "max"; overruns: boolean } {
-  const lo = Math.ceil((words / MAX_PACE) * fps - 1e-9);
-  const hi = Math.floor((words / MIN_PACE) * fps + 1e-9);
+export function fitFrames(
+  words: number,
+  spoken: number,
+  fps: number,
+  pad: number,
+  band: { min: number; max: number } = paceBandFor(),
+): { frames: number; clampedTo?: "min" | "max"; overruns: boolean } {
+  const lo = Math.ceil((words / band.max) * fps - 1e-9);
+  const hi = Math.floor((words / band.min) * fps + 1e-9);
   const wanted = Math.round((spoken + pad) * fps);
   let frames = wanted;
   let clampedTo: "min" | "max" | undefined;
@@ -115,6 +130,17 @@ export function runFitBeats(input: FitBeatsInput): FitBeatsResult {
   const fps = doc.fps && doc.fps > 0 ? doc.fps : 30;
   const pad = input.padSeconds ?? DEFAULT_FIT_PAD_SECONDS;
   const silent = doc.narration === "none";
+  // The input wins over the file. A script written without spaces throws here, with the reason.
+  const language = input.language ?? (typeof doc.language === "string" ? doc.language : undefined);
+  const band = paceBandFor(language);
+  const notes: string[] = [];
+  if (input.language !== undefined && input.language !== doc.language) {
+    notes.push(
+      `Sized for language "${input.language}" (the language input), but beats.json says ` +
+        `${typeof doc.language === "string" ? `"${doc.language}"` : "nothing about language"}. Add "language": ` +
+        `"${input.language}" to beats.json so validate_beats holds the narration to the same band.`,
+    );
+  }
 
   const reported = new Map<string, number>();
   for (const clip of input.narration?.written ?? []) {
@@ -152,7 +178,7 @@ export function runFitBeats(input: FitBeatsInput): FitBeatsResult {
     }
     if (spoken === null || !(spoken > 0)) return skip("no measured voice for this beat. Run generate_narration first, or pass spokenSeconds.");
 
-    const fit = fitFrames(words, spoken, fps, pad);
+    const fit = fitFrames(words, spoken, fps, pad, band);
     const entry: FittedBeat = {
       ...base,
       after: fit.frames,
@@ -171,13 +197,13 @@ export function runFitBeats(input: FitBeatsInput): FitBeatsResult {
       const needSeconds = spoken / TEMPO_CEIL;
       entry.note =
         `The voice needs ${spoken.toFixed(2)}s (${needSeconds.toFixed(2)}s at the fastest natural stretch), but ${words} words only ` +
-        `allow a beat of ${(fit.frames / fps).toFixed(2)}s at ${MIN_PACE} words/sec. Shorten this line to about ${maxWords} words or fewer, ` +
-        `or lengthen the beat to ${Math.ceil(needSeconds * fps)} frames and accept a pace under ${MIN_PACE} words/sec (validate_beats will say so).`;
+        `allow a beat of ${(fit.frames / fps).toFixed(2)}s at ${band.min} words/sec. Shorten this line to about ${maxWords} words or fewer, ` +
+        `or lengthen the beat to ${Math.ceil(needSeconds * fps)} frames and accept a pace under ${band.min} words/sec (validate_beats will say so).`;
       // Closest legal length, so the rest of the lesson still lines up; the finding is the report.
     } else if (fit.clampedTo === "min") {
-      entry.note = `The voice is quicker than ${MAX_PACE} words/sec, so the beat was held at ${(fit.frames / fps).toFixed(2)}s, the shortest the pace window allows. Add words to the line if the gap is noticeable.`;
+      entry.note = `The voice is quicker than ${band.max} words/sec, so the beat was held at ${(fit.frames / fps).toFixed(2)}s, the shortest the pace window allows. Add words to the line if the gap is noticeable.`;
     } else if (fit.clampedTo === "max") {
-      entry.note = `The voice would take longer than the ${MIN_PACE} words/sec window, so the beat was held at ${(fit.frames / fps).toFixed(2)}s, the longest it allows.`;
+      entry.note = `The voice would take longer than the ${band.min} words/sec window, so the beat was held at ${(fit.frames / fps).toFixed(2)}s, the longest it allows.`;
     }
     fitted.push(entry);
     shift += fit.frames - beat.duration;
@@ -185,7 +211,8 @@ export function runFitBeats(input: FitBeatsInput): FitBeatsResult {
   });
 
   const fittedDoc: BeatDoc = { ...doc, beats: next };
-  const validation = validateBeatsLogic(fittedDoc);
+  // Validated with the language the beats were sized for, even when that came from the input and not the file.
+  const validation = validateBeatsLogic(language === undefined ? fittedDoc : { ...fittedDoc, language });
   const dryRun = input.dryRun === true;
   const framesBefore = doc.beats.reduce((n, b) => n + b.duration, 0);
   const framesAfter = next.reduce((n, b) => n + b.duration, 0);
@@ -205,7 +232,10 @@ export function runFitBeats(input: FitBeatsInput): FitBeatsResult {
     unfittable: fitted.filter((b) => b.status === "unfittable"),
     framesBefore,
     framesAfter,
+    language: language ?? "en",
+    paceBand: { min: band.min, max: band.max, measured: band.measured },
     validation,
+    notes,
   };
 }
 
@@ -216,7 +246,8 @@ export function registerFitBeats(server: McpServer): void {
       title: "Size the beats from the measured voice",
       description:
         "Sets each beat's duration to the length its narration actually takes, so validate_beats' 2.3 to 2.9 " +
-        "words per second holds with a real voice. A voice reads plain prose at about 3 words per second and " +
+        "words per second (the English band; the top-level language in beats.json, or the language input, picks another) " +
+        "holds with a real voice. A voice reads plain prose at about 3 words per second and " +
         "number-heavy lines at about 2.2, so beats sized from word counts overrun or sit half empty; this replaces the " +
         "manual loop of reading generate_narration's spokenSeconds, computing new lengths and rewriting beats.json. " +
         "Run generate_narration on provisional beats first. Each beat becomes the spoken length plus a pad (padSeconds, " +
@@ -238,6 +269,14 @@ export function registerFitBeats(server: McpServer): void {
           .optional()
           .describe("generate_narration's result, instead of spokenSeconds."),
         padSeconds: z.number().min(0).optional().describe("Silence after the spoken line. Default 0.5."),
+        language: z
+          .string()
+          .optional()
+          .describe(
+            "The language the narration is in, as a BCP-47 tag. It picks the pace band the beats are sized into " +
+              "(hi, es and de are measured; others use the English band with a warning; zh, ja, th, km, lo and my " +
+              "are refused). Default: the top-level language in beats.json, else English.",
+          ),
         dryRun: z.boolean().optional().describe("Return the proposed durations without writing beats.json."),
       },
     },

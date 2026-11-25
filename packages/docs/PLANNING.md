@@ -298,11 +298,16 @@ translation is content, and content that will be spoken over someone's product
 gets seen by a human first.
 
 `validate_beats` checks the shape and the language tags, since a tag becomes a
-directory name. It deliberately does **not** apply `SCRIPT.md`'s 2.3-2.9
-words/sec budget to a translation. That is an English number: the same sentence
-runs 20 to 30 percent longer in German or Hindi, and holding a translation to it
-would reject correct translations. `generate_narration` reports an overrun
-instead, where the fix is a shorter translation rather than a faster read.
+directory name. It does **not** hold a translation to `SCRIPT.md`'s 2.3-2.9
+words/sec budget, which is an English number: the same sentence runs 20 to 30
+percent longer in German or Hindi. Each line is checked against its own tag's
+measured band instead (NARRATION.md, "Pace by language"), and a miss is a warning,
+never an error. A tag with no measured band gets one warning for the file and its
+lines are not pace-checked. `generate_narration` reports an overrun, where the fix
+is a shorter translation rather than a faster read.
+
+A top-level `language` in `beats.json` (a BCP-47 tag, optional) picks the band
+`vo` itself is held to; absent means English.
 
 ## 4.8. Vertical reformat hints (added 2026-09-11)
 

@@ -1,0 +1,343 @@
+{
+  "measuredAt": "2026-11-25",
+  "edgeTtsVersion": "7.3.1",
+  "method": "Spoken span is the last word's endMs minus the first word's startMs from py/edge-words.py, words are whitespace tokens, rate is words per second per sentence, median over the 12 corpus sentences. r is the language's median divided by English's. Band is [round1(2.3 * r), round1(2.9 * r)].",
+  "english": {
+    "min": 2.3,
+    "max": 2.9
+  },
+  "languages": {
+    "en": {
+      "voice": "en-US-AndrewNeural",
+      "sentences": [
+        {
+          "id": "s01",
+          "words": 16,
+          "seconds": 5.099,
+          "wordsPerSec": 3.138
+        },
+        {
+          "id": "s02",
+          "words": 15,
+          "seconds": 4.312,
+          "wordsPerSec": 3.479
+        },
+        {
+          "id": "s03",
+          "words": 20,
+          "seconds": 6.437,
+          "wordsPerSec": 3.107
+        },
+        {
+          "id": "s04",
+          "words": 12,
+          "seconds": 3.625,
+          "wordsPerSec": 3.31
+        },
+        {
+          "id": "s05",
+          "words": 26,
+          "seconds": 9.287,
+          "wordsPerSec": 2.8
+        },
+        {
+          "id": "s06",
+          "words": 19,
+          "seconds": 4.637,
+          "wordsPerSec": 4.097
+        },
+        {
+          "id": "s07",
+          "words": 13,
+          "seconds": 5.699,
+          "wordsPerSec": 2.281
+        },
+        {
+          "id": "s08",
+          "words": 18,
+          "seconds": 4.649,
+          "wordsPerSec": 3.872
+        },
+        {
+          "id": "s09",
+          "words": 20,
+          "seconds": 5.862,
+          "wordsPerSec": 3.412
+        },
+        {
+          "id": "s10",
+          "words": 21,
+          "seconds": 5.374,
+          "wordsPerSec": 3.908
+        },
+        {
+          "id": "s11",
+          "words": 16,
+          "seconds": 3.537,
+          "wordsPerSec": 4.524
+        },
+        {
+          "id": "s12",
+          "words": 17,
+          "seconds": 4.449,
+          "wordsPerSec": 3.821
+        }
+      ],
+      "medianWordsPerSec": 3.445,
+      "r": 1,
+      "band": {
+        "min": 2.3,
+        "max": 2.9
+      }
+    },
+    "hi": {
+      "voice": "hi-IN-MadhurNeural",
+      "sentences": [
+        {
+          "id": "s01",
+          "words": 23,
+          "seconds": 8.137,
+          "wordsPerSec": 2.827
+        },
+        {
+          "id": "s02",
+          "words": 15,
+          "seconds": 6.012,
+          "wordsPerSec": 2.495
+        },
+        {
+          "id": "s03",
+          "words": 25,
+          "seconds": 8.837,
+          "wordsPerSec": 2.829
+        },
+        {
+          "id": "s04",
+          "words": 15,
+          "seconds": 5.549,
+          "wordsPerSec": 2.703
+        },
+        {
+          "id": "s05",
+          "words": 29,
+          "seconds": 11.362,
+          "wordsPerSec": 2.552
+        },
+        {
+          "id": "s06",
+          "words": 26,
+          "seconds": 9.437,
+          "wordsPerSec": 2.755
+        },
+        {
+          "id": "s07",
+          "words": 16,
+          "seconds": 8.812,
+          "wordsPerSec": 1.816
+        },
+        {
+          "id": "s08",
+          "words": 23,
+          "seconds": 8.149,
+          "wordsPerSec": 2.822
+        },
+        {
+          "id": "s09",
+          "words": 23,
+          "seconds": 8.449,
+          "wordsPerSec": 2.722
+        },
+        {
+          "id": "s10",
+          "words": 27,
+          "seconds": 9.849,
+          "wordsPerSec": 2.741
+        },
+        {
+          "id": "s11",
+          "words": 16,
+          "seconds": 7.099,
+          "wordsPerSec": 2.254
+        },
+        {
+          "id": "s12",
+          "words": 25,
+          "seconds": 9.062,
+          "wordsPerSec": 2.759
+        }
+      ],
+      "medianWordsPerSec": 2.732,
+      "r": 0.7929,
+      "band": {
+        "min": 1.8,
+        "max": 2.3
+      }
+    },
+    "es": {
+      "voice": "es-ES-AlvaroNeural",
+      "sentences": [
+        {
+          "id": "s01",
+          "words": 16,
+          "seconds": 4.9,
+          "wordsPerSec": 3.265
+        },
+        {
+          "id": "s02",
+          "words": 17,
+          "seconds": 4.737,
+          "wordsPerSec": 3.589
+        },
+        {
+          "id": "s03",
+          "words": 25,
+          "seconds": 7.475,
+          "wordsPerSec": 3.344
+        },
+        {
+          "id": "s04",
+          "words": 16,
+          "seconds": 4.049,
+          "wordsPerSec": 3.952
+        },
+        {
+          "id": "s05",
+          "words": 29,
+          "seconds": 9.724,
+          "wordsPerSec": 2.982
+        },
+        {
+          "id": "s06",
+          "words": 19,
+          "seconds": 6.224,
+          "wordsPerSec": 3.053
+        },
+        {
+          "id": "s07",
+          "words": 13,
+          "seconds": 5.425,
+          "wordsPerSec": 2.396
+        },
+        {
+          "id": "s08",
+          "words": 20,
+          "seconds": 6.175,
+          "wordsPerSec": 3.239
+        },
+        {
+          "id": "s09",
+          "words": 25,
+          "seconds": 6.887,
+          "wordsPerSec": 3.63
+        },
+        {
+          "id": "s10",
+          "words": 17,
+          "seconds": 5.287,
+          "wordsPerSec": 3.215
+        },
+        {
+          "id": "s11",
+          "words": 11,
+          "seconds": 4.262,
+          "wordsPerSec": 2.581
+        },
+        {
+          "id": "s12",
+          "words": 16,
+          "seconds": 4.987,
+          "wordsPerSec": 3.208
+        }
+      ],
+      "medianWordsPerSec": 3.227,
+      "r": 0.9367,
+      "band": {
+        "min": 2.2,
+        "max": 2.7
+      }
+    },
+    "de": {
+      "voice": "de-DE-ChristophNeural",
+      "sentences": [
+        {
+          "id": "s01",
+          "words": 19,
+          "seconds": 6.474,
+          "wordsPerSec": 2.935
+        },
+        {
+          "id": "s02",
+          "words": 16,
+          "seconds": 6,
+          "wordsPerSec": 2.667
+        },
+        {
+          "id": "s03",
+          "words": 24,
+          "seconds": 8.324,
+          "wordsPerSec": 2.883
+        },
+        {
+          "id": "s04",
+          "words": 13,
+          "seconds": 5.187,
+          "wordsPerSec": 2.506
+        },
+        {
+          "id": "s05",
+          "words": 28,
+          "seconds": 10.012,
+          "wordsPerSec": 2.797
+        },
+        {
+          "id": "s06",
+          "words": 17,
+          "seconds": 5.824,
+          "wordsPerSec": 2.919
+        },
+        {
+          "id": "s07",
+          "words": 15,
+          "seconds": 7.537,
+          "wordsPerSec": 1.99
+        },
+        {
+          "id": "s08",
+          "words": 19,
+          "seconds": 6.499,
+          "wordsPerSec": 2.924
+        },
+        {
+          "id": "s09",
+          "words": 23,
+          "seconds": 8.399,
+          "wordsPerSec": 2.738
+        },
+        {
+          "id": "s10",
+          "words": 22,
+          "seconds": 7.512,
+          "wordsPerSec": 2.929
+        },
+        {
+          "id": "s11",
+          "words": 14,
+          "seconds": 5.124,
+          "wordsPerSec": 2.732
+        },
+        {
+          "id": "s12",
+          "words": 14,
+          "seconds": 5.374,
+          "wordsPerSec": 2.605
+        }
+      ],
+      "medianWordsPerSec": 2.768,
+      "r": 0.8033,
+      "band": {
+        "min": 1.8,
+        "max": 2.3
+      }
+    }
+  }
+}

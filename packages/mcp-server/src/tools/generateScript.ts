@@ -42,6 +42,11 @@ export interface GenerateScriptInput {
   fps?: number;
   creativeLevel?: CreativeLevel;
   snapToBars?: PlanBeatsInput["snapToBars"];
+  /**
+   * The language the narration is written in. Word budgets use that language's measured pace band (see
+   * plan_beats) and it is written to beatsJson.language, so validate_beats holds the draft to the same band.
+   */
+  language?: string;
   draft?: ScriptDraft;
 }
 
@@ -167,6 +172,7 @@ export function runGenerateScript(input: GenerateScriptInput): GenerateScriptRes
     appUrl,
     fps: input.fps,
     snapToBars: input.snapToBars,
+    language: input.language,
   });
 
   const notes = [...plan.notes, defaults.review];
@@ -190,7 +196,12 @@ export function runGenerateScript(input: GenerateScriptInput): GenerateScriptRes
       visual,
     };
   });
-  const beatsJson: Record<string, unknown> = { fps: plan.fps, production: { creativeLevel }, beats };
+  const beatsJson: Record<string, unknown> = {
+    fps: plan.fps,
+    ...(input.language !== undefined ? { language: input.language } : {}),
+    production: { creativeLevel },
+    beats,
+  };
 
   if (!draft) {
     const visualAdvice = defaults.allowVisualOverrides
@@ -252,6 +263,11 @@ export function registerGenerateScript(server: McpServer): void {
         "feature, features required) and rejects draft.visuals; mid plans the simple arc and allows visual " +
         "overrides; peak plans the packed arc and allows visual overrides. An explicit arc overrides the " +
         "level's arc except at literal, which always plans the literal arc. snapToBars works as in plan_beats. " +
+        "language (a BCP-47 tag) is for narration that is not English: the word budgets use that language's " +
+        "measured pace band (hi, es and de are measured, any other language gets the English band and a note says " +
+        "so, zh, ja, th, km, lo and my count characters and are refused), and it is written to beatsJson.language " +
+        "so the validation holds the draft to the same band. A beat too short for any whole number of words is " +
+        "named in notes, because no narration can pass for it. " +
         "This tool never writes anything to disk, beats.json included. The human-approval gate is unchanged: " +
         "show the human the full beatsJson, and call write_beats_file only after they approve.",
       inputSchema: {
@@ -275,6 +291,14 @@ export function registerGenerateScript(server: McpServer): void {
           .object({ bpm: z.number().positive(), beatsPerBar: z.number().int().min(1).optional() })
           .optional()
           .describe("As in plan_beats: land every beat boundary on a downbeat of the score at this bpm."),
+        language: z
+          .string()
+          .optional()
+          .describe(
+            "The language the narration is written in, as a BCP-47 tag (hi, es, de measured; hi-IN is read as hi). " +
+              "Budgets use its measured pace band instead of English 2.3-2.9 words/sec, and it is written to " +
+              "beatsJson.language. Default English, which writes nothing.",
+          ),
         draft: z
           .object({
             narration: z

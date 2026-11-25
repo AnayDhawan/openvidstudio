@@ -1,0 +1,95 @@
+{
+  "note": "Parallel plain-prose narration sentences used only to measure how fast each language's voice speaks relative to English. They are measurement material, not shipped scripts. Words are counted as whitespace-separated tokens, the same rule validate_beats uses.",
+  "voices": {
+    "en": "en-US-AndrewNeural",
+    "hi": "hi-IN-MadhurNeural",
+    "es": "es-ES-AlvaroNeural",
+    "de": "de-DE-ChristophNeural"
+  },
+  "sentences": [
+    {
+      "id": "s01",
+      "en": "Every morning, your dashboard shows what changed overnight, so you can decide what to do first.",
+      "hi": "हर सुबह आपका डैशबोर्ड दिखाता है कि रात भर में क्या बदला, ताकि आप तय कर सकें कि सबसे पहले क्या करना है।",
+      "es": "Cada mañana, tu panel muestra qué cambió durante la noche, para que decidas qué hacer primero.",
+      "de": "Jeden Morgen zeigt dein Dashboard, was sich über Nacht geändert hat, damit du entscheiden kannst, was du zuerst tust."
+    },
+    {
+      "id": "s02",
+      "en": "Install the package with one command, then open the settings page and paste your key.",
+      "hi": "एक कमांड से पैकेज इंस्टॉल करें, फिर सेटिंग्स पेज खोलें और अपनी की पेस्ट करें।",
+      "es": "Instala el paquete con un solo comando, luego abre la página de ajustes y pega tu clave.",
+      "de": "Installiere das Paket mit einem einzigen Befehl, öffne dann die Einstellungsseite und füge deinen Schlüssel ein."
+    },
+    {
+      "id": "s03",
+      "en": "Most teams spend hours copying numbers between spreadsheets, and every copy is another chance for a mistake to slip in.",
+      "hi": "ज़्यादातर टीमें स्प्रेडशीट के बीच नंबर कॉपी करने में घंटों लगा देती हैं, और हर कॉपी में गलती होने का एक और मौका होता है।",
+      "es": "La mayoría de los equipos pasa horas copiando números entre hojas de cálculo, y cada copia es otra oportunidad para que se cuele un error.",
+      "de": "Die meisten Teams verbringen Stunden damit, Zahlen zwischen Tabellen hin und her zu kopieren, und jede Kopie ist eine weitere Gelegenheit für einen Fehler."
+    },
+    {
+      "id": "s04",
+      "en": "Click the export button and the report downloads in about two seconds.",
+      "hi": "एक्सपोर्ट बटन पर क्लिक करें और रिपोर्ट लगभग दो सेकंड में डाउनलोड हो जाती है।",
+      "es": "Haz clic en el botón de exportar y el informe se descarga en unos dos segundos.",
+      "de": "Klicke auf die Export-Schaltfläche, und der Bericht wird in etwa zwei Sekunden heruntergeladen."
+    },
+    {
+      "id": "s05",
+      "en": "Under the hood, the server reads each file once, caches the result, and reprocesses only what changed since the last run, so large projects stay fast.",
+      "hi": "अंदर से, सर्वर हर फ़ाइल एक बार पढ़ता है, नतीजा कैश करता है, और बदली हुई चीज़ें ही दोबारा प्रोसेस करता है, इसलिए बड़े प्रोजेक्ट भी तेज़ रहते हैं।",
+      "es": "Por dentro, el servidor lee cada archivo una vez, guarda el resultado y solo reprocesa lo que cambió desde la última ejecución, por eso los proyectos grandes siguen rápidos.",
+      "de": "Im Hintergrund liest der Server jede Datei einmal, speichert das Ergebnis und verarbeitet nur neu, was sich seit dem letzten Lauf geändert hat, deshalb bleiben große Projekte schnell."
+    },
+    {
+      "id": "s06",
+      "en": "Nothing leaves your machine unless you choose to share it, and you can turn sharing off at any time.",
+      "hi": "जब तक आप खुद साझा करना न चुनें, कुछ भी आपकी मशीन से बाहर नहीं जाता, और आप साझा करना कभी भी बंद कर सकते हैं।",
+      "es": "Nada sale de tu equipo a menos que decidas compartirlo, y puedes desactivar el uso compartido en cualquier momento.",
+      "de": "Nichts verlässt deinen Rechner, solange du es nicht teilen willst, und du kannst das Teilen jederzeit abschalten."
+    },
+    {
+      "id": "s07",
+      "en": "In 2025 the project grew from 40 contributors to 310 across 27 countries.",
+      "hi": "2025 में यह प्रोजेक्ट 40 योगदानकर्ताओं से बढ़कर 27 देशों के 310 योगदानकर्ताओं तक पहुँच गया।",
+      "es": "En 2025 el proyecto pasó de 40 colaboradores a 310 en 27 países.",
+      "de": "Im Jahr 2025 ist das Projekt von 40 Mitwirkenden auf 310 in 27 Ländern gewachsen."
+    },
+    {
+      "id": "s08",
+      "en": "Here is the part people usually miss: the tool checks its own output before showing it to you.",
+      "hi": "यहाँ वह बात है जो लोग अक्सर चूक जाते हैं: यह टूल आपको दिखाने से पहले अपने ही आउटपुट की जाँच करता है।",
+      "es": "Esta es la parte que la gente suele pasar por alto: la herramienta revisa su propio resultado antes de mostrártelo.",
+      "de": "Hier ist der Teil, den die meisten übersehen: Das Werkzeug prüft seine eigene Ausgabe, bevor es sie dir zeigt."
+    },
+    {
+      "id": "s09",
+      "en": "Open the terminal, run the build, and watch the progress bar fill as each step completes without a single error.",
+      "hi": "टर्मिनल खोलें, बिल्ड चलाएँ, और देखें कि हर चरण पूरा होने पर प्रोग्रेस बार कैसे भरता है, बिना किसी एक भी गलती के।",
+      "es": "Abre la terminal, ejecuta la compilación y mira cómo se llena la barra de progreso a medida que cada paso termina sin un solo error.",
+      "de": "Öffne das Terminal, starte den Build und sieh zu, wie sich der Fortschrittsbalken füllt, während jeder Schritt ohne einen einzigen Fehler abgeschlossen wird."
+    },
+    {
+      "id": "s10",
+      "en": "If something goes wrong, you get a clear message that says what failed, where it failed, and how to fix it.",
+      "hi": "अगर कुछ गलत होता है, तो आपको एक साफ़ संदेश मिलता है जो बताता है कि क्या फेल हुआ, कहाँ फेल हुआ, और उसे कैसे ठीक करें।",
+      "es": "Si algo sale mal, recibes un mensaje claro que dice qué falló, dónde falló y cómo arreglarlo.",
+      "de": "Wenn etwas schiefgeht, bekommst du eine klare Meldung, die sagt, was fehlgeschlagen ist, wo es passiert ist und wie du es behebst."
+    },
+    {
+      "id": "s11",
+      "en": "That is all it takes. Try it today, and tell us what you build with it.",
+      "hi": "बस इतना ही करना है। आज ही आज़माएँ, और हमें बताएँ कि आपने इससे क्या बनाया।",
+      "es": "Eso es todo. Pruébalo hoy y cuéntanos qué construyes con él.",
+      "de": "Das ist alles. Probiere es heute aus und erzähl uns, was du damit baust."
+    },
+    {
+      "id": "s12",
+      "en": "A new release ships every two weeks, and each one comes with notes written in plain language.",
+      "hi": "हर दो हफ्ते में एक नया रिलीज़ आता है, और हर रिलीज़ के साथ ऐसे नोट्स होते हैं जो आसान भाषा में लिखे गए हैं।",
+      "es": "Cada dos semanas sale una versión nueva, y cada una trae notas escritas en lenguaje sencillo.",
+      "de": "Alle zwei Wochen erscheint eine neue Version, und jede enthält Hinweise in einfacher Sprache."
+    }
+  ]
+}

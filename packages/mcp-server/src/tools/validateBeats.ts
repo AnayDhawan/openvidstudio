@@ -4,6 +4,7 @@ import { interactionSchema } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { resolveProjectRoot, sanitizeSegment } from "../util";
 import { writeFactRecord } from "../facts";
+import { ENGLISH_PACE_MAX, ENGLISH_PACE_MIN, paceBandFor, type PaceBand } from "../languagePace";
 
 export interface ValidateBeatsResult {
   valid: boolean;
@@ -20,8 +21,9 @@ const EM_DASH = "—";
 const RHYTHM_MIN_BEATS = 4;
 /** The longest beat should be at least this many times the shortest, or the shots read as evenly spaced ticks. */
 const RHYTHM_MIN_SPREAD = 2.5;
-export const MIN_PACE = 2.3;
-export const MAX_PACE = 2.9;
+/** The English band. Other languages come from paceBandFor (languagePace.ts). */
+export const MIN_PACE = ENGLISH_PACE_MIN;
+export const MAX_PACE = ENGLISH_PACE_MAX;
 /** SCRIPT.md's reading-time budget for onScreenText on a narration:"none" beat. */
 export const MAX_READING_WORDS_PER_SEC = 3.5;
 export const READING_OVERHEAD_SEC = 0.8;
@@ -43,19 +45,32 @@ export function wordCount(text: string): number {
 }
 
 /**
- * SCRIPT.md's pacing rule for one spoken line: 2.3 to 2.9 words per second over the beat's length.
- * `message` is the failure to report, or null when the line is inside the budget. validate_beats and
- * fit_beats both read the budget from here, so there is one number.
+ * SCRIPT.md's pacing rule for one spoken line: 2.3 to 2.9 words per second over the beat's length, which
+ * is the English band. With a language, the line is held to that language's band instead (hi, es and de
+ * are measured, see languagePace.ts); a language with no measurement keeps the English band, and a script
+ * written without spaces throws. `message` is the failure to report, or null when the line is inside the
+ * budget. validate_beats and fit_beats both read the budget from here, so there is one number.
  */
-export function voPaceCheck(vo: string, seconds: number): { words: number; pace: number; message: string | null } {
+export function voPaceCheck(
+  vo: string,
+  seconds: number,
+  language?: string,
+): { words: number; pace: number; message: string | null } {
+  const band = paceBandFor(language);
   const words = wordCount(vo);
   const pace = words / seconds;
-  const message =
-    pace < MIN_PACE || pace > MAX_PACE
-      ? `VO pace ${pace.toFixed(2)} words/sec is outside the ${MIN_PACE}-${MAX_PACE} words/sec ` +
-        `budget (${words} words over ${seconds.toFixed(2)}s, per SCRIPT.md)`
-      : null;
-  return { words, pace, message };
+  if (pace >= band.min && pace <= band.max) return { words, pace, message: null };
+  const over = `${words} words over ${seconds.toFixed(2)}s`;
+  // The English text is pinned by tests and docs. A measured language names itself and where its band comes from.
+  const budget =
+    band.measured && band.language !== "en"
+      ? `budget for ${band.language} (${over}, measured, see NARRATION.md)`
+      : `budget (${over}, per SCRIPT.md)`;
+  return {
+    words,
+    pace,
+    message: `VO pace ${pace.toFixed(2)} words/sec is outside the ${band.min}-${band.max} words/sec ${budget}`,
+  };
 }
 
 /**
@@ -81,6 +96,46 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     errors.push(`narration must be one of ${NARRATION_MODES.map((n) => `"${n}"`).join(", ")} (omit for "voice")`);
   }
   const narration = narrationRaw === "none" ? "none" : "voice";
+
+  // beats.json's own language picks the pace band `vo` is held to (languagePace.ts). Absent means English,
+  // exactly as before. A language with no measurement is held to the English band and says so, once; a script
+  // written without spaces has no word count to pace, so its vo is not pace-checked and the file says why.
+  let voLanguage: string | undefined;
+  let checkVoPace = true;
+  if (root.language !== undefined) {
+    if (typeof root.language !== "string" || !LANGUAGE_TAG.test(root.language)) {
+      errors.push(
+        `language must be a BCP-47 language tag such as "en", "hi" or "pt-BR" (it picks the pace band vo is held to), ` +
+          `got ${JSON.stringify(root.language)}`,
+      );
+    } else {
+      try {
+        const band = paceBandFor(root.language);
+        voLanguage = root.language;
+        if (!band.measured) warnings.push(band.note!);
+      } catch (err) {
+        checkVoPace = false;
+        warnings.push(`${(err as Error).message} The pace of vo is not checked for this file.`);
+      }
+    }
+  }
+
+  // Each tag in voTranslations is looked up once. null means it has no band to check against (a warning
+  // was already given for it), so its lines are skipped rather than held to a number that does not apply.
+  const translationBands = new Map<string, PaceBand | null>();
+  const translationBand = (tag: string): PaceBand | null => {
+    if (translationBands.has(tag)) return translationBands.get(tag)!;
+    let band: PaceBand | null = null;
+    try {
+      const found = paceBandFor(tag);
+      if (found.measured) band = found;
+      else warnings.push(`voTranslations.${tag}: ${found.note} Its lines are not pace-checked.`);
+    } catch (err) {
+      warnings.push(`voTranslations.${tag}: ${(err as Error).message} Its lines are not pace-checked.`);
+    }
+    translationBands.set(tag, band);
+    return band;
+  };
 
   // Mirrored from openvidstudio.config.json's production field (PLANNING.md §0) so a tool
   // reading beats.json alone still knows the level a video was planned at. Shape-checked
@@ -179,8 +234,8 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
         if (hasDuration) {
           const seconds = (duration as number) / fps;
           if (seconds > 0) {
-            const pace = voPaceCheck(vo as string, seconds);
-            if (pace.message !== null) errors.push(`${label}: ${pace.message}`);
+            const pace = checkVoPace ? voPaceCheck(vo as string, seconds, voLanguage) : null;
+            if (pace?.message) errors.push(`${label}: ${pace.message}`);
           }
         }
       }
@@ -215,10 +270,10 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       }
     }
 
-    // Translated narration lines. Only the shape is checked here, never the pacing: the
-    // 2.3-2.9 words/sec budget in SCRIPT.md is an English number, and the same sentence is
-    // routinely 20 to 30 percent longer in German or Hindi. Holding a translation to
-    // English pacing would reject correct translations.
+    // Translated narration lines. The shape is an error when wrong. The pace is only ever a warning: each
+    // line is held to its own tag's measured band (a German line is not an English one), and a tag with no
+    // measured band, or one written without spaces, is skipped with a single warning for the whole file.
+    // generate_narration is where an overrun is actually decided.
     const translations = beat.voTranslations;
     if (translations !== undefined) {
       if (typeof translations !== "object" || translations === null || Array.isArray(translations)) {
@@ -235,6 +290,13 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
             errors.push(`${label}: voTranslations.${tag} must be a non-empty string`);
           } else if (line.includes(EM_DASH)) {
             errors.push(`${label}: voTranslations.${tag} contains an em dash, rewrite with commas/periods`);
+          }
+          if (typeof line === "string" && line.trim().length > 0 && hasDuration && LANGUAGE_TAG.test(tag)) {
+            const band = translationBand(tag);
+            if (band !== null) {
+              const check = voPaceCheck(line, (duration as number) / fps, tag);
+              if (check.message !== null) warnings.push(`${label}: voTranslations.${tag}: ${check.message}`);
+            }
           }
         }
       }
@@ -507,7 +569,11 @@ export function registerValidateBeats(server: McpServer): void {
         "frame timing (30fps unless the file states its own fps; the first beat starts at 0, every later " +
         "beat starts at the previous beat's start + duration), no em dashes in vo/visual string fields, VO " +
         "word-count vs the 2.3-2.9 words/sec budget checked in both directions (too many words for the " +
-        "duration and suspiciously few), every beat has a captureMethod, and method-specific required " +
+        "duration and suspiciously few; the band is the English 2.3-2.9 unless the file's top-level language names " +
+        "another, in which case that language's measured band applies: hi, es and de are measured, any other " +
+        "language gets the English band with a warning, and a script written without spaces such as zh is not " +
+        "pace-checked and says why; each voTranslations line is checked against its own tag's band as a " +
+        "warning, never an error, with one warning per tag that has no measured band), every beat has a captureMethod, and method-specific required " +
         "fields (url + interactions for screenshot/recording, higgsfieldPrompt for higgsfield, nothing extra " +
         "for dom-demo). Top-level narration (\"voice\" or \"none\", \"voice\" assumed if omitted) controls " +
         "whether vo is required and pace-checked at all: under \"none\", vo is optional and unpaced, and an " +

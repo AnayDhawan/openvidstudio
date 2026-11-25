@@ -122,4 +122,19 @@ console.log("\n== beat ids stay unique when feature names collide ==");
   check("a feature that slugs to nothing keeps its positional id", ids({ arc: "literal", features: ["!!!", "???"] }).join(",") === "demo-1,demo-2");
 }
 
+console.log("\n== beats too short for any narration ==");
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "ovs-plan-short-"));
+  // 4 seconds over five beats gives some under a second: no whole number of words fits 2.3-2.9 words/sec there.
+  const tiny = runPlanBeats({ projectRoot: root, targetDurationSeconds: 4, arc: "simple", features: ["search"] });
+  const impossible = tiny.beats.filter((b) => b.wordBudget.min > b.wordBudget.max);
+  const possible = tiny.beats.filter((b) => b.wordBudget.min <= b.wordBudget.max);
+  check("a 4 s simple plan has at least one beat whose word budget is empty (min over max)", impossible.length > 0 && possible.length > 0);
+  check("every such beat is named in the notes, with the reason", impossible.every((b) => tiny.notes.some((n) => n.includes(`"${b.id}"`) && /no narration can pass/.test(n))));
+  check("a beat that can hold narration is not named in that note", possible.every((b) => !tiny.notes.some((n) => /no narration can pass/.test(n) && n.includes(`"${b.id}"`))));
+
+  const normal = runPlanBeats({ projectRoot: root, targetDurationSeconds: 60, arc: "simple", features: ["search", "share"] });
+  check("a 60 s plan has no empty budget and no such note", normal.beats.every((b) => b.wordBudget.min <= b.wordBudget.max) && !normal.notes.some((n) => /no narration can pass/.test(n)));
+}
+
 finish();

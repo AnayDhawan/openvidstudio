@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot } from "../util";
 import { loadConfig } from "../config";
 import { runTool } from "./mcp";
+import { ENGLISH_PACE_MAX, ENGLISH_PACE_MIN, paceBandFor } from "../languagePace";
 
 /**
  * validate_beats enforces SCRIPT.md's 2.3-2.9 words/sec as a hard floor and ceiling,
@@ -12,11 +13,9 @@ import { runTool } from "./mcp";
  * `interactions`, which no doc states up front.
  *
  * This hands back a skeleton that already satisfies both, with the word budget stated
- * per beat, so narration is written to a number instead of guessed and revised.
+ * per beat, so narration is written to a number instead of guessed and revised. The band is
+ * the English 2.3-2.9 unless a language is named: see languagePace.ts.
  */
-
-const PACE_MIN = 2.3;
-const PACE_MAX = 2.9;
 
 export type ArcName = "simple" | "packed" | "tutorial" | "literal";
 
@@ -35,6 +34,12 @@ export interface PlanBeatsInput {
    * between two beats of the music.
    */
   snapToBars?: { bpm: number; beatsPerBar?: number };
+  /**
+   * The language the narration is written in (BCP-47, "hi-IN" is read as "hi"). Word budgets use that
+   * language's measured pace band. Default English. A language with no measurement plans with the
+   * English band and says so in notes; a script written without spaces (zh, ja, th) throws.
+   */
+  language?: string;
 }
 
 export interface PlannedBeat {
@@ -56,6 +61,10 @@ export interface PlanBeatsResult {
   totalFrames: number;
   totalSeconds: number;
   arc: ArcName;
+  /** The language the word budgets are for, as given, "en" when none was. */
+  language: string;
+  /** The words/sec band the budgets were computed from. measured is false for a stand-in English band. */
+  paceBand: { min: number; max: number; measured: boolean };
   totalWordBudget: { min: number; max: number; suggested: number };
   beats: PlannedBeat[];
   /** Present when snapToBars was used. */
@@ -218,6 +227,8 @@ export function runPlanBeats(input: PlanBeatsInput): PlanBeatsResult {
   const arc: ArcName = input.arc ?? "simple";
   const appUrl = input.appUrl ?? config.capture.appUrl;
   const requestedFrames = Math.round(input.targetDurationSeconds * fps);
+  const language = input.language ?? "en";
+  const band = paceBandFor(input.language);
 
   const slots = slotsFor(arc, input.features ?? []);
   const weightTotal = slots.reduce((a, s) => a + s.weight, 0);
@@ -250,8 +261,8 @@ export function runPlanBeats(input: PlanBeatsInput): PlanBeatsResult {
   slots.forEach((slot, i) => {
     const duration = durations[i]!;
     const seconds = duration / fps;
-    const min = Math.ceil(PACE_MIN * seconds);
-    const max = Math.floor(PACE_MAX * seconds);
+    const min = Math.ceil(band.min * seconds);
+    const max = Math.floor(band.max * seconds);
     let startBar: number | undefined;
     if (snap) startBar = snap.bars.slice(0, i).reduce((a, b) => a + b, 0);
     beats.push({
@@ -276,6 +287,15 @@ export function runPlanBeats(input: PlanBeatsInput): PlanBeatsResult {
             `Word budgets below are for the snapped durations.`,
         ]
       : []),
+    ...(band.language !== "en"
+      ? [
+          band.measured
+            ? `Word budgets are for language "${language}": its measured pace band is ${band.min}-${band.max} words/sec, ` +
+              `not the English ${ENGLISH_PACE_MIN}-${ENGLISH_PACE_MAX} (NARRATION.md, "Pace by language"). beats.json needs ` +
+              `"language": "${language}" for validate_beats to hold the narration to the same band (generate_script sets it).`
+            : band.note!,
+        ]
+      : []),
     `Word budgets are the range validate_beats will accept for each duration. Write to the suggested ` +
       `number: it sits mid band, so a small edit later does not push the beat out of range.`,
     `Every beat with captureMethod "screenshot" also needs visual.url and visual.interactions (an array, ` +
@@ -283,6 +303,16 @@ export function runPlanBeats(input: PlanBeatsInput): PlanBeatsResult {
     `Capture beats default to ${appUrl}. Change capture.appUrl in openvidstudio.config.json, or set a url ` +
       `per beat.`,
     `Beats must stay contiguous: each start equals the previous start plus its duration. These already are.`,
+    // No whole number of words fits a very short beat: ceil(min * s) lands above floor(max * s). Narration
+    // cannot be written to pass, so the beat has to get more time, and the plan says which one.
+    ...beats
+      .filter((b) => b.wordBudget.min > b.wordBudget.max)
+      .map(
+        (b) =>
+          `Beat "${b.id}" is only ${b.seconds} s, and no whole number of words fits ${band.min}-${band.max} words/sec ` +
+          `in that time (the budget runs from ${b.wordBudget.min} to ${b.wordBudget.max}), so no narration can pass ` +
+          `validate_beats for it. Give it more time: raise targetDurationSeconds or plan fewer features.`,
+      ),
   ];
 
   const totalBudget = beats.reduce(
@@ -299,6 +329,8 @@ export function runPlanBeats(input: PlanBeatsInput): PlanBeatsResult {
     totalFrames,
     totalSeconds: Number((totalFrames / fps).toFixed(2)),
     arc,
+    language,
+    paceBand: { min: band.min, max: band.max, measured: band.measured },
     totalWordBudget: totalBudget,
     beats,
     ...(snap
@@ -329,7 +361,9 @@ export function registerPlanBeats(server: McpServer): void {
         "arcs: simple (single feature, hook to CTA), packed (one dense hero beat then one demo per claim), " +
         "tutorial (prerequisites, install, setup, steps, recap), literal (exactly one screenshot demo beat per " +
         "feature, equal length, nothing added; needs at least one feature). Output feeds straight into validate_beats " +
-        "once narration is written in. Pass snapToBars with the score's bpm when the video is cut to music, so " +
+        "once narration is written in. Pass language when the narration is not English: the word budget then uses that " +
+        "language's measured pace band (hi, es and de are measured; others get the English band with a note) and the " +
+        "result reports it as paceBand. A beat too short for any whole number of words is named in notes. Pass snapToBars with the score's bpm when the video is cut to music, so " +
         "every boundary lands on a downbeat; the planned total then moves to the nearest whole bar.",
       inputSchema: {
         projectRoot: z.string().optional(),
@@ -338,6 +372,15 @@ export function registerPlanBeats(server: McpServer): void {
         features: z.array(z.string()).optional(),
         appUrl: z.string().optional(),
         fps: z.number().positive().optional(),
+        language: z
+          .string()
+          .optional()
+          .describe(
+            "The language the narration is written in, as a BCP-47 tag (hi, es, de measured; hi-IN is read as hi). " +
+              "Word budgets use that language's measured pace band instead of the English 2.3-2.9 words/sec. A " +
+              "language with no measurement uses the English band and a note says so; zh, ja, th, km, lo and my " +
+              "count characters, not words, and are refused. Default English.",
+          ),
         snapToBars: z
           .object({ bpm: z.number().positive(), beatsPerBar: z.number().int().min(1).optional() })
           .optional()

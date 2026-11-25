@@ -47,6 +47,58 @@ second and number-heavy lines nearer 2.2, so after `generate_narration` run `fit
 sizes each beat from the clips' measured `spokenSeconds` (plus a half second pad, clamped into the pace window) and
 lists any line that cannot fit. Use `dryRun: true` to see the lengths first. Then regenerate with `overwrite: true`.
 
+### Pace by language
+
+The 2.3 to 2.9 words per second is an English number. A voice in another language packs a
+different number of whitespace-separated words into a second, so the band moves with the
+language. Three languages are measured:
+
+| Language | Voice | Median words/sec | r | Band (words/sec) |
+|---|---|---|---|---|
+| English | `en-US-AndrewNeural` | 3.445 | 1 | 2.3-2.9 (unchanged) |
+| Hindi (`hi`) | `hi-IN-MadhurNeural` | 2.732 | 0.7929 | 1.8-2.3 |
+| Spanish (`es`) | `es-ES-AlvaroNeural` | 3.227 | 0.9367 | 2.2-2.7 |
+| German (`de`) | `de-DE-ChristophNeural` | 2.768 | 0.8033 | 1.8-2.3 |
+
+Measured 2026-11-25 with edge-tts 7.3.1, on 12 parallel plain-prose sentences of 10 to 30 words
+(`packages/mcp-server/scripts/fixtures/pace-corpus.json`), one synthesis per sentence at the voice's
+default rate. For each sentence the spoken span is the last word's end minus the first word's start from
+`py/edge-words.py`, so the silence edge-tts adds at both ends of a clip does not bias the rate, and words are
+whitespace-separated tokens, the rule `validate_beats` counts with. Every number is in
+`scripts/fixtures/pace-measurements.json`; `node scripts/measure-language-pace.mjs` repeats the measurement
+(it needs network access to Microsoft's speech service).
+
+The formula, with `r` the language's median words/sec over English's median on the same corpus:
+
+```
+band = [round1(2.3 * r), round1(2.9 * r)]
+```
+
+`round1` rounds to one decimal. The English median (3.445) is above 2.9 because these spans leave out the
+silence at both ends of a clip while the band is checked over a whole beat, pad included, so only the ratio
+between languages carries over.
+
+`de-DE-ConradNeural` is not in `edge-tts --list-voices` today; the service accepts the name but it is not a
+listed voice, so the German band was measured with `de-DE-ChristophNeural`.
+
+Where the band is used:
+
+- Set `language` (a BCP-47 tag; `hi-IN` is read as `hi`) on `plan_beats` and `generate_script`, and the word
+  budgets use that band. `generate_script` also writes it to `beatsJson.language`.
+- A top-level `language` in `beats.json` makes `validate_beats` hold each beat's `vo` to that band, and
+  `fit_beats` size beats into it (its `language` input overrides the file).
+- Each `voTranslations` line is checked against its own tag's band. A miss is a warning, never an error,
+  because `generate_narration` is where an overrun is decided.
+- Any other language gets the English band, and a warning says there is no measured band for it (one warning
+  per language, not per beat). Add a language by adding its voice and 12 sentences to the corpus, running the
+  script, and pinning the new `r` in `src/languagePace.ts` and `language-pace.test.mjs`.
+- `zh`, `ja`, `th`, `km`, `lo` and `my` are written without spaces, so a words-per-second band does not
+  apply. `plan_beats`, `generate_script` and `fit_beats` refuse them, and `validate_beats` skips the pace check
+  with a warning. Plan those beat lengths by hand from a measured clip.
+
+Set `baseLanguage` on `generate_narration` to the same tag as `beats.json`'s `language`, so the clips are
+synthesized in the language the budgets were written for.
+
 ## Engines
 
 | Engine | Quality | Speed | Runs locally |

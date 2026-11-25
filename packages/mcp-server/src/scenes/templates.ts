@@ -175,12 +175,15 @@ function esc(s: string): string {
  * So: prefer the first complete sentence when there is one short enough, otherwise cut at
  * the last word boundary that fits. Either way the line on screen is a whole thought, and
  * the rest of the sentence is still spoken.
+ *
+ * A sentence ends at . ! ? or at the Devanagari danda (U+0964) or double danda (U+0965), which is
+ * what Hindi uses instead of a full stop.
  */
 export function captionLine(vo: string, max = 82): string {
   const text = vo.trim();
   if (text.length <= max) return text;
 
-  const firstStop = text.search(/[.!?](\s|$)/);
+  const firstStop = text.search(/[.!?।॥](\s|$)/);
   if (firstStop > 0 && firstStop + 1 <= max) return text.slice(0, firstStop + 1);
 
   const cut = text.slice(0, max);

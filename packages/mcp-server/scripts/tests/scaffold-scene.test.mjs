@@ -203,6 +203,21 @@ console.log("\n== Part 29: scene templates, from a real production run ==");
   check("...at a word boundary, never mid-word", long.startsWith(noStop) && !long.slice(noStop.length).startsWith("x"));
   check("...and the cut lands on a space in the original", long[noStop.length] === " ");
 
+  // Hindi ends a sentence with a danda, not a full stop. captionLine only knew . ! and ?, so a two sentence
+  // Hindi line was cut mid-thought at a word boundary instead of at the end of the first sentence.
+  const hindiTwo =
+    "पौधे सूर्य के प्रकाश से अपना भोजन बनाते हैं। प्रकाश संश्लेषण इस पूरी क्रिया का नाम है और यह बहुत जरूरी है।";
+  check(
+    "a Hindi caption prefers the first whole sentence, which a danda ends",
+    captionLine(hindiTwo) === "पौधे सूर्य के प्रकाश से अपना भोजन बनाते हैं।",
+  );
+  check(
+    "a double danda ends a sentence too",
+    captionLine("यह पहली पंक्ति है॥ यह दूसरी पंक्ति है जो बहुत लंबी है और पहली के बाद आती है, इसलिए इसे काटना होगा॥") ===
+      "यह पहली पंक्ति है॥",
+  );
+  check("a Hindi line that fits is left whole", captionLine("पौधे भोजन बनाते हैं। यह जरूरी है।") === "पौधे भोजन बनाते हैं। यह जरूरी है।");
+
   // The browser template sized the frame to nearly fill the stage and then pushed the
   // camera to 1.78 anyway, so validate_scenes rejected what scaffold_scene had just
   // written. A 1440x900 capture is CAPTURE.md's own default viewport, which made this the

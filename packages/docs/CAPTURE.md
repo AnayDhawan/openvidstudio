@@ -108,6 +108,31 @@ section down. The full-viewport-then-crop approach in steps 4-6 is
 deterministic: one screenshot, one measurement, one crop, no hidden
 re-layout between them.
 
+## Several viewports in one call
+
+A responsive page is three pages. `capture_screenshot` takes `viewports` instead of `viewport` and
+captures the same URL, interactions and settle at each one:
+
+```json
+{ "beatId": "hook", "url": "http://localhost:3000", "viewports": ["desktop", "tablet", "phone"] }
+```
+
+| Preset | CSS size | Device scale |
+|---|---|---|
+| `desktop` | 1920x1080 | 1 |
+| `laptop` | 1440x900 | 2 |
+| `tablet` | 834x1194 | 2 |
+| `phone` | 390x844 | 3 |
+
+An entry can also be `{ "name": "wide", "width": 2560, "height": 1440, "deviceScaleFactor": 1 }`. Each
+viewport gets its own browser context, because a pixel ratio is fixed when a context is created, and
+its own file: `public/images/hook-desktop.png`, `hook-tablet.png`, `hook-phone.png`. An unnamed
+viewport is named for its size (`hook-1000x700.png`); with `outPath`, the name goes before the
+extension. A viewport without its own `deviceScaleFactor` uses the call's (default 2). Each capture
+runs the whole protocol above on its own, including the zoom check and its own sidecars. Two viewports
+with one name are an error, and a bad request fails before anything is captured. The result is
+`{ captures: [{ name, ...the usual result }] }`. `viewport` and `viewports` cannot be combined.
+
 ## Layers: splitting a capture for parallax
 
 A flat screenshot can only be slid or scaled as one piece. To give a camera real parallax, ask

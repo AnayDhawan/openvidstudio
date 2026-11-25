@@ -197,4 +197,16 @@ console.log("\n== every tool the docs describe exists, and every input they list
   }
 }
 
+console.log("\n== the AGENTS.md every scaffolded project gets names the scripting flow (#183) ==");
+{
+  const agents = fs.readFileSync(path.join(monorepoRoot, "templates", "default", "AGENTS.md"), "utf8").replace(/\r\n/g, "\n");
+  const order = agents.match(/## The order\n\n```\n([\s\S]*?)\n```/);
+  check("AGENTS.md has a fenced order block", order !== null);
+  const flow = order ? flat(order[1]) : "";
+  check("the order block plans the beats with generate_script", /generate_script/.test(flow));
+  check("the order block does not send a first-time user to plan_beats", !/plan_beats/.test(flow));
+  check("the order block still gets from the approval gate to write_beats_file", /APPROVAL GATE -> write_beats_file/.test(flow));
+  check("AGENTS.md names plan_beats and validate_beats only as the manual route", /manual route/i.test(agents) && /plan_beats/.test(agents));
+}
+
 finish();

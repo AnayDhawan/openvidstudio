@@ -682,6 +682,29 @@ function sampleFrames(beat: RenderBeat): number[] {
   return [...new Set(frames)];
 }
 
+/**
+ * The reason a beat was skipped, with the cause added when it is known. A scene that plays a
+ * recording through OffthreadVideo cannot be mounted here (openSeekablePage has no video proxy),
+ * and the bare timeout names nothing a user can act on, so it is explained and pointed at the
+ * checks that do work. Any other reason, or a scene that is not a recording, is returned as is.
+ */
+export function explainSkippedBeat(reason: string, sceneSource: string | null): string {
+  if (sceneSource === null || !reason.includes("remotion_renderReady")) return reason;
+  if (!/\bOffthreadVideo\b|<Video\b/.test(sceneSource)) return reason;
+  return (
+    `${reason} This beat plays a recording through OffthreadVideo, which the render checks cannot mount, so it was not measured ` +
+    `(text size, framing and dead frames did not run). Check it in a draft render_video (draft: true) and pull its frames with qc_extract_frames.`
+  );
+}
+
+function readSceneSource(projectRoot: string, videoName: string, beatId: string): string | null {
+  try {
+    return fs.readFileSync(path.join(projectRoot, "src", "videos", videoName, "scenes", `${pascalCase(beatId)}.tsx`), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCheckResult> {
   const started = Date.now();
   const bundleStarted = Date.now();
@@ -764,8 +787,12 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
       } catch (err) {
         // A beat that cannot mount (a recording through OffthreadVideo is the known case, see
         // openSeekablePage) is reported as skipped. It is never treated as "no findings".
-        const reason = err instanceof Error ? err.message : String(err);
-        skipped.push({ beatId: beat.id, reason: err instanceof RemotionBridgeProtocolError ? reason.split(" Original:")[0] : reason });
+        const raw = err instanceof Error ? err.message : String(err);
+        const reason = explainSkippedBeat(
+          err instanceof RemotionBridgeProtocolError ? raw.split(" Original:")[0] : raw,
+          readSceneSource(input.projectRoot, input.videoName, beat.id),
+        );
+        skipped.push({ beatId: beat.id, reason });
         findings.push({
           beatId: beat.id,
           scene: `${pascalCase(beat.id)}.tsx`,

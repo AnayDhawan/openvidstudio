@@ -485,7 +485,7 @@ VO specifically, silently omits the layer with no warning:
 | Screenshot | `public/images/<beatId>.png` | `capture_screenshot` | the `real-screenshot` scene `scaffold_scene` generates |
 | Recording / Higgsfield clip | `public/video/<beatId>.mp4` | `capture_screen_recording` / `import_higgsfield_clip` | the `real-recording` / `higgsfield-clip` scene `scaffold_scene` generates |
 | VO narration | `public/audio/vo/<beatId>.mp3` | `generate_narration` (edge-tts unless `engine` is passed; it does not read `narration.engine` from the config), or dev-provided | `stitch_composition`, only if the file exists at this exact path when it runs |
-| Music bed | `public/audio/music-bed.mp3` | (dev-provided) | `stitch_composition`, only if the file exists at this exact path when it runs |
+| Music bed | `public/audio/music-bed.mp3` | (dev-provided, or a copy of the built-in `public/sfx/music-bed.mp3`) | `stitch_composition`, only if the file exists at this exact path when it runs |
 | Built-in SFX | `public/sfx/<name>.{wav,mp3}` | `scripts/gen-sfx.sh`, ships with the template | `@openvidstudio/core`'s `sfx.tsx` helpers |
 | Imported SFX / music | `public/imported_audios/<id>.<ext>` | dropped in by hand, or `plan_sound_effects` (Freesound provider) | scenes, via `staticFile("imported_audios/<id>.<ext>")` |
 | Rendered video, contact sheet, QC stills | `output/<video>.mp4`, `output/contact-sheet.jpg`, `output/qc/<video>/` | `render_video`, `contact_sheet`, `qc_extract_frames` | pick up / upload from here |

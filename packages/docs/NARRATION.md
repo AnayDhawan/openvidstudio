@@ -400,6 +400,11 @@ import { MusicBed } from "@openvidstudio/core";
 Keep it quiet. It sits under narration, and 0.16 is already at the edge of noticeable
 when a voice is speaking over it.
 
+To put the built-in bed under a whole stitched video instead, copy `public/sfx/music-bed.mp3` to
+`public/audio/music-bed.mp3`. `stitch_composition` only looks at that path, and when the file is
+absent it returns `musicBedFound: false` with no warning, so a video that was meant to have music
+renders without any.
+
 ### If you want real music instead
 
 `find_music_bed` searches two CC0-1.0 catalogs, [open-lofi](https://github.com/btahir/open-lofi)

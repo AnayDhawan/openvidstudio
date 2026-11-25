@@ -227,6 +227,8 @@ console.log("\n== the skills give the same narration order as AGENTS.md (#183) =
   const gatesAt = director.indexOf("## 10. Gates");
   const narrationAt = director.indexOf("generate_narration");
   check("the director skill runs generate_narration and fit_beats before section 9", narrationAt >= 0 && narrationAt < scenesAt && director.indexOf("fit_beats") < scenesAt);
+  const planning = flat(readDoc("PLANNING.md"));
+  check("PLANNING.md says how to change the lengths before approval and not to re-call generate_script", /edit `start` and `duration` in the `beatsJson`[^.]*contiguous/.test(planning) && /Do not call `generate_script` again/.test(planning));
   check("the director gates section no longer runs generate_narration", !/generate_narration/.test(director.slice(gatesAt, director.indexOf("## 11."))));
 }
 

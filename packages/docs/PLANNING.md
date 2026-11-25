@@ -540,7 +540,9 @@ The warning comes from §4.5's pacing check, and the skeleton of every arc draws
 `tutorial` weights keep the longest beat at 1.6 to 1.9 times the shortest, and `literal` beats are equal
 (`snapToBars` rounds to whole bars and can change that). It is a note, not an error, so the file still
 validates and `write_beats_file` still writes it. Change the lengths before approval if the story wants one
-long hold and one short punch.
+long hold and one short punch: edit `start` and `duration` in the `beatsJson` shown to the human, keep the beats
+contiguous (each `start` is the previous `start` plus `duration`), and run `validate_beats` again. Do not call
+`generate_script` again to do it, because it rebuilds every length from the weights.
 
 **The result, both ways.** The object assembled by hand in the manual route and the `beatsJson` of the second
 `generate_script` call are the same object. It is what the human is shown at the approval gate:

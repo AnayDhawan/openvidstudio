@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { require, distDir, monorepoRoot, check, finish } from "./_harness.mjs";
 
-const { explainSkippedBeat } = require(path.join(distDir, "tools", "validateScenesRender.js"));
+const { explainSkippedBeat, clipRelPathFor } = require(path.join(distDir, "tools", "validateScenesRender.js"));
 
 const timeout = "Timed out after 12000ms waiting for window.remotion_renderReady.";
 const recordingScene = `import { OffthreadVideo, staticFile } from "remotion";
@@ -34,6 +34,32 @@ console.log("\n== other skips are left alone ==");
   check("a render timeout with no readable scene source is unchanged", explainSkippedBeat(timeout, null) === timeout);
   const other = "Page crashed.";
   check("a different failure on a recording scene is unchanged", explainSkippedBeat(other, recordingScene) === other);
+}
+
+console.log("\n== a missing clip file is named, not blamed on OffthreadVideo ==");
+{
+  const missing = explainSkippedBeat(timeout, recordingScene, { relPath: "public/video/demo-live-map.mp4", exists: false });
+  check("a timeout on a recording scene whose file is missing keeps the original reason", missing.startsWith(timeout));
+  check("...names the expected path relative to the project", missing.includes("public/video/demo-live-map.mp4"));
+  check("...says the file is missing", /missing/.test(missing));
+  check("...does not blame OffthreadVideo", !/OffthreadVideo/.test(missing));
+  check("...has no absolute path", !/[A-Za-z]:[\\/]/.test(missing));
+  const present = explainSkippedBeat(timeout, recordingScene, { relPath: "public/video/demo-live-map.mp4", exists: true });
+  check("the same scene with the file present keeps the recording explanation", /recording/.test(present) && /OffthreadVideo/.test(present) && !/missing/.test(present));
+}
+
+console.log("\n== any clip scene, and plain <Video> ==");
+{
+  const clipScene = `import { OffthreadVideo, staticFile } from "remotion";
+export const Broll = () => <OffthreadVideo src={staticFile("video/broll.mp4")} />;`;
+  const r = explainSkippedBeat(timeout, clipScene, { relPath: "public/video/broll.mp4", exists: true });
+  check("a Higgsfield-style clip scene is described as a video clip", /video clip/.test(r) && /OffthreadVideo/.test(r));
+  check("the recording scene text also says video clip", /video clip/.test(explainSkippedBeat(timeout, recordingScene)));
+  const plainVideo = `import { Video, staticFile } from "remotion";
+export const Plain = () => <Video src={staticFile("video/plain.mp4")} />;`;
+  check("a scene with plain <Video> is not blamed on OffthreadVideo (nothing in the source shows it fails the same way)", explainSkippedBeat(timeout, plainVideo) === timeout);
+  check("clipRelPathFor reads the staticFile path of the OffthreadVideo", clipRelPathFor(clipScene, "broll") === "public/video/broll.mp4");
+  check("clipRelPathFor falls back to public/video/<beatId>.mp4", clipRelPathFor("<OffthreadVideo src={someVar} />", "demo-live-map") === "public/video/demo-live-map.mp4");
 }
 
 console.log("\n== PIPELINE.md says recording beats are skipped by the render checks ==");

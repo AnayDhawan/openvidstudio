@@ -397,12 +397,19 @@ console.log("\n== Part 10: render_video's brand-lock gate ==");
   const standardRoot = path.join(tmpRoot, "brand-lock-standard-test");
   runInitProject({ name: "plain", projectRoot: standardRoot });
   let standardRefused = false;
+  let gateMessage = "";
   try {
     prepareRenderVideo({ projectRoot: standardRoot, videoName: "plain" });
   } catch (err) {
-    standardRefused = /Brand-lock gate/.test(err instanceof Error ? err.message : String(err));
+    gateMessage = err instanceof Error ? err.message : String(err);
+    standardRefused = /Brand-lock gate/.test(gateMessage);
   }
   check("a standard project without a brand still gets the gate", standardRefused);
+  // #183: the gate used to tell a project that films a live site (no repo to read) to run
+  // extract_brand on the video project's own folder, which has no brand in it.
+  check("the gate message names the repo being filmed as the extract_brand source", /sourceRepo/.test(gateMessage) && /repo being filmed/.test(gateMessage));
+  check("the gate message says the project root is the source only when the video lives in that repo", /only when the video lives in that repo/.test(gateMessage));
+  check("the gate message says what to do when there is no repo to read, a live site", /live site/.test(gateMessage) && /skipBrandLock: true/.test(gateMessage));
 }
 
 console.log("\n== Part 10b: missing narration is reported, not silent ==");

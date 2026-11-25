@@ -441,8 +441,10 @@ export function prepareRenderVideo(input: RenderVideoInput): PreparedRenderVideo
   if (!brandLocked && input.skipBrandLock !== true) {
     throw new Error(
       `Brand-lock gate: no src/brand.ts found in this project. Run extract_brand with ` +
-        `{ sourceRepo: "${projectRoot}" } before rendering. It writes src/brand.ts from the repo being filmed. ` +
-        "If this project deliberately has no brand to extract, pass skipBrandLock: true.",
+        `{ sourceRepo: "<path of the repo being filmed>" } before rendering; it writes src/brand.ts from that repo. ` +
+        `This project's own folder, "${projectRoot}", is the source only when the video lives in that repo. ` +
+        "If you are filming a live site or a product with no repo to read, or this project deliberately has no brand " +
+        "to extract, pass skipBrandLock: true.",
     );
   }
 

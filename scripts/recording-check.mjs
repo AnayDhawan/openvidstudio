@@ -80,14 +80,25 @@ function probe(file) {
   return { width: doc.streams[0].width, height: doc.streams[0].height, codec: doc.streams[0].codec_name, seconds: Number.parseFloat(doc.format.duration) };
 }
 
-async function frameStats(file, atSeconds) {
-  const out = path.join(projectRoot, `frame-${atSeconds}.png`);
-  const r = spawnSync("ffmpeg", ["-nostdin", "-y", "-ss", String(atSeconds), "-i", file, "-frames:v", "1", out], { encoding: "utf8" });
-  if (r.status !== 0 || !fs.existsSync(out)) fail(`could not extract a frame at ${atSeconds}s: ${r.stderr.slice(-400)}`);
-  const st = await sharp(out).removeAlpha().stats();
-  const mean = st.channels.map((c) => c.mean);
-  const stdev = Math.max(...st.channels.map((c) => c.stdev));
-  return { mean, stdev };
+/**
+ * One frame every STEP seconds across the whole clip, as { t, mean, stdev }. A frame has content when its
+ * pixels vary (stdev over 20): the fixture is a dark page with a large title and a coloured block, a
+ * blank page is one flat colour.
+ */
+const STEP = 0.25;
+async function sampleFrames(file, seconds) {
+  const dir = path.join(projectRoot, "frames");
+  fs.mkdirSync(dir, { recursive: true });
+  const r = spawnSync("ffmpeg", ["-nostdin", "-y", "-i", file, "-vf", `fps=${1 / STEP},scale=320:-1`, path.join(dir, "f-%03d.png")], { encoding: "utf8" });
+  if (r.status !== 0) fail(`could not extract frames: ${r.stderr.slice(-400)}`);
+  const files = fs.readdirSync(dir).filter((f) => f.endsWith(".png")).sort();
+  if (files.length < 3) fail(`only ${files.length} frames came out of a ${seconds.toFixed(1)}s clip`);
+  const out = [];
+  for (const [i, f] of files.entries()) {
+    const st = await sharp(path.join(dir, f)).removeAlpha().stats();
+    out.push({ t: i * STEP, mean: st.channels.map((c) => c.mean), stdev: Math.max(...st.channels.map((c) => c.stdev)) });
+  }
+  return out;
 }
 
 try {
@@ -117,14 +128,27 @@ try {
   check(`duration: under ${maxSeconds}s, so nothing hung`, info.seconds <= maxSeconds, `${info.seconds.toFixed(2)}s`);
   check("duration: the tool's own figure agrees with ffprobe's", typeof result.durationMs === "number" && Math.abs(result.durationMs / 1000 - info.seconds) < 0.3, `${result.durationMs}ms vs ${(info.seconds * 1000).toFixed(0)}ms`);
 
-  // Frames well inside the clip, away from the first moment before the page paints.
-  const times = [0.6, 1.2, Math.min(1.9, info.seconds - 0.3)];
-  const stats = [];
-  for (const t of times) stats.push(await frameStats(result.outPath, t));
-  stats.forEach((s, i) => check(`not blank: the frame at ${times[i]}s has content`, s.stdev > 20, `stdev ${s.stdev.toFixed(1)}`));
-  // The block cycles colour, so the frames are not the same picture.
-  const spread = Math.max(...[0, 1, 2].flatMap((a) => [0, 1, 2].map((b) => Math.max(...stats[a].mean.map((m, c) => Math.abs(m - stats[b].mean[c]))))));
-  check("not frozen: the frames change over time", spread > 6, `largest mean-colour difference ${spread.toFixed(1)}`);
+  // The recording starts when the browser opens the page and the video includes the page loading, so
+  // the first moments can be blank and how many depends on the machine (Windows runners are slow to
+  // paint). What has to hold everywhere is that the page is then on screen for the whole of what was
+  // recorded: at least the wait, with content right up to the end.
+  const frames = await sampleFrames(result.outPath, info.seconds);
+  const has = (f) => f.stdev > 20;
+  const firstContent = frames.findIndex(has);
+  const lastContent = frames.length - 1 - [...frames].reverse().findIndex(has);
+  check("not blank: the page appears in the recording", firstContent !== -1, `${frames.filter(has).length} of ${frames.length} frames have content`);
+  if (firstContent !== -1) {
+    const leading = frames[firstContent].t;
+    console.log(`  note: the first ${leading.toFixed(2)}s of the recording is the page still loading`);
+    const visibleSeconds = (lastContent - firstContent + 1) * STEP;
+    check(`not blank: the page is visible for at least the ${WAIT_MS}ms that was recorded`, visibleSeconds >= WAIT_MS / 1000 - 0.3, `${visibleSeconds.toFixed(2)}s visible`);
+    check("not blank: it is still on screen at the end of the clip", frames.length - 1 - lastContent <= 1, `last frame with content at ${frames[lastContent].t.toFixed(2)}s of ${info.seconds.toFixed(2)}s`);
+    check("not blank: no blank gap in the middle once the page has appeared", frames.slice(firstContent, lastContent + 1).every(has));
+    // The block cycles colour, so frames of the page are not all the same picture.
+    const shown = frames.slice(firstContent, lastContent + 1);
+    const spread = Math.max(...shown.flatMap((a) => shown.map((b) => Math.max(...a.mean.map((m, c) => Math.abs(m - b.mean[c]))))));
+    check("not frozen: the frames change over time", spread > 6, `largest mean-colour difference ${spread.toFixed(1)}`);
+  }
 } finally {
   server.close();
   // Windows can hold the recording open for a moment after the browser closes.

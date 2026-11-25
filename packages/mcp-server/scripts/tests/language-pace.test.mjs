@@ -325,4 +325,17 @@ console.log("\n== generate_script takes a language ==");
   check("zh: refuses, because it counts characters, not words", throwsWith(() => runGenerateScript({ ...brief, language: "zh" }), /counts characters, not words/));
 }
 
+console.log("\n== generate_narration and stitch_composition warn that captions stay in the base language ==");
+{
+  const { createMcpServer } = require(path.join(distDir, "server.js"));
+  const tools = createMcpServer()._registeredTools;
+  // Both descriptions talk about shipping a cut per language, so both must say what a cut does not change.
+  for (const name of ["generate_narration", "stitch_composition"]) {
+    const description = tools[name].description.replace(/\s+/g, " ");
+    check(`${name}'s description says every language cut shows the base-language caption`, /every language cut shows the base-language caption/.test(description));
+    check(`...and that captions are baked from the base-language vo`, /baked from the base-language vo/.test(description));
+    check(`...and that only the audio changes per language`, /only the (narration )?audio changes per language/i.test(description));
+  }
+}
+
 finish();

@@ -216,6 +216,79 @@ console.log("\n== feature names that collide ==");
   check("the second id is accepted in a draft (it is not an unknown id)", call(root, { targetDurationSeconds: 60, features: ["Search", "search"], draft: draftFrom(sameSlug.result) }).result.validation.valid === true);
 }
 
+console.log("\n== one brief at each creative level (#179) ==");
+{
+  // The same inputs at all three levels: features search and share, 60 s, 30 fps. Every call goes
+  // through call(), so each one is also held to the no-write rule asserted in the section below.
+  const fps = 30;
+  const levelBrief = { targetDurationSeconds: 60, features: ["search", "share"], fps };
+  const expectedIds = {
+    peak: ["hook", "demo-search", "demo-share", "differentiator", "cta"],
+    mid: ["hook", "problem", "demo-search", "demo-share", "differentiator", "cta"],
+    literal: ["demo-search", "demo-share"],
+  };
+  const paceOf = (error) => Number(/VO pace ([\d.]+) words\/sec/.exec(error)?.[1]);
+
+  for (const level of ["peak", "mid", "literal"]) {
+    const tag = `${level}:`;
+    const ids = expectedIds[level];
+    const skeleton = call(root, { ...levelBrief, creativeLevel: level });
+    check(`${tag} the skeleton call does not throw and reports the level`, skeleton.error === undefined && skeleton.result.stage === "skeleton" && skeleton.result.creativeLevel === level);
+    if (skeleton.error) continue;
+    const planned = skeleton.result.plan.beats;
+    check(`${tag} the skeleton has ${ids.length} beats: ${ids.join(", ")}`, skeleton.result.beatsJson.beats.map((b) => b.id).join(",") === ids.join(",") && planned.map((b) => b.id).join(",") === ids.join(","));
+    check(`${tag} the beats fill the whole 60 s, contiguous from frame 0`, planned.reduce((end, b) => (b.start === end ? end + b.duration : NaN), 0) === 60 * fps);
+    check(`${tag} every beat's wordBudget is { min: ceil(2.3 * s), max: floor(2.9 * s) } for its own seconds`, planned.every((b) => {
+      const s = b.duration / fps;
+      return b.wordBudget.min === Math.ceil(2.3 * s) && b.wordBudget.max === Math.floor(2.9 * s) && b.wordBudget.min <= b.wordBudget.suggested && b.wordBudget.suggested <= b.wordBudget.max;
+    }));
+
+    // One beat far too fast and one far too sparse, the rest on budget.
+    const fast = skeleton.result.plan.beats.find((b) => b.id === "demo-search");
+    const sparse = skeleton.result.plan.beats.find((b) => b.id === "demo-share");
+    const draft = draftFrom(skeleton.result, { "demo-search": fast.wordBudget.suggested * 2, "demo-share": Math.round(sparse.wordBudget.suggested / 2) });
+    const bad = call(root, { ...levelBrief, creativeLevel: level, draft });
+    check(`${tag} a beat at 2x budget and a beat at half budget do not throw: stage validated, valid false`, bad.error === undefined && bad.result.stage === "validated" && bad.result.validation.valid === false);
+    if (bad.error) continue;
+    check(`${tag} validation.errors deep-equals validateBeatsLogic(beatsJson).errors`, sameJson(bad.result.validation.errors, validateBeatsLogic(bad.result.beatsJson).errors));
+    check(`${tag} there are exactly two errors and both contain words/sec`, bad.result.validation.errors.length === 2 && bad.result.validation.errors.every((e) => /words\/sec/.test(e)));
+    const fastError = bad.result.validation.errors.find((e) => /beat "demo-search"/.test(e));
+    const sparseError = bad.result.validation.errors.find((e) => /beat "demo-share"/.test(e));
+    check(`${tag} the 2x beat reports a pace above 2.9 and the half beat a pace below 2.3`, paceOf(fastError) > 2.9 && paceOf(sparseError) < 2.3);
+  }
+
+  console.log("\n-- literal adds nothing of its own --");
+  {
+    const skeletonCall = call(root, { ...levelBrief, creativeLevel: "literal" });
+    const validatedCall = skeletonCall.result ? call(root, { ...levelBrief, creativeLevel: "literal", draft: draftFrom(skeletonCall.result) }) : { error: skeletonCall.error };
+    check("literal: the skeleton call and the narration-only draft call do not throw", skeletonCall.error === undefined && validatedCall.error === undefined);
+    const wanted = levelBrief.features.map((f) => `demo-${f}`);
+    if (!skeletonCall.error && !validatedCall.error) {
+      for (const [stage, r] of [["skeleton", skeletonCall.result], ["validated", validatedCall.result]]) {
+        check(`literal ${stage}: no beat uses the dom-demo capture method`, r.beatsJson.beats.every((b) => b.visual.captureMethod !== "dom-demo") && r.plan.beats.every((b) => b.captureMethod !== "dom-demo"));
+        check(`literal ${stage}: no beat id falls outside the requested features`, r.beatsJson.beats.every((b) => wanted.includes(b.id)) && r.beatsJson.beats.length === wanted.length);
+        check(`literal ${stage}: every beat is a screenshot of the app url`, r.beatsJson.beats.every((b) => b.visual.captureMethod === "screenshot" && b.visual.url === "http://localhost:3000"));
+      }
+      check("literal: two features at 60 s are two 30 s beats with a 69-87 word budget each", skeletonCall.result.plan.beats.every((b) => b.duration === 30 * fps && b.wordBudget.min === 69 && b.wordBudget.max === 87));
+    }
+
+    const none = call(root, { targetDurationSeconds: 60, creativeLevel: "literal", features: [] });
+    check("literal with an empty features array fails with the same clear message as no features", none.error instanceof Error && /literal arc needs at least one feature/.test(none.error.message));
+  }
+
+  console.log("\n-- peak accepts visual overrides --");
+  {
+    const skeleton = call(root, { ...levelBrief, creativeLevel: "peak" }).result;
+    const draft = { ...draftFrom(skeleton), visuals: { hook: { colorScheme: "dark", url: "http://localhost:3000/hero" } } };
+    const { result: r, error } = call(root, { ...levelBrief, creativeLevel: "peak", draft });
+    check("peak: a draft with visuals does not throw", error === undefined && r?.stage === "validated");
+    const hook = r?.beatsJson.beats.find((b) => b.id === "hook");
+    check("peak: the override is shallow-merged over the hook beat's default visual in beatsJson", hook?.visual.captureMethod === "screenshot" && hook.visual.colorScheme === "dark" && hook.visual.url === "http://localhost:3000/hero" && Array.isArray(hook.visual.interactions));
+    check("peak: every other beat keeps its default visual", r?.beatsJson.beats.filter((b) => b.id !== "hook").every((b) => sameJson(b.visual, skeleton.beatsJson.beats.find((s) => s.id === b.id).visual)) === true);
+    check("peak: the draft with the override still validates", r?.validation.valid === true);
+  }
+}
+
 console.log("\n== the tool never writes ==");
 {
   check("the project listing and file contents were identical before and after every call above", writes.length === 0);

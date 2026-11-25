@@ -51,7 +51,7 @@ lists any line that cannot fit. Use `dryRun: true` to see the lengths first. The
 
 The 2.3 to 2.9 words per second is an English number. A voice in another language packs a
 different number of whitespace-separated words into a second, so the band moves with the
-language. Three languages are measured:
+language. Three languages are measured, each on one voice, the voice in its row:
 
 | Language | Voice | Median words/sec | r | Band (words/sec) |
 |---|---|---|---|---|
@@ -60,9 +60,13 @@ language. Three languages are measured:
 | Spanish (`es`) | `es-ES-AlvaroNeural` | 3.227 | 0.9367 | 2.2-2.7 |
 | German (`de`) | `de-DE-ChristophNeural` | 2.768 | 0.8033 | 1.8-2.3 |
 
-Measured 2026-11-25 with edge-tts 7.3.1, on 12 parallel plain-prose sentences of 10 to 30 words
+Each band was measured on the voice in its row. A different voice may read faster or slower, and then the
+band is a rougher guide.
+
+Measured 2026-11-25 with edge-tts 7.3.1, on 12 parallel narration-style sentences of 10 to 30 words
 (`packages/mcp-server/scripts/fixtures/pace-corpus.json`), one synthesis per sentence at the voice's
-default rate. For each sentence the spoken span is the last word's end minus the first word's start from
+default rate. The corpus includes one number-heavy sentence (years and counts), which is the slowest of the
+twelve in all four languages, so the median, not the mean, is used. For each sentence the spoken span is the last word's end minus the first word's start from
 `py/edge-words.py`, so the silence edge-tts adds at both ends of a clip does not bias the rate, and words are
 whitespace-separated tokens, the rule `validate_beats` counts with. Every number is in
 `scripts/fixtures/pace-measurements.json`; `node scripts/measure-language-pace.mjs` repeats the measurement
@@ -92,12 +96,17 @@ Where the band is used:
 - Any other language gets the English band, and a warning says there is no measured band for it (one warning
   per language, not per beat). Add a language by adding its voice and 12 sentences to the corpus, running the
   script, and pinning the new `r` in `src/languagePace.ts` and `language-pace.test.mjs`.
-- `zh`, `ja`, `th`, `km`, `lo` and `my` are written without spaces, so a words-per-second band does not
+- `zh`, `ja`, `th`, `km`, `lo` and `my`, and the three-letter codes of the same scripts (`yue`, `cmn`, `zho`,
+  `jpn`, `tha`, `khm`, `lao`, `mya`), are written without spaces, so a words-per-second band does not
   apply. `plan_beats`, `generate_script` and `fit_beats` refuse them, and `validate_beats` skips the pace check
   with a warning. Plan those beat lengths by hand from a measured clip.
 
-Set `baseLanguage` on `generate_narration` to the same tag as `beats.json`'s `language`, so the clips are
-synthesized in the language the budgets were written for.
+The band says nothing about which voice `generate_narration` uses. `baseLanguage` only decides which text is
+the base `vo` and where the clips go, and without `voices` the edge-tts voice is `en-US-AndrewNeural` (or
+`voice`, if you pass one) for every language. Pass `voices` with the voice from the table, for example
+`{ "hi": "hi-IN-MadhurNeural" }`; the band is measured for that voice and another voice may read faster or
+slower. If you choose another voice, `fit_beats` sizes the beats from its real clips, which is what to trust
+over the table.
 
 ## Engines
 

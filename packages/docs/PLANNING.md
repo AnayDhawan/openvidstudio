@@ -301,8 +301,9 @@ gets seen by a human first.
 directory name. It does **not** hold a translation to `SCRIPT.md`'s 2.3-2.9
 words/sec budget, which is an English number: the same sentence runs 20 to 30
 percent longer in German or Hindi. Each line is checked against its own tag's
-measured band instead (NARRATION.md, "Pace by language"), and a miss is a warning,
-never an error. A tag with no measured band gets one warning for the file and its
+measured band instead (NARRATION.md, "Pace by language"; each band is for the voice
+named there, so pass that voice to `generate_narration` in `voices`), and a miss is a
+warning, never an error. A tag with no measured band gets one warning for the file and its
 lines are not pace-checked. `generate_narration` reports an overrun, where the fix
 is a shorter translation rather than a faster read.
 

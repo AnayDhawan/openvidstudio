@@ -1,5 +1,5 @@
 {
-  "note": "Parallel plain-prose narration sentences used only to measure how fast each language's voice speaks relative to English. They are measurement material, not shipped scripts. Words are counted as whitespace-separated tokens, the same rule validate_beats uses.",
+  "note": "Parallel narration-style sentences used only to measure how fast each language's voice speaks relative to English. One of them (s07) is number-heavy on purpose. They are measurement material, not shipped scripts. Words are counted as whitespace-separated tokens, the same rule validate_beats uses.",
   "voices": {
     "en": "en-US-AndrewNeural",
     "hi": "hi-IN-MadhurNeural",

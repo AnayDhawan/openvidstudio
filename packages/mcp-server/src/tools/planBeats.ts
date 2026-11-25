@@ -291,7 +291,8 @@ export function runPlanBeats(input: PlanBeatsInput): PlanBeatsResult {
       ? [
           band.measured
             ? `Word budgets are for language "${language}": its measured pace band is ${band.min}-${band.max} words/sec, ` +
-              `not the English ${ENGLISH_PACE_MIN}-${ENGLISH_PACE_MAX} (NARRATION.md, "Pace by language"). beats.json needs ` +
+              `not the English ${ENGLISH_PACE_MIN}-${ENGLISH_PACE_MAX} (NARRATION.md, "Pace by language"). It was measured on one ` +
+              `voice, the one in that table, so pass it to generate_narration in voices. beats.json needs ` +
               `"language": "${language}" for validate_beats to hold the narration to the same band (generate_script sets it).`
             : band.note!,
         ]
@@ -363,7 +364,8 @@ export function registerPlanBeats(server: McpServer): void {
         "feature, equal length, nothing added; needs at least one feature). Output feeds straight into validate_beats " +
         "once narration is written in. Pass language when the narration is not English: the word budget then uses that " +
         "language's measured pace band (hi, es and de are measured; others get the English band with a note) and the " +
-        "result reports it as paceBand. A beat too short for any whole number of words is named in notes. Pass snapToBars with the score's bpm when the video is cut to music, so " +
+        "result reports it as paceBand. Each measured band is for one voice per language (the voice in NARRATION.md's " +
+        "table), so pass that voice to generate_narration in voices: another voice may read faster or slower. A beat too short for any whole number of words is named in notes. Pass snapToBars with the score's bpm when the video is cut to music, so " +
         "every boundary lands on a downbeat; the planned total then moves to the nearest whole bar.",
       inputSchema: {
         projectRoot: z.string().optional(),

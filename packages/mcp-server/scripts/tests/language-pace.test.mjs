@@ -19,7 +19,6 @@ const { runFitBeats } = require(path.join(distDir, "tools", "fitBeats.js"));
 const { runGenerateScript } = require(path.join(distDir, "tools", "generateScript.js"));
 
 const words = (n) => Array(n).fill("word").join(" ");
-const fields = (band) => ({ min: band.min, max: band.max, measured: band.measured });
 const sameFields = (band, min, max, measured) => band.min === min && band.max === max && band.measured === measured;
 const round1 = (n) => Math.round(n * 10) / 10;
 const tmp = (prefix) => fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -73,7 +72,8 @@ console.log("\n== paceBandFor: a language with no measurement ==");
 
 console.log("\n== paceBandFor: scripts without spaces refuse ==");
 {
-  for (const tag of ["zh", "ja", "th", "km", "lo", "my", "zh-CN", "ja-JP", "th-TH", "ZH"]) {
+  // The six two-letter codes, regional forms, and the three-letter codes of the same scripts (Cantonese has no two-letter tag).
+  for (const tag of ["zh", "ja", "th", "km", "lo", "my", "zh-CN", "ja-JP", "th-TH", "ZH", "yue", "yue-HK", "cmn", "zho", "jpn", "tha", "khm", "lao", "mya"]) {
     check(`${tag} throws, because it counts characters, not words`, throwsWith(() => paceBandFor(tag), /counts characters, not words/));
   }
   check("the refusal says beat lengths must be planned by hand", throwsWith(() => paceBandFor("zh"), /planned by hand/));
@@ -224,6 +224,10 @@ console.log("\n== validate_beats: voTranslations are checked as warnings ==");
   const itWarnings = unmeasured.warnings.filter((w) => w.includes('"it"'));
   check("an unmeasured tag gets exactly one warning however many beats use it", frWarnings.length === 1 && /no measured/i.test(frWarnings[0]));
   check("a second unmeasured tag gets its own single warning", itWarnings.length === 1);
+  // A translation line has no base-language stand-in to talk about: the warning says only that there is no band and no check.
+  check("the unmeasured-tag warning is exactly that: no measured band, its lines are not pace-checked", frWarnings[0] === 'voTranslations.fr: no measured pace band for "fr", so its lines are not pace-checked.' && itWarnings[0] === 'voTranslations.it: no measured pace band for "it", so its lines are not pace-checked.');
+  check("...and does not talk about an English stand-in, which would contradict 'not pace-checked'", !/stand-in|rough guide|English/.test(frWarnings[0]));
+  check("the base-language note for the same tag still says the English band is the stand-in", /stand-in/.test(paceBandFor("fr").note));
   check("unmeasured lines are not pace-checked, so there are no per-beat pace warnings for them", unmeasured.warnings.every((w) => !/VO pace/.test(w)));
   check("unmeasured tags never make a draft invalid", unmeasured.valid);
 
@@ -260,9 +264,39 @@ console.log("\n== fit_beats reads the language ==");
   check("the input language applies when the file has none", fit(undefined, { language: "de" }).beats[0].after === 135);
   check("an override that the file does not carry is said in the notes", fit(undefined, { language: "de" }).notes.some((n) => /beats\.json/.test(n) && /de/.test(n)));
   check("no override and no mismatch means no notes", german.notes.length === 0 && english.notes.length === 0);
+  // A file with no language already means English, so asking for en says nothing new.
+  check("language en on a file with no language field adds no note", fit(undefined, { language: "en" }).notes.length === 0);
+  check("language en-GB on a file with no language field adds no note either", fit(undefined, { language: "en-GB" }).notes.length === 0);
+  check("language en on a file that says en adds no note", fit("en", { language: "en" }).notes.length === 0);
+  check("the same language in another region adds no note (hi on a hi-IN file)", fit("hi-IN", { language: "hi" }).notes.length === 0);
+  check("language en on a file that says de still says so: validate_beats would read de", fit("de", { language: "en" }).notes.some((n) => /beats\.json/.test(n) && /"de"/.test(n)));
+  check("the override note says what to add", fit(undefined, { language: "de" }).notes.some((n) => n.includes('"language": "de"')));
   check("an unmeasured language says so in the result's validation", fit("fr").validation.warnings.some((w) => /no measured/i.test(w)));
   check("a spaceless language refuses", throwsWith(() => fit("zh"), /counts characters, not words/));
   check("a clamp note quotes the band it used", fit("de", { spokenSeconds: { a: 9 } }).beats[0].note.includes("1.8"));
+}
+
+console.log("\n== tool descriptions and docs say whose voice the bands are for ==");
+{
+  const { createMcpServer } = require(path.join(distDir, "server.js"));
+  const tools = createMcpServer()._registeredTools;
+  const fitDescription = tools.fit_beats.description;
+  check("fit_beats' description no longer hard-codes the English window (words/2.9 to words/2.3)", !/words\/2\.9|words\/2\.3/.test(fitDescription));
+  check("...it says the pace band is the language's, with English 2.3-2.9", /language's pace band/.test(fitDescription) && /English 2\.3-2\.9 words\/sec/.test(fitDescription));
+  check("...and it no longer says the voice needs 'more than 2.3 words per second'", !/more than 2\.3 words per second/.test(fitDescription));
+  for (const name of ["plan_beats", "generate_script", "fit_beats", "validate_beats"]) {
+    check(`${name}'s description says the band is measured for one voice, not for any voice`, /one voice|that voice|voice in/.test(tools[name].description) && /voices/.test(tools[name].description));
+  }
+
+  const narration = fs.readFileSync(path.join(packageRoot, "..", "docs", "NARRATION.md"), "utf8");
+  // One line, so a sentence the doc wraps is still matched.
+  const section = narration.slice(narration.indexOf("### Pace by language"), narration.indexOf("## Engines")).replace(/\s+/g, " ");
+  check("NARRATION.md says each band was measured on the voice in its row", /measured on the voice in its row/.test(section));
+  check("...tells the user to pass voices for generate_narration, with an example", /`voices`/.test(section) && /hi-IN-MadhurNeural/.test(section.slice(section.indexOf("`voices`"))));
+  check("...says another voice may read faster or slower", /another voice may read faster or slower/.test(section));
+  check("...no longer claims baseLanguage picks the synthesis voice", !/so the clips are synthesized in the language the budgets were written for/.test(section));
+  check("...describes the corpus as narration-style, with one number-heavy sentence", /narration-style/.test(section) && !/plain-prose/.test(section) && /number-heavy sentence/.test(section));
+  check("...lists the three-letter codes of the spaceless scripts", ["yue", "cmn", "zho", "jpn", "tha", "khm", "lao", "mya"].every((c) => section.includes(`\`${c}\``)));
 }
 
 console.log("\n== generate_script takes a language ==");

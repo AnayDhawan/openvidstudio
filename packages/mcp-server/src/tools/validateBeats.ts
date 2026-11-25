@@ -129,7 +129,7 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
     try {
       const found = paceBandFor(tag);
       if (found.measured) band = found;
-      else warnings.push(`voTranslations.${tag}: ${found.note} Its lines are not pace-checked.`);
+      else warnings.push(`voTranslations.${tag}: no measured pace band for "${tag}", so its lines are not pace-checked.`);
     } catch (err) {
       warnings.push(`voTranslations.${tag}: ${(err as Error).message} Its lines are not pace-checked.`);
     }
@@ -572,7 +572,8 @@ export function registerValidateBeats(server: McpServer): void {
         "duration and suspiciously few; the band is the English 2.3-2.9 unless the file's top-level language names " +
         "another, in which case that language's measured band applies: hi, es and de are measured, any other " +
         "language gets the English band with a warning, and a script written without spaces such as zh is not " +
-        "pace-checked and says why; each voTranslations line is checked against its own tag's band as a " +
+        "pace-checked and says why; each measured band is for one voice per language, the voice in NARRATION.md's " +
+        "table, which generate_narration uses when voices names it; each voTranslations line is checked against its own tag's band as a " +
         "warning, never an error, with one warning per tag that has no measured band), every beat has a captureMethod, and method-specific required " +
         "fields (url + interactions for screenshot/recording, higgsfieldPrompt for higgsfield, nothing extra " +
         "for dom-demo). Top-level narration (\"voice\" or \"none\", \"voice\" assumed if omitted) controls " +

@@ -14,8 +14,9 @@ stay inside that range rather than writing to a "feels about right" length
 and hoping it fits.
 
 The 2.3-2.9 band is English. Other languages read faster or slower in whitespace words, so the band
-moves: Hindi 1.8-2.3, Spanish 2.2-2.7 and German 1.8-2.3 are measured from real edge-tts audio, and
-NARRATION.md's "Pace by language" has the table, the formula and how it was measured. Set `language` on
+moves: Hindi 1.8-2.3, Spanish 2.2-2.7 and German 1.8-2.3 are measured from real edge-tts audio, each on one
+named voice, and NARRATION.md's "Pace by language" has the table, the formula, how it was measured and
+how to pass that voice to `generate_narration`. Set `language` on
 `plan_beats` or `generate_script`, or at the top of `beats.json`, to use one. A language with no
 measured band gets the English numbers and a warning, and scripts written without spaces (Chinese,
 Japanese, Thai) have no word count to pace, so plan those beat lengths by hand.

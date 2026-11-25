@@ -266,7 +266,9 @@ export function registerGenerateScript(server: McpServer): void {
         "language (a BCP-47 tag) is for narration that is not English: the word budgets use that language's " +
         "measured pace band (hi, es and de are measured, any other language gets the English band and a note says " +
         "so, zh, ja, th, km, lo and my count characters and are refused), and it is written to beatsJson.language " +
-        "so the validation holds the draft to the same band. A beat too short for any whole number of words is " +
+        "so the validation holds the draft to the same band. Each measured band is for one voice per language " +
+        "(the voice in NARRATION.md's table), so pass that voice to generate_narration in voices: another voice may " +
+        "read faster or slower. A beat too short for any whole number of words is " +
         "named in notes, because no narration can pass for it. " +
         "This tool never writes anything to disk, beats.json included. The human-approval gate is unchanged: " +
         "show the human the full beatsJson, and call write_beats_file only after they approve.",

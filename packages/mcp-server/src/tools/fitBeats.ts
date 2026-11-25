@@ -134,7 +134,17 @@ export function runFitBeats(input: FitBeatsInput): FitBeatsResult {
   const language = input.language ?? (typeof doc.language === "string" ? doc.language : undefined);
   const band = paceBandFor(language);
   const notes: string[] = [];
-  if (input.language !== undefined && input.language !== doc.language) {
+  // A file with no language means English, and "hi-IN" and "hi" are the same band, so compare what validate_beats
+  // would read from the file against what was asked for, by primary subtag. Only a real difference is worth a note.
+  const fileLanguage = (() => {
+    if (typeof doc.language !== "string") return "en";
+    try {
+      return paceBandFor(doc.language).language;
+    } catch {
+      return doc.language;
+    }
+  })();
+  if (input.language !== undefined && band.language !== fileLanguage) {
     notes.push(
       `Sized for language "${input.language}" (the language input), but beats.json says ` +
         `${typeof doc.language === "string" ? `"${doc.language}"` : "nothing about language"}. Add "language": ` +
@@ -245,17 +255,18 @@ export function registerFitBeats(server: McpServer): void {
     {
       title: "Size the beats from the measured voice",
       description:
-        "Sets each beat's duration to the length its narration actually takes, so validate_beats' 2.3 to 2.9 " +
-        "words per second (the English band; the top-level language in beats.json, or the language input, picks another) " +
-        "holds with a real voice. A voice reads plain prose at about 3 words per second and " +
+        "Sets each beat's duration to the length its narration actually takes, so validate_beats' pace check " +
+        "holds with a real voice. That check is the language's pace band (English 2.3-2.9 words/sec; the " +
+        "top-level language in beats.json, or the language input, picks another, and each measured band is for one " +
+        "voice per language, the voice in NARRATION.md's table, so pass it to generate_narration in voices). A voice reads plain prose at about 3 words per second and " +
         "number-heavy lines at about 2.2, so beats sized from word counts overrun or sit half empty; this replaces the " +
         "manual loop of reading generate_narration's spokenSeconds, computing new lengths and rewriting beats.json. " +
         "Run generate_narration on provisional beats first. Each beat becomes the spoken length plus a pad (padSeconds, " +
-        "default 0.5), clamped into the pace window words/2.9 to words/2.3 and rounded to whole frames, and later " +
+        "default 0.5), clamped into the language's pace window (words divided by the band's max to words divided by its min) and rounded to whole frames, and later " +
         "beats' start frames move so the beats stay contiguous. The spoken length comes from spokenSeconds or " +
         "generate_narration's result (narration), else the raw clips generate_narration keeps under " +
         ".openvidstudio/narration/, else the fitted clips. Beats whose line cannot fit even at the clamp (the voice " +
-        "needs more than 2.3 words per second allows) are listed in unfittable with the number of words to cut or the " +
+        "needs more than the band's minimum words per second allows) are listed in unfittable with the number of words to cut or the " +
         "frames to lengthen the beat to; they are set to the longest legal length meanwhile. Never changes vo. dryRun " +
         "returns the proposed durations without writing beats.json. Re-runs validate_beats on the result and returns it as " +
         "validation. After fitting, run generate_narration again (overwrite: true) so the clips are stretched to the new lengths.",

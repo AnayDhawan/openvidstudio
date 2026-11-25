@@ -112,6 +112,10 @@ export type { PixelShape } from "./pixel";
 // Backgrounds and transition primitives (C4)
 export { Atmosphere, DotGrid, Flash, Black, Letterbox } from "./atmosphere";
 
+// Animated beams: a light travelling along lines between anchor points, frame-driven
+export { AnimatedBeams, beamCurve, beamProgress, beamDash, DEFAULT_BEAM_CYCLE, DEFAULT_BEAM_GAP } from "./AnimatedBeams";
+export type { AnimatedBeamsProps, BeamAnchor } from "./AnimatedBeams";
+
 // UI chrome: windows, JSON viewer, tool chips, badges, glass panel, chapter HUD (C4)
 export { Window, JsonView, Check, Cross, ToolChip, Pill, Glass, ChapterHud } from "./panels";
 export type { Chapter } from "./panels";

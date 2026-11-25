@@ -702,13 +702,14 @@ as one continuous move across the cut.
 | `Flash` | `at`, `color?` (`#ffffff`), `strength?` (0.55), `dur?` (10) | Brief exposure flash on a hard hit |
 | `Black` | `from`, `to?` | Holds solid black. Omit `to` to hold forever |
 | `Letterbox` | `amount?` (1) | Bars for a cinematic moment. `amount` scales the bar height, 1 = 64/1080 of the frame height (64px at 1080, about 114px at 1920 tall) |
+| `AnimatedBeams` | `anchors` (2 or more `{ x, y }` in stage px), `connections?` (index pairs, default each anchor to the next), `at?` (0), `cycle?` (60), `loop?` (true), `gap?` (12), `stagger?` (0), `curvature?` (0.2), `strokeWidth?` (4), `beamLength?` (0.25), `trackOpacity?` (0.18), `reverse?`, `colors?`, `easing?` (`E.drift`), `width?`, `height?` (1920x1080) | A light that travels along lines joining anchor points, for architecture and flow beats. Frame-driven: no CSS animation, no randomness, so a still at any frame is exactly what the video shows. `cycle` is the frames one trip takes, `stagger` ripples a chain, `connections: [[0, 1], [0, 2]]` fans out from one anchor, and a positive `curvature` bows each line to the left of its direction of travel. The beam runs the accent to accentAlt tokens, read at render time, so it takes a brand's palette. It draws in stage pixels, so mount it inside the camera stage, over the nodes it joins |
 | `TransitionOverlay` | `type` (`"fade"`, `"whip"`, `"push"`, `"wipe"`, `"light-leak"`), `length?` | A transition drawn over a hard cut, in the colour tokens. Mount it in a `Sequence` that starts `length / 2` frames before the cut (`layout="none"`): it peaks on the cut frame and is clear on its first and last frames. `length` is its total frames and defaults to the Sequence's. `stitch_composition` does this for every beat whose `transition` is not `"cut"`, so a scene rarely mounts one by hand |
 
 | | |
 |---|---|
 | ![Atmosphere: drifting colour fields](img/api/atmosphere.png) `Atmosphere` | ![DotGrid: a faint dot texture behind a Glass panel](img/api/dotgrid.png) `DotGrid` |
 | ![Flash: the frame during an exposure flash](img/api/flash.png) `Flash` | ![Letterbox: cinematic bars](img/api/letterbox.png) `Letterbox` |
-| ![Black: a solid black frame, with the scene held under it](img/api/black.png) `Black` | |
+| ![Black: a solid black frame, with the scene held under it](img/api/black.png) `Black` | ![AnimatedBeams: lit stretches of curved lines travelling from a Client node through a Gateway to a Search node and a Store node](img/api/animatedbeams.png) `AnimatedBeams` |
 
 `TransitionOverlay`, one still per type, a few frames into the cut (a blue "before" scene turning into a dark "after" one;
 the light leak is at its peak on the cut itself):

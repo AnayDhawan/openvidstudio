@@ -42,6 +42,8 @@ console.log("\n== a missing clip file is named, not blamed on OffthreadVideo =="
   check("a timeout on a recording scene whose file is missing keeps the original reason", missing.startsWith(timeout));
   check("...names the expected path relative to the project", missing.includes("public/video/demo-live-map.mp4"));
   check("...says the file is missing", /missing/.test(missing));
+  check("...says the path is where the scene expects the clip, not that it is certain", /expected at public\/video\/demo-live-map\.mp4/.test(missing));
+  check("...advice fits a recording and an imported clip alike: re-capture or re-import", /re-capture or re-import/i.test(missing));
   check("...does not blame OffthreadVideo", !/OffthreadVideo/.test(missing));
   check("...has no absolute path", !/[A-Za-z]:[\\/]/.test(missing));
   const present = explainSkippedBeat(timeout, recordingScene, { relPath: "public/video/demo-live-map.mp4", exists: true });
@@ -66,6 +68,7 @@ console.log("\n== PIPELINE.md says recording beats are skipped by the render che
 {
   const doc = fs.readFileSync(path.join(monorepoRoot, "packages", "docs", "PIPELINE.md"), "utf8").replace(/\s+/g, " ");
   check("the review loop section names the recording case", /recording[^.]*render-skipped|render-skipped[^.]*recording/i.test(doc));
+  check("the review loop section says a video clip, a screen recording or an imported clip, like the code", /video clip \(a screen recording or an imported clip\)/.test(doc));
 }
 
 finish();

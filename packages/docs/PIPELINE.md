@@ -232,9 +232,9 @@ draft render:
 - It also returns the numeric findings `validate_scenes` makes in render mode (cropping, text
   size, reading time, contrast, em dashes, safe area, HUD overlap, dead frames, brand palette),
   so an agent without image input reviews from the numbers. A beat that cannot be mounted is
-  reported as skipped, never as clean. A beat that plays a screen recording (`OffthreadVideo`) is
+  reported as skipped, never as clean. A beat that plays a video clip (a screen recording or an imported clip) through `OffthreadVideo` is
   always one of them: it gets a `render-skipped` finding, so a `validate_scenes` run with any
-  recording beat is not a clean pass. Review that beat in a draft `render_video` and
+  such beat is not a clean pass. Review that beat in a draft `render_video` and
   `qc_extract_frames`, or capture it as a screenshot beat if the checks matter more than the motion.
 
 Then `validate_scenes` with `render: true` is the gate before stitching and rendering.

@@ -696,8 +696,8 @@ export function explainSkippedBeat(reason: string, sceneSource: string | null, c
   if (!/\bOffthreadVideo\b/.test(sceneSource)) return reason;
   if (clip && !clip.exists) {
     return (
-      `${reason} The capture file ${clip.relPath} is missing, so this beat cannot mount and was not measured. ` +
-      `Capture it again (capture_screen_recording) or point the scene at the right file.`
+      `${reason} The clip file expected at ${clip.relPath} is missing, so this beat cannot mount and was not measured. ` +
+      `Re-capture or re-import the clip, or point the scene at the right file.`
     );
   }
   return (

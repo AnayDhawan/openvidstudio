@@ -30,11 +30,18 @@ import {
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { fileBytes, relToProject, writeFactRecord } from "../facts";
+import { applyScenario } from "../scenarioInput";
 
 export interface CaptureScreenshotInput {
   projectRoot?: string;
   beatId: string;
-  url: string;
+  /** The page to capture. Optional only when scenarioPath is given and its scenario sets one. */
+  url?: string;
+  /**
+   * A scenario file (JSON or YAML) relative to projectRoot that stands in for `interactions` and, if
+   * it sets one, `url`. Not allowed together with `interactions`. See CAPTURE.md, "Scenario files".
+   */
+  scenarioPath?: string;
   viewport?: Viewport;
   interactions?: Interaction[];
   cropSelector?: string;
@@ -258,7 +265,8 @@ function layerBaseNames(layers: CaptureLayer[]): string[] {
 export async function runCaptureScreenshot(
   input: CaptureScreenshotInput
 ): Promise<CaptureScreenshotResult> {
-  const result = await captureScreenshot(input);
+  const resolved = applyScenario(input);
+  const result = await captureScreenshot(resolved);
   const projectRoot = resolveProjectRoot(input.projectRoot);
   writeFactRecord(projectRoot, {
     tool: "capture_screenshot",
@@ -267,12 +275,13 @@ export async function runCaptureScreenshot(
       kind: "real-capture",
       outPath: relToProject(projectRoot, result.outPath),
       bytes: fileBytes(result.outPath),
-      url: input.url,
+      url: resolved.url,
       viewport: { width: result.width, height: result.height },
       pixelWidth: result.pixelWidth,
       pixelHeight: result.pixelHeight,
       deviceScaleFactor: result.deviceScaleFactor,
-      interactions: input.interactions?.length ?? 0,
+      interactions: resolved.interactions?.length ?? 0,
+      ...(input.scenarioPath ? { scenario: input.scenarioPath } : {}),
       settled: result.settle?.settled ?? null,
       settleWaitedMs: result.settle?.waitedMs ?? null,
       ...(result.layers ? { layers: result.layers.layers.length } : {}),
@@ -281,7 +290,9 @@ export async function runCaptureScreenshot(
   return result;
 }
 
-async function captureScreenshot(input: CaptureScreenshotInput): Promise<CaptureScreenshotResult> {
+async function captureScreenshot(
+  input: Omit<CaptureScreenshotInput, "url" | "scenarioPath"> & { url: string },
+): Promise<CaptureScreenshotResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
   const target = input.viewport ?? DEFAULT_VIEWPORT;
@@ -529,7 +540,12 @@ export function registerCaptureScreenshot(server: McpServer): void {
       inputSchema: {
         projectRoot: z.string().optional(),
         beatId: z.string().min(1),
-        url: z.string().min(1),
+        url: z.string().min(1).optional().describe("The page to capture. Optional only with a scenarioPath whose scenario sets a url."),
+        scenarioPath: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("A scenario file (JSON or YAML) relative to projectRoot that stands in for interactions and, if it sets one, url. Not with interactions. See CAPTURE.md, Scenario files."),
         viewport: viewportSchema.optional(),
         interactions: z.array(interactionSchema).optional(),
         cropSelector: z.string().optional(),

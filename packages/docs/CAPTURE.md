@@ -108,6 +108,56 @@ section down. The full-viewport-then-crop approach in steps 4-6 is
 deterministic: one screenshot, one measurement, one crop, no hidden
 re-layout between them.
 
+## Scenario files
+
+The click path to a beat's state can live in a file instead of an `interactions` array. Pass
+`scenarioPath` (relative to the project root) to `capture_screen_recording` or `capture_screenshot`:
+
+```yaml
+# scenarios/checkout.yaml
+name: checkout            # free text, for the reader
+url: http://localhost:3000   # optional when the call gives a url
+steps:
+  - action: navigate
+    url: /pricing
+  - action: click
+    selector: "#buy"
+    settleMs: 1500        # optional on every step: let the page settle for up to this long afterwards
+  - action: type
+    selector: "#email"
+    text: a@b.co
+  - action: scroll
+    y: 800
+    durationMs: 600
+```
+
+JSON reads the same (`{ "url": "...", "steps": [{ "action": "click", "selector": "#buy" }] }`). The
+format is taken from the extension (`.json`, `.yaml`, `.yml`), or from the content when there is none.
+
+| `action` | Fields | Does |
+|---|---|---|
+| `navigate` | `url` | Goes to another page. A relative url resolves against the page the replay is on |
+| `click` | `selector` | Clicks it |
+| `hover` | `selector` | Hovers it |
+| `type` | `selector`, `text` | Fills the field with `text` |
+| `select` | `selector`, `value` | Picks the option |
+| `scroll` | `selector?`, `x?`, `y?`, `durationMs?` | Scrolls the page or the element. With `durationMs` the scroll is eased over that time |
+| `wait` | `ms?`, `selector?` | With `selector`, waits for it to appear (`ms` is the timeout); otherwise waits `ms` (default 500) |
+| `settle` | `ms?` | Waits for fonts, images and finite animations, up to `ms` |
+
+Every step also takes `settleMs`, shorthand for a `settle` step right after it.
+
+A scenario **compiles to the `interactions` array** the tools already run: `type` becomes `fill`, `settleMs`
+becomes a `settle` interaction, and the rest map one to one. Nothing downstream knows a second format
+exists, so the cursor sidecar, the capture sidecar (which records the compiled interactions) and
+`docs_drift` see exactly what a hand-written array would give them. A scenario's `url` is the page the
+capture starts on; a `url` in the call wins over it. `scenarioPath` and `interactions` together are an
+error, and an invalid file names the step and field that is wrong (`steps.2.selector: ...`).
+
+Existing arrays keep working unchanged, and convert to a file with `scenarioFromInteractions` from
+`@openvidstudio/capture` (a `settle` with a budget after a step folds into that step's `settleMs`).
+`navigate` is also available as an `interactions` entry: `{ "type": "navigate", "url": "/pricing" }`.
+
 ## Layers: splitting a capture for parallax
 
 A flat screenshot can only be slid or scaled as one piece. To give a camera real parallax, ask

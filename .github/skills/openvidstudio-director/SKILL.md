@@ -45,8 +45,11 @@ product cannot show something, build a labelled sample, film it for real, and di
 
 ## 5. Beats and the approval gate
 
-- `plan_beats`, with `snapToBars` and the score's bpm when the video is cut to music.
-- Write narration to each beat's word budget. `validate_beats`.
+- `generate_script`, with `snapToBars` and the score's bpm when the video is cut to music. With no
+  `draft` it returns the skeleton and a word budget per beat.
+- Write narration to each beat's word budget, then call `generate_script` again with the same inputs
+  and `draft: { narration }`. It validates and returns the full `beatsJson`; it never writes.
+  (`plan_beats` then `validate_beats` is the manual route to the same file.)
 - **Show the full beats file and wait for an explicit yes.** Then `write_beats_file`.
 - Done when `beats.json` is on disk.
 
@@ -72,6 +75,14 @@ product cannot show something, build a labelled sample, film it for real, and di
 - Or use a bed through `find_music_bed` and `import_music_bed`, then `plan_music_cues`.
 - Done when the checks are clean and cues exist.
 
+## 8b. Narration, before any scene is scaffolded
+
+- If the video has a voice: `generate_narration`, then `fit_beats` to size the beats from the
+  measured clips, then `generate_narration` again with `overwrite: true`.
+- Do this before section 9. `fit_beats` changes the beat durations, and a scaffolded scene bakes
+  its beat's duration into its camera keyframes.
+- Done when every beat has a clip and `fit_beats` reports nothing unfittable.
+
 ## 9. Scenes and the review loop
 
 - Author scenes in `scenes/` from `@openvidstudio/core`'s primitives and `design.ts`, using
@@ -88,7 +99,7 @@ product cannot show something, build a labelled sample, film it for real, and di
 
 - `validate_scenes` with `render: true`: cropping, text size, reading time, contrast, em dashes,
   safe area, HUD overlap, dead frames, palette. Errors block the render. Warnings need a decision.
-- `validate_beats` again if the beats changed. `generate_narration` if the video has a voice.
+- `validate_beats` again if the beats changed.
 - `stitch_composition`. Done when every gate is green or consciously waived.
 
 ## 11. Render and assemble

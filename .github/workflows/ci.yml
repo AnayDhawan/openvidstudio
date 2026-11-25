@@ -8,7 +8,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  # Every job has a timeout so a hang costs minutes, not the 6 hour default. Each is about twice
+  # the slowest measured run: test 0.5 to 1.6 min, offline-render 2.2 to 15.7 min (Windows is
+  # the slow one), plugin-validate 0.2 min. scripts/tests/ci-timeouts.test.mjs keeps it true.
   test:
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -40,8 +44,9 @@ jobs:
       - run: node scripts/generate-tool-docs.mjs --check
       # The per-tool test files that need nothing but node and the built packages. The rest
       # (renders, browsers, ffmpeg, Python) run locally through `pnpm --filter @openvidstudio/mcp-server test`.
-      - run: node packages/mcp-server/scripts/manual-test.mjs capture-argv-spaces plan-beats stitch-music tool-count release-version plan-shots claude-plugin plugin-launcher install-cli generate-script language-pace
+      - run: node packages/mcp-server/scripts/manual-test.mjs capture-argv-spaces plan-beats stitch-music tool-count release-version plan-shots claude-plugin plugin-launcher install-cli generate-script generate-script-docs language-pace music-bed-docs
   offline-render:
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -73,7 +78,38 @@ jobs:
       # network blocked, so that regressing back to a network font loader fails CI
       # instead of surfacing as a support issue from someone's offline machine.
       - run: node scripts/offline-render-check.mjs
+  # The recording engine (Playwright video, the webm to mp4 transcode, ffprobe) differs most between
+  # operating systems and is the path the render jobs never touch. This records a local fixture page
+  # on each OS and checks the resolution, the duration and that the frames are not blank.
+  recording:
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: "pnpm"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @openvidstudio/capture build
+      - run: pnpm --filter @openvidstudio/mcp-server build
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+      - run: pnpm --filter @openvidstudio/capture exec playwright install --with-deps chromium
+      - run: node scripts/recording-check.mjs
   plugin-validate:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7

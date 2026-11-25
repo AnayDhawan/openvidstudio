@@ -11,11 +11,15 @@ detail and is kept in sync with this file by hand.
 ## The order
 
 ```
-preflight -> plan_production -> extract_brand -> write_brief -> plan_beats -> [write VO]
-  -> validate_beats -> APPROVAL GATE -> write_beats_file -> captures -> [compose_score]
+preflight -> plan_production -> extract_brand -> write_brief -> generate_script (skeleton)
+  -> [write VO] -> generate_script (with the draft) -> APPROVAL GATE -> write_beats_file
+  -> captures -> generate_narration -> fit_beats -> generate_narration (overwrite) -> [compose_score]
   -> scenes -> render_stills -> validate_scenes -> stitch_composition -> render_video
   -> finalize_video -> qc_extract_frames
 ```
+
+`plan_beats` then `validate_beats` is the manual route to the same beats file. `./docs/PLANNING.md`
+section 4.10 has the generate_script flow, with a worked example.
 
 `./docs/CREATIVE.md` is the craft: read it before writing a brief at peak or mid level.
 `./docs/TOOLS.md` lists every tool. Review with `render_stills` (`perBeat: "review"`) before

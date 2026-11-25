@@ -682,6 +682,44 @@ function sampleFrames(beat: RenderBeat): number[] {
   return [...new Set(frames)];
 }
 
+/**
+ * The reason a beat was skipped, with the cause added when it is known. A scene that plays a
+ * video clip through OffthreadVideo (a screen recording or an imported clip) cannot be mounted
+ * here (openSeekablePage has no video proxy), and the bare timeout names nothing a user can act
+ * on. When the clip file is missing the render also never becomes ready (a missing capture holds
+ * it open), so that is named first and OffthreadVideo is not blamed. Only OffthreadVideo is
+ * matched: nothing in the bridge's source says a plain <Video> fails the same way. Any other
+ * reason, or a scene without OffthreadVideo, is returned as is.
+ */
+export function explainSkippedBeat(reason: string, sceneSource: string | null, clip?: { relPath: string; exists: boolean }): string {
+  if (sceneSource === null || !reason.includes("remotion_renderReady")) return reason;
+  if (!/\bOffthreadVideo\b/.test(sceneSource)) return reason;
+  if (clip && !clip.exists) {
+    return (
+      `${reason} The clip file expected at ${clip.relPath} is missing, so this beat cannot mount and was not measured. ` +
+      `Re-capture or re-import the clip, or point the scene at the right file.`
+    );
+  }
+  return (
+    `${reason} This beat plays a video clip (a screen recording or an imported clip) through OffthreadVideo, which the render checks cannot mount, so it was not measured ` +
+    `(text size, framing and dead frames did not run). Check it in a draft render_video (draft: true) and pull its frames with qc_extract_frames.`
+  );
+}
+
+/** The clip a scene plays, relative to the project: its staticFile path when it has one, else public/video/<beatId>.mp4. */
+export function clipRelPathFor(sceneSource: string, beatId: string): string {
+  const m = /OffthreadVideo[^>]*?src=\{\s*staticFile\(\s*["']([^"']+)["']\s*\)\s*\}/s.exec(sceneSource);
+  return m ? `public/${m[1]}` : `public/video/${beatId}.mp4`;
+}
+
+function readSceneSource(projectRoot: string, videoName: string, beatId: string): string | null {
+  try {
+    return fs.readFileSync(path.join(projectRoot, "src", "videos", videoName, "scenes", `${pascalCase(beatId)}.tsx`), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCheckResult> {
   const started = Date.now();
   const bundleStarted = Date.now();
@@ -764,8 +802,15 @@ export async function runRenderChecks(input: RenderCheckInput): Promise<RenderCh
       } catch (err) {
         // A beat that cannot mount (a recording through OffthreadVideo is the known case, see
         // openSeekablePage) is reported as skipped. It is never treated as "no findings".
-        const reason = err instanceof Error ? err.message : String(err);
-        skipped.push({ beatId: beat.id, reason: err instanceof RemotionBridgeProtocolError ? reason.split(" Original:")[0] : reason });
+        const raw = err instanceof Error ? err.message : String(err);
+        const sceneSource = readSceneSource(input.projectRoot, input.videoName, beat.id);
+        const clipRel = sceneSource === null ? null : clipRelPathFor(sceneSource, beat.id);
+        const reason = explainSkippedBeat(
+          err instanceof RemotionBridgeProtocolError ? raw.split(" Original:")[0] : raw,
+          sceneSource,
+          clipRel === null ? undefined : { relPath: clipRel, exists: fs.existsSync(path.join(input.projectRoot, clipRel)) },
+        );
+        skipped.push({ beatId: beat.id, reason });
         findings.push({
           beatId: beat.id,
           scene: `${pascalCase(beat.id)}.tsx`,

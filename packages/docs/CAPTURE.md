@@ -70,6 +70,17 @@ capture path in this project encodes with crf 18 and `-tune stillimage` instead.
    targetH * zoom)`. Verify again: `innerWidth/innerHeight` should now
    equal `targetW/targetH` exactly. This is the size you actually wanted,
    once compensated.
+
+   The tools read `window.devicePixelRatio` in step 1 as well, because a
+   browser zoom moves `innerWidth` and `devicePixelRatio` by the same factor
+   (`requestedWidth / innerWidth` equals `devicePixelRatio / deviceScaleFactor`).
+   When the two readings disagree, the page is in a state a viewport change
+   cannot fix (a device scale factor that was not applied, or one forced on
+   the browser), and the call fails with a `ViewportDesyncError` that lists
+   what was measured. `capture_screen_recording` repeats the check on the page
+   it is about to record, before the recording does anything: `innerWidth`
+   must be back on the request and `devicePixelRatio` must sit at
+   `deviceScaleFactor * zoom`.
 3. Interact with the page (click, select, scroll) to reach the exact state
    the beat needs, in this same compensated viewport.
 4. Take a full-viewport screenshot (`scale: "css"`, no `fullPage`, no
@@ -157,6 +168,31 @@ error, and an invalid file names the step and field that is wrong (`steps.2.sele
 Existing arrays keep working unchanged, and convert to a file with `scenarioFromInteractions` from
 `@openvidstudio/capture` (a `settle` with a budget after a step folds into that step's `settleMs`).
 `navigate` is also available as an `interactions` entry: `{ "type": "navigate", "url": "/pricing" }`.
+
+## Several viewports in one call
+
+A responsive page is three pages. `capture_screenshot` takes `viewports` instead of `viewport` and
+captures the same URL, interactions and settle at each one:
+
+```json
+{ "beatId": "hook", "url": "http://localhost:3000", "viewports": ["desktop", "tablet", "phone"] }
+```
+
+| Preset | CSS size | Device scale |
+|---|---|---|
+| `desktop` | 1920x1080 | 1 |
+| `laptop` | 1440x900 | 2 |
+| `tablet` | 834x1194 | 2 |
+| `phone` | 390x844 | 3 |
+
+An entry can also be `{ "name": "wide", "width": 2560, "height": 1440, "deviceScaleFactor": 1 }`. Each
+viewport gets its own browser context, because a pixel ratio is fixed when a context is created, and
+its own file: `public/images/hook-desktop.png`, `hook-tablet.png`, `hook-phone.png`. An unnamed
+viewport is named for its size (`hook-1000x700.png`); with `outPath`, the name goes before the
+extension. A viewport without its own `deviceScaleFactor` uses the call's (default 2). Each capture
+runs the whole protocol above on its own, including the zoom check and its own sidecars. Two viewports
+with one name are an error, and a bad request fails before anything is captured. The result is
+`{ captures: [{ name, ...the usual result }] }`. `viewport` and `viewports` cannot be combined.
 
 ## Layers: splitting a capture for parallax
 

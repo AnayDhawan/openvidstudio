@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
+import type { Browser } from "playwright";
 import sharp from "sharp";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { resolveProjectRoot, sanitizeSegment, sanitizeRelativeOutPath } from "../util";
@@ -27,6 +28,10 @@ import {
   type LayerElement,
   type SettleReport,
   type Viewport,
+  resolveViewports,
+  viewportOutPath,
+  viewportRequestSchema,
+  type ViewportRequest,
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { fileBytes, relToProject, writeFactRecord } from "../facts";
@@ -43,6 +48,13 @@ export interface CaptureScreenshotInput {
    */
   scenarioPath?: string;
   viewport?: Viewport;
+  /**
+   * Capture the same page at several viewports in one call: preset names ("desktop", "tablet",
+   * "phone") or explicit { name?, width, height, deviceScaleFactor? }. Each one gets its own browser
+   * context (so its own pixel ratio) and its own file, `<beatId>-<name>.png`. Replaces `viewport`;
+   * passing both is an error. The result is a CaptureScreenshotViewportsResult.
+   */
+  viewports?: ViewportRequest[];
   interactions?: Interaction[];
   cropSelector?: string;
   outPath?: string;
@@ -262,11 +274,20 @@ function layerBaseNames(layers: CaptureLayer[]): string[] {
   });
 }
 
+export interface CaptureScreenshotDeps {
+  /** A browser to capture in, left open for the caller. Without one the call launches and closes its own. */
+  browser?: Browser;
+}
+
 export async function runCaptureScreenshot(
-  input: CaptureScreenshotInput
+  input: CaptureScreenshotInput,
+  deps: CaptureScreenshotDeps = {},
 ): Promise<CaptureScreenshotResult> {
+  if (input.viewports !== undefined) {
+    throw new Error("runCaptureScreenshot captures one viewport. Use runCaptureScreenshotViewports for a viewports list.");
+  }
   const resolved = applyScenario(input);
-  const result = await captureScreenshot(resolved);
+  const result = await captureScreenshot(resolved, deps);
   const projectRoot = resolveProjectRoot(input.projectRoot);
   writeFactRecord(projectRoot, {
     tool: "capture_screenshot",
@@ -292,6 +313,7 @@ export async function runCaptureScreenshot(
 
 async function captureScreenshot(
   input: Omit<CaptureScreenshotInput, "url" | "scenarioPath"> & { url: string },
+  deps: CaptureScreenshotDeps = {},
 ): Promise<CaptureScreenshotResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
@@ -305,7 +327,8 @@ async function captureScreenshot(
   const layerRequests = input.layers ?? [];
   const layerNames = layerBaseNames(layerRequests);
 
-  const browser = await launchChromium();
+  const ownsBrowser = deps.browser === undefined;
+  const browser = deps.browser ?? (await launchChromium());
   try {
     const context = await browser.newContext({
       deviceScaleFactor,
@@ -325,7 +348,7 @@ async function captureScreenshot(
       // explicit opt-in override for the beat that actually needs it.
       await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
 
-      const { zoom, viewport: compensatedViewport } = await detectAndCompensateZoom(page, target);
+      const { zoom, viewport: compensatedViewport } = await detectAndCompensateZoom(page, target, { deviceScaleFactor });
 
       const cursorPoints = await replayInteractions(page, input.interactions);
 
@@ -489,6 +512,49 @@ async function captureScreenshot(
       await context.close();
     }
   } finally {
+    if (ownsBrowser) await browser.close();
+  }
+}
+
+export interface CaptureScreenshotViewportCapture extends CaptureScreenshotResult {
+  /** The viewport's name, which is also the suffix of its file. */
+  name: string;
+}
+
+export interface CaptureScreenshotViewportsResult {
+  captures: CaptureScreenshotViewportCapture[];
+}
+
+/**
+ * The same capture at each requested viewport, in request order, one browser shared by all of them
+ * and one context per viewport (a pixel ratio is fixed when a context is created). Every viewport
+ * runs the whole protocol on its own: its own zoom check, interactions, settle and sidecars. The
+ * names, sizes and pixel ratios are all resolved before the browser opens, so a bad request fails
+ * without capturing anything.
+ */
+export async function runCaptureScreenshotViewports(input: CaptureScreenshotInput): Promise<CaptureScreenshotViewportsResult> {
+  if (input.viewports === undefined) throw new Error("viewports is required for a multi-viewport capture.");
+  if (input.viewport !== undefined) {
+    throw new Error("Pass either viewport or viewports, not both: viewports replaces the single viewport.");
+  }
+  const beatId = sanitizeSegment(input.beatId, "beatId");
+  const resolved = resolveViewports(input.viewports, input.deviceScaleFactor ?? DEFAULT_DEVICE_SCALE);
+  const baseOut = input.outPath ?? path.join("public", "images", `${beatId}.png`);
+
+  const browser = await launchChromium();
+  try {
+    const captures: CaptureScreenshotViewportCapture[] = [];
+    for (const v of resolved) {
+      const { viewports: _viewports, ...single } = input;
+      void _viewports;
+      const result = await runCaptureScreenshot(
+        { ...single, viewport: v.viewport, deviceScaleFactor: v.deviceScaleFactor, outPath: viewportOutPath(baseOut, v.name) },
+        { browser },
+      );
+      captures.push({ name: v.name, ...result });
+    }
+    return { captures };
+  } finally {
     await browser.close();
   }
 }
@@ -530,7 +596,7 @@ export function registerCaptureScreenshot(server: McpServer): void {
         "first, same rect-measurement style as cropSelector) and written to `<outPath>.cursor.json`, so " +
         "scaffold_scene can build a cursor overlay from real coordinates instead of a hand-drawn guess. " +
         "Returns { outPath, width, height, pixelWidth, pixelHeight, deviceScaleFactor, zoom, settle?, " +
-        "cursorPoints? } -- " +
+        "cursorPoints? } -- (or, with viewports, { captures: [{ name, ...that }] }) " +
         "width/height are CSS pixels, pixelWidth/pixelHeight the real pixels on disk, zoom the measured " +
         "desync ratio for STYLE.md's frame-sizing formula, settle the report (omitted when settle:false), " +
         "cursorPoints the same real coordinates written to the sidecar (omitted when there were none). " +
@@ -547,6 +613,18 @@ export function registerCaptureScreenshot(server: McpServer): void {
           .optional()
           .describe("A scenario file (JSON or YAML) relative to projectRoot that stands in for interactions and, if it sets one, url. Not with interactions. See CAPTURE.md, Scenario files."),
         viewport: viewportSchema.optional(),
+        viewports: z
+          .array(viewportRequestSchema)
+          .min(1)
+          .optional()
+          .describe(
+            "Several viewports in one call, instead of viewport: preset names (desktop 1920x1080 at 1x, " +
+              "laptop 1440x900 at 2x, tablet 834x1194 at 2x, phone 390x844 at 3x) or { name?, width, height, " +
+              "deviceScaleFactor? }. Each viewport gets its own context (so its own pixel ratio) and its own " +
+              "file <beatId>-<name>.png (name defaults to WIDTHxHEIGHT; with outPath, the name goes before the " +
+              "extension). A viewport without its own deviceScaleFactor uses the call's. Returns " +
+              "{ captures: [{ name, ...the usual result }] }.",
+          ),
         interactions: z.array(interactionSchema).optional(),
         cropSelector: z.string().optional(),
         outPath: z.string().optional(),
@@ -608,6 +686,9 @@ export function registerCaptureScreenshot(server: McpServer): void {
           ),
       },
     },
-    async (input) => runTool("capture_screenshot", () => runCaptureScreenshot(input)),
+    async (input) =>
+      runTool("capture_screenshot", async () =>
+        input.viewports ? await runCaptureScreenshotViewports(input) : await runCaptureScreenshot(input),
+      ),
   );
 }

@@ -684,7 +684,8 @@ export function registerStitchComposition(server: McpServer): void {
         "duration moves; nothing is emitted when no beat has a transition), a VO Audio layer " +
         "per beat only where public/audio/vo/<beatId>.mp3 actually exists on disk, and a looping " +
         "full-duration music bed layer if public/audio/music-bed.mp3 exists. The scaffold ships an ambient " +
-        "music-bed.mp3 with no pulse to cut against; compose_score writes an original arc-matched score to the " +
+        "bed at public/sfx/music-bed.mp3 with no pulse to cut against, but this tool only picks a bed up from " +
+        "public/audio/music-bed.mp3, so copy it there (create public/audio first); compose_score writes an original arc-matched score to the " +
         "same name, with an exact cue grid next to it (plan_music_cues produces one for any other track), so " +
         "scene cuts can land on a beat instead of an arbitrary second. Also (re)registers the " +
         "composition in src/Root.tsx (via an internal src/videos/.registry.json this tool owns), without " +
@@ -694,7 +695,10 @@ export function registerStitchComposition(server: McpServer): void {
         + "language, reading public/audio/vo/<lang>/<beatId>.mp3 for every language but the base, which "
         + "keeps the original flat path. requireNarration is then enforced per language, because a video "
         + "fully narrated in English and half narrated in Hindi is a failure of the Hindi cut and saying so "
-        + "once for the whole stitch would hide which cut is broken. Pass musicBed to override the "
+        + "once for the whole stitch would hide which cut is broken. Captions do not follow the language: they are "
+        + "baked from the base-language vo by scaffold_scene and every language composition shares those scenes, so "
+        + "every language cut shows the base-language caption (a project whose base language is that language gets "
+        + "captions in that language) and only the audio changes per language. Pass musicBed to override the "
         + "auto-detected bed file and its mix level: file is a filename under public/audio/ (same convention "
         + "as the auto-detected music-bed.mp3), volume defaults to 0.18 when beats.json's "
         + "narration is \"voice\" or omitted (today's under-narration tuning) and 1.0 when narration is "

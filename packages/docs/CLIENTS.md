@@ -136,7 +136,7 @@ claude mcp add openvidstudio -- npx -y @openvidstudio/mcp-server
 ```
 
 On native Windows `npx` is a `.cmd` shim that Claude Code cannot start directly, so wrap it in `cmd /c`
-(`npx openvidstudio-mcp install claude-code` prints the right form for the machine it runs on):
+(`npx -y @openvidstudio/mcp-server install claude-code` prints the right form for the machine it runs on):
 
 ```
 claude mcp add openvidstudio -- cmd /c npx -y @openvidstudio/mcp-server

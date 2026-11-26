@@ -130,6 +130,10 @@ export function runInstall(argv: string[], env: InstallEnv): InstallResult {
   }
 
   if (client === "claude-code") {
+    // The same per-platform command every other client gets: on native Windows `npx` is a .cmd
+    // shim that claude cannot spawn directly, so it has to go through `cmd /c`.
+    const run = serverCommand(env.platform);
+    const mcpAdd = `  claude mcp add ${SERVER_NAME} -- ${[run.command, ...run.args].join(" ")}`;
     return {
       ok: true,
       client,
@@ -147,7 +151,7 @@ export function runInstall(argv: string[], env: InstallEnv): InstallResult {
         "",
         "Tools only, without the plugin:",
         "",
-        `  claude mcp add ${SERVER_NAME} -- npx -y ${PACKAGE}`,
+        mcpAdd,
         "",
         "Do not keep both: the plugin already registers the server.",
       ],

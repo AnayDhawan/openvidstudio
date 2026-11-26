@@ -440,6 +440,12 @@ export function validateBeatsLogic(beatsJson: unknown): ValidateBeatsResult {
       if (v.deterministic !== undefined && typeof v.deterministic !== "boolean") {
         errors.push(`${label}: visual.deterministic must be a boolean if present`);
       }
+      if (
+        v.shows !== undefined &&
+        (!Array.isArray(v.shows) || v.shows.length === 0 || v.shows.some((s) => typeof s !== "string" || s.length === 0))
+      ) {
+        errors.push(`${label}: visual.shows must be a non-empty array of CSS selector strings if present`);
+      }
       if (!Array.isArray(v.interactions)) {
         errors.push(
           `${label}: visual.interactions (array, may be empty) is required for captureMethod "${captureMethod}"`,
@@ -593,7 +599,9 @@ export function registerValidateBeats(server: McpServer): void {
         "without moving any beat boundary) and artifacts (screenshotPath/recordingPath/voPath overrides of the convention output " +
         "paths, each a non-empty string). For browser screenshot/recording beats, settle (boolean) and " +
         "settleTimeoutMs (positive number) are also type-checked if present -- see capture_screenshot/" +
-        "capture_screen_recording for what they control. Returns { valid, errors, warnings } with every failure found, " +
+        "capture_screen_recording for what they control. So is shows, a non-empty array of CSS selectors the " +
+        "beat is meant to show on screen, which validate_scenes with intent: true checks against the live page. " +
+        "Returns { valid, errors, warnings } with every failure found, " +
         "never just the first -- this is the tool's normal answer for an invalid draft, not an exceptional case, so " +
         "it never throws for a validation failure. warnings never make a draft invalid: with four or more beats, " +
         "if the longest is less than 2.5x the shortest, one warns that uniform shot lengths read as a metronome " +

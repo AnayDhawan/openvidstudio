@@ -70,6 +70,17 @@ capture path in this project encodes with crf 18 and `-tune stillimage` instead.
    targetH * zoom)`. Verify again: `innerWidth/innerHeight` should now
    equal `targetW/targetH` exactly. This is the size you actually wanted,
    once compensated.
+
+   The tools read `window.devicePixelRatio` in step 1 as well, because a
+   browser zoom moves `innerWidth` and `devicePixelRatio` by the same factor
+   (`requestedWidth / innerWidth` equals `devicePixelRatio / deviceScaleFactor`).
+   When the two readings disagree, the page is in a state a viewport change
+   cannot fix (a device scale factor that was not applied, or one forced on
+   the browser), and the call fails with a `ViewportDesyncError` that lists
+   what was measured. `capture_screen_recording` repeats the check on the page
+   it is about to record, before the recording does anything: `innerWidth`
+   must be back on the request and `devicePixelRatio` must sit at
+   `deviceScaleFactor * zoom`.
 3. Interact with the page (click, select, scroll) to reach the exact state
    the beat needs, in this same compensated viewport.
 4. Take a full-viewport screenshot (`scale: "css"`, no `fullPage`, no
@@ -107,6 +118,81 @@ a real bleed bug: an element-scoped shot picking up part of the next
 section down. The full-viewport-then-crop approach in steps 4-6 is
 deterministic: one screenshot, one measurement, one crop, no hidden
 re-layout between them.
+
+## Scenario files
+
+The click path to a beat's state can live in a file instead of an `interactions` array. Pass
+`scenarioPath` (relative to the project root) to `capture_screen_recording` or `capture_screenshot`:
+
+```yaml
+# scenarios/checkout.yaml
+name: checkout            # free text, for the reader
+url: http://localhost:3000   # optional when the call gives a url
+steps:
+  - action: navigate
+    url: /pricing
+  - action: click
+    selector: "#buy"
+    settleMs: 1500        # optional on every step: let the page settle for up to this long afterwards
+  - action: type
+    selector: "#email"
+    text: a@b.co
+  - action: scroll
+    y: 800
+    durationMs: 600
+```
+
+JSON reads the same (`{ "url": "...", "steps": [{ "action": "click", "selector": "#buy" }] }`). The
+format is taken from the extension (`.json`, `.yaml`, `.yml`), or from the content when there is none.
+
+| `action` | Fields | Does |
+|---|---|---|
+| `navigate` | `url` | Goes to another page. A relative url resolves against the page the replay is on |
+| `click` | `selector` | Clicks it |
+| `hover` | `selector` | Hovers it |
+| `type` | `selector`, `text` | Fills the field with `text` |
+| `select` | `selector`, `value` | Picks the option |
+| `scroll` | `selector?`, `x?`, `y?`, `durationMs?` | Scrolls the page or the element. With `durationMs` the scroll is eased over that time |
+| `wait` | `ms?`, `selector?` | With `selector`, waits for it to appear (`ms` is the timeout); otherwise waits `ms` (default 500) |
+| `settle` | `ms?` | Waits for fonts, images and finite animations, up to `ms` |
+
+Every step also takes `settleMs`, shorthand for a `settle` step right after it.
+
+A scenario **compiles to the `interactions` array** the tools already run: `type` becomes `fill`, `settleMs`
+becomes a `settle` interaction, and the rest map one to one. Nothing downstream knows a second format
+exists, so the cursor sidecar, the capture sidecar (which records the compiled interactions) and
+`docs_drift` see exactly what a hand-written array would give them. A scenario's `url` is the page the
+capture starts on; a `url` in the call wins over it. `scenarioPath` and `interactions` together are an
+error, and an invalid file names the step and field that is wrong (`steps.2.selector: ...`).
+
+Existing arrays keep working unchanged, and convert to a file with `scenarioFromInteractions` from
+`@openvidstudio/capture` (a `settle` with a budget after a step folds into that step's `settleMs`).
+`navigate` is also available as an `interactions` entry: `{ "type": "navigate", "url": "/pricing" }`.
+
+## Several viewports in one call
+
+A responsive page is three pages. `capture_screenshot` takes `viewports` instead of `viewport` and
+captures the same URL, interactions and settle at each one:
+
+```json
+{ "beatId": "hook", "url": "http://localhost:3000", "viewports": ["desktop", "tablet", "phone"] }
+```
+
+| Preset | CSS size | Device scale |
+|---|---|---|
+| `desktop` | 1920x1080 | 1 |
+| `laptop` | 1440x900 | 2 |
+| `tablet` | 834x1194 | 2 |
+| `phone` | 390x844 | 3 |
+
+An entry can also be `{ "name": "wide", "width": 2560, "height": 1440, "deviceScaleFactor": 1 }`. Each
+viewport gets its own browser context, because a pixel ratio is fixed when a context is created, and
+its own file: `public/images/hook-desktop.png`, `hook-tablet.png`, `hook-phone.png`. An unnamed
+viewport is named for its size (`hook-1000x700.png`); with `outPath`, the name goes before the
+extension. A viewport without its own `deviceScaleFactor` uses the call's (default 2). Each capture
+runs the whole protocol above on its own, including the zoom check and its own sidecars. Two viewports
+with one name are an error, and a bad request fails before anything is captured. The result is
+`{ captures: [{ name, ...the usual result }] }`. `viewport` and `viewports` cannot be combined.
 
 ## Layers: splitting a capture for parallax
 

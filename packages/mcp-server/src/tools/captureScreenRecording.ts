@@ -13,6 +13,7 @@ import {
   writeCursorSidecar,
   writeSettleSidecar,
   detectAndCompensateZoom,
+  assertViewportBeforeRecording,
   installDeterminism,
   interactionSchema,
   launchChromium,
@@ -25,11 +26,18 @@ import {
 } from "@openvidstudio/capture";
 import { runTool } from "./mcp";
 import { fileBytes, relToProject, writeFactRecord } from "../facts";
+import { applyScenario } from "../scenarioInput";
 
 export interface CaptureScreenRecordingInput {
   projectRoot?: string;
   beatId: string;
-  url: string;
+  /** The page to record. Optional only when scenarioPath is given and its scenario sets one. */
+  url?: string;
+  /**
+   * A scenario file (JSON or YAML) relative to projectRoot that stands in for `interactions` and, if
+   * it sets one, `url`. Not allowed together with `interactions`. See CAPTURE.md, "Scenario files".
+   */
+  scenarioPath?: string;
   viewport?: Viewport;
   /** Pixels recorded per CSS pixel. Defaults to 2, same reasoning as capture_screenshot. */
   deviceScaleFactor?: number;
@@ -268,7 +276,8 @@ async function probeDurationMs(filePath: string, cwd: string): Promise<number | 
 export async function runCaptureScreenRecording(
   input: CaptureScreenRecordingInput
 ): Promise<CaptureScreenRecordingResult> {
-  const result = await captureScreenRecording(input);
+  const resolved = applyScenario(input);
+  const result = await captureScreenRecording(resolved);
   const projectRoot = resolveProjectRoot(input.projectRoot);
   writeFactRecord(projectRoot, {
     tool: "capture_screen_recording",
@@ -277,11 +286,12 @@ export async function runCaptureScreenRecording(
       kind: "real-capture",
       outPath: relToProject(projectRoot, result.outPath),
       bytes: fileBytes(result.outPath),
-      url: input.url,
+      url: resolved.url,
       viewport: { width: result.width, height: result.height },
       durationMs: result.durationMs ?? null,
       speed: input.speed ?? 1,
-      interactions: input.interactions?.length ?? 0,
+      interactions: resolved.interactions?.length ?? 0,
+      ...(input.scenarioPath ? { scenario: input.scenarioPath } : {}),
       settled: result.settle?.settled ?? null,
       settleWaitedMs: result.settle?.waitedMs ?? null,
     },
@@ -290,7 +300,7 @@ export async function runCaptureScreenRecording(
 }
 
 async function captureScreenRecording(
-  input: CaptureScreenRecordingInput,
+  input: Omit<CaptureScreenRecordingInput, "url" | "scenarioPath"> & { url: string },
 ): Promise<CaptureScreenRecordingResult> {
   const beatId = sanitizeSegment(input.beatId, "beatId");
   const projectRoot = resolveProjectRoot(input.projectRoot);
@@ -322,7 +332,8 @@ async function captureScreenRecording(
       const probePage = await probeContext.newPage();
       await probePage.setViewportSize(target);
       await probePage.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
-      const compensation = await detectAndCompensateZoom(probePage, target);
+      // The probe context is created with no deviceScaleFactor, so its pixel ratio is 1 by construction.
+      const compensation = await detectAndCompensateZoom(probePage, target, { deviceScaleFactor: 1 });
       zoom = compensation.zoom;
       compensatedViewport = compensation.viewport;
     } finally {
@@ -361,6 +372,10 @@ async function captureScreenRecording(
         // at load and caches the result.
         if (input.deterministic) await installDeterminism(page);
         await page.goto(input.url, { waitUntil: input.waitUntil ?? "load" });
+        // The recording is already running here. Check the page it is recording is the one that was
+        // probed (right innerWidth, and a devicePixelRatio that fits the measured zoom), so a desync
+        // ends the call with a clear error rather than a clip at the wrong size.
+        await assertViewportBeforeRecording(page, target, { deviceScaleFactor, zoom });
         // Settle BEFORE the interactions, not after: the recording is already running, so
         // this is what keeps the opening seconds of the clip from being the page still
         // loading rather than the product working.
@@ -503,7 +518,12 @@ export function registerCaptureScreenRecording(server: McpServer): void {
       inputSchema: {
         projectRoot: z.string().optional(),
         beatId: z.string().min(1),
-        url: z.string().min(1),
+        url: z.string().min(1).optional().describe("The page to record. Optional only with a scenarioPath whose scenario sets a url."),
+        scenarioPath: z
+          .string()
+          .min(1)
+          .optional()
+          .describe("A scenario file (JSON or YAML) relative to projectRoot that stands in for interactions and, if it sets one, url. Not with interactions. See CAPTURE.md, Scenario files."),
         viewport: viewportSchema.optional(),
         settle: z
           .boolean()

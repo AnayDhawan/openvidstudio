@@ -28,6 +28,10 @@ output/
 *.mov
 *.webm
 
+# Python wheels. packages/mcp-server's Python dependencies are installed from PyPI, never
+# vendored; 13 stray wheels were removed in #169 and this keeps them from coming back.
+*.whl
+
 # Committed brand/demo assets are real product content (Task 4's gallery sample video),
 # not renderer output -- the *.mp4 rule above is scoped to output/ render output, this
 # carves out the one directory that ships real binary assets on purpose.

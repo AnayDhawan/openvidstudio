@@ -13,6 +13,7 @@
     "dist"
   ],
   "dependencies": {
+    "js-yaml": "4.3.2",
     "playwright": "^1.65.1",
     "zod": "^4.6.6"
   },

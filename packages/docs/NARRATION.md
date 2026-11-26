@@ -108,8 +108,9 @@ Where the band is used:
   `fit_beats` size beats into it (its `language` input overrides the file).
 - Each `voTranslations` line is checked against its own tag's band. A miss is a warning, never an error,
   because `generate_narration` is where an overrun is decided.
-- Any other language gets the English band, and a warning says there is no measured band for it (one warning
-  per language, not per beat). Add a language by adding its voice and 12 sentences to the corpus, running the
+- Any other base language gets the English band, and a warning says there is no measured band for it (one
+  warning for the file, not per beat). `voTranslations` lines for an unmeasured tag are not pace-checked at all,
+  with one warning for that tag. Add a language by adding its voice and 12 sentences to the corpus, running the
   script, and pinning the new `r` in `src/languagePace.ts` and `language-pace.test.mjs`.
 - `zh`, `ja`, `th`, `km`, `lo` and `my`, and the three-letter codes of the same scripts (`yue`, `cmn`, `zho`,
   `jpn`, `tha`, `khm`, `lao`, `mya`), are written without spaces, so a words-per-second band does not
@@ -119,9 +120,13 @@ Where the band is used:
 The band says nothing about which voice `generate_narration` uses. `baseLanguage` only decides which text is
 the base `vo` and where the clips go, and without `voices` the edge-tts voice is `en-US-AndrewNeural` (or
 `voice`, if you pass one) for every language. Pass `voices` with the voice from the table, for example
-`{ "hi": "hi-IN-MadhurNeural" }`; the band is measured for that voice and another voice may read faster or
-slower. If you choose another voice, `fit_beats` sizes the beats from its real clips, which is what to trust
-over the table.
+`{ "hi": "hi-IN-MadhurNeural" }`. A `voices` key is the language tag, spelled exactly as it is in the run, and
+it is read only when the language it names is being generated: that entry applies when `baseLanguage` is `hi`
+or `languages` includes `hi`, and is ignored otherwise (`hi-IN` is a different key from `hi`). The band is
+measured for the voice in its row and another voice may read faster or slower. If you choose another voice,
+`fit_beats` sizes the beats from its real clips, still clamped into the language's band, and lists any line that
+cannot fit in `unfittable`. The clips' own lengths are a better guide than the table's rate for that voice, but
+the band still decides what `validate_beats` accepts.
 
 ## Languages in a render
 
@@ -195,8 +200,9 @@ every engine here, and for a launch video it is worth the hour.
 `omnivoice` is a local neural model. The narration text never leaves the machine, it covers 600+
 languages with no per-language voice to pick, and it can clone one voice across every language of a
 video. Pass `engine: "omnivoice"` to `generate_narration`; the engine input is the only switch.
-`generate_narration` does not read `narration.engine` from `openvidstudio.config.json`, so without
-the input it uses `edge-tts` and sends the text to Microsoft, whatever the config says.
+`generate_narration` does not read `narration.engine` or `narration.voice` from `openvidstudio.config.json`
+(`init_project` writes both there, which invites editing them), so without the input it uses `edge-tts` and
+sends the text to Microsoft, whatever the config says.
 
 **Requirements.** Python 3.10 or newer (the package's `requires-python`; omnivoice also needs torch
 2.4 or newer), PyTorch, and about 3 GB of disk for the model. Install into a fresh virtual environment:
@@ -393,6 +399,11 @@ import { MusicBed } from "@openvidstudio/core";
 
 Keep it quiet. It sits under narration, and 0.16 is already at the edge of noticeable
 when a voice is speaking over it.
+
+To put the built-in bed under a whole stitched video instead, copy `public/sfx/music-bed.mp3` to
+`public/audio/music-bed.mp3`, creating `public/audio` if it does not exist. `stitch_composition` only looks at that path, and when the file is
+absent it returns `musicBedFound: false` with no warning, so a video that was meant to have music
+renders without any.
 
 ### If you want real music instead
 

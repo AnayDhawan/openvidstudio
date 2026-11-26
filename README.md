@@ -55,6 +55,14 @@ then directed.
 
 - **Real product, real pixels.** The UI, the text and the layout are ground truth, not a mockup.
 - **Your agent drives.** No separate app and no keyframing by hand.
+- **A script in one call.** `generate_script` returns the beats with a word budget for each, then merges the
+  lines your agent writes to those budgets and runs the validator, so you approve a draft that has already
+  been checked. It writes nothing itself.
+- **Narration that can stay on your machine.** The default voice, edge-tts, sends the text to Microsoft's
+  speech service. The optional OmniVoice engine (`engine: "omnivoice"`) runs locally, and `preflight`
+  checks for it.
+- **Pacing that knows the language.** Hindi, Spanish and German get word budgets measured from real audio,
+  instead of English's 2.3-2.9 words a second.
 - **Directed, not recorded.** Push-ins, depth, a cursor that arcs and settles, transitions that
   hide the cut, and depth of field that is off by default so it never smears the text you are showing.
 - **Music that does not tick.** `compose_score` writes an original score for the video's arc, with
@@ -153,11 +161,15 @@ and hands you the mp4.
 | OmniVoice | Python 3.10+, about 3 GB model download on first use | Optional local narration (`engine: "omnivoice"`) | no |
 | numpy, scipy, soundfile, pyloudnorm, matplotlib | any current, Python 3.8+ | `compose_score`, the original-score tool | no |
 
-`preflight` checks every row (the OmniVoice row when you pass `engine: "omnivoice"`). Only the Node
-version is enforced numerically; the rest are presence checks.
+`preflight` checks every row. The OmniVoice row runs when you pass `engine: "omnivoice"`; a config set to
+`omnivoice` also triggers the check, with a warning, because `generate_narration` does not read the config.
+Only the Node version is enforced numerically; the rest are presence checks.
 
 The default narration engine, `edge-tts`, sends the narration text to Microsoft's speech service. The
-`omnivoice` engine keeps the text on your machine: see [NARRATION.md](packages/docs/NARRATION.md).
+`omnivoice` engine keeps the text on your machine, but only when `generate_narration` is called with
+`engine: "omnivoice"`. It does not read `narration.engine` or `narration.voice` from
+`openvidstudio.config.json` (`init_project` writes both there), so editing the config does not switch the
+engine. See [NARRATION.md](packages/docs/NARRATION.md).
 
 ```bash
 # Windows. Reopen the terminal after installing ffmpeg, winget only puts it on PATH for new shells.
@@ -228,7 +240,7 @@ process is the `openvidstudio-director` skill, and the craft is written down in
 | Area | What it does | Key tools |
 | --- | --- | --- |
 | **Project setup** | Scaffolds the project, checks the machine, plans the production | `init_project` · `preflight` · `plan_production` |
-| **Beats** | Plans, validates and commits the script-and-shot skeleton every render is built from | `plan_beats` · `validate_beats` · `write_beats_file` |
+| **Beats** | Plans, validates and commits the script-and-shot skeleton every render is built from | `generate_script` · `plan_beats` · `validate_beats` · `write_beats_file` |
 | **Capture** | Browser, desktop, mobile and terminal capture of the real running app, zoom-compensated; a page can be split into depth layers | `capture_screenshot` · `capture_screen_recording` · `capture_desktop` · `capture_mobile` · `capture_terminal` |
 | **Shot planning** | Ranks what the video should show from the repo's own emphasis | `plan_shots` |
 | **Brief and design** | The creative brief written before any beat, and the design system as code | `write_brief` |
@@ -271,7 +283,8 @@ Start with [PLANNING.md](packages/docs/PLANNING.md) for the guided intake flow, 
 [PIPELINE.md](packages/docs/PIPELINE.md), [STYLE.md](packages/docs/STYLE.md),
 [CAPTURE.md](packages/docs/CAPTURE.md) and [SCRIPT.md](packages/docs/SCRIPT.md) cover the steps and
 the rules that are enforced rather than suggested. [CREATIVE.md](packages/docs/CREATIVE.md) is the
-craft of directing, [API.md](packages/docs/API.md) is every core primitive with a rendered still,
+craft of directing, [API.md](packages/docs/API.md) is every core primitive with a rendered still plus the
+inputs and results of the scripting and narration tools,
 and [NARRATION.md](packages/docs/NARRATION.md), [PRESETS.md](packages/docs/PRESETS.md) and
 [HIGGSFIELD.md](packages/docs/HIGGSFIELD.md) cover the rest.
 
@@ -286,7 +299,7 @@ has real Remotion knowledge to work from.
 | Video engine | [Remotion](https://www.remotion.dev) (its own license, see below) |
 | Capture | [Playwright](https://playwright.dev), ffmpeg |
 | Agent interface | [Model Context Protocol](https://modelcontextprotocol.io) (`@openvidstudio/mcp-server`) |
-| Narration | edge-tts |
+| Narration | edge-tts, or OmniVoice locally |
 | Language | TypeScript |
 | Package manager | pnpm workspaces |
 | CI | GitHub Actions |

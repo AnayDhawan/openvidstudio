@@ -11,6 +11,8 @@
  */
 export * from "./process";
 export * from "./browser";
+export * from "./scenario";
+export * from "./viewports";
 export * from "./determinism";
 export * from "./settle";
 export * from "./cursor";

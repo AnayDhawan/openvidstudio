@@ -8,6 +8,14 @@ import * as path from "node:path";
 import { require, monorepoRoot, check, skip, finish } from "./_harness.mjs";
 import { sceneProject, inBrowser, haveNodeModules, sameBytes } from "./_browser.mjs";
 
+const capture = require(path.join(monorepoRoot, "packages", "capture", "dist", "index.js"));
+let browserAvailable = true;
+try {
+  await (await capture.launchChromium()).close();
+} catch {
+  browserAvailable = false;
+}
+
 const coreSrc = fs.readFileSync(path.join(monorepoRoot, "packages", "core", "src", "AnimatedBeams.tsx"), "utf8");
 const coreIndex = fs.readFileSync(path.join(monorepoRoot, "packages", "core", "src", "index.ts"), "utf8");
 const tokensSrc = fs.readFileSync(path.join(monorepoRoot, "packages", "core", "src", "tokens.ts"), "utf8");
@@ -61,6 +69,8 @@ console.log("\n== geometry and timing ==");
 console.log("\n== real frames ==");
 if (!haveNodeModules) {
   skip("real frames", "no resolvable node_modules to scaffold a renderable project from");
+} else if (!browserAvailable) {
+  skip("real frames", "Chromium is not available in this environment");
 } else {
   const scene = (name, jsx, header = "") => `import React from "react";
 import { AbsoluteFill } from "remotion";

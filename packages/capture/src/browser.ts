@@ -47,7 +47,8 @@ export type Interaction =
   | { type: "hover"; selector: string }
   | { type: "scroll"; selector?: string; x?: number; y?: number; durationMs?: number }
   | { type: "wait"; ms?: number; selector?: string }
-  | { type: "settle"; ms?: number };
+  | { type: "settle"; ms?: number }
+  | { type: "navigate"; url: string };
 
 export const interactionSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("click"), selector: z.string().min(1) }),
@@ -71,6 +72,8 @@ export const interactionSchema = z.discriminatedUnion("type", [
   // transition, a route change, a lazily loaded image) to completion before the next step
   // runs, which is what stops a capture landing halfway through a fade.
   z.object({ type: z.literal("settle"), ms: z.number().optional() }),
+  // Go to another page mid-path. A relative url resolves against the page the replay is on.
+  z.object({ type: z.literal("navigate"), url: z.string().min(1) }),
 ]);
 
 /**
@@ -226,6 +229,9 @@ export async function replayInteractions(page: Page, interactions: Interaction[]
         break;
       case "settle":
         await settlePage(page, { timeoutMs: interaction.ms });
+        break;
+      case "navigate":
+        await page.goto(new URL(interaction.url, page.url()).toString(), { waitUntil: "load" });
         break;
     }
     index++;

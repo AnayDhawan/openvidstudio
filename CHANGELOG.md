@@ -13,8 +13,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A `literal` arc in `plan_beats` (#178).** One screenshot demo beat per feature, all the same length, and nothing else: no hook, problem or call to action. It needs at least one feature and has no cap on how many. `creativeLevel: "literal"` always plans it.
 - **`preflight` takes `engine`, and checks for OmniVoice (#180).** With `engine: "omnivoice"` (or a config whose `narration.engine` is `omnivoice`) it adds a non-blocking `omnivoice` check: `omnivoice-infer` on PATH or a python that can import `omnivoice`, and the install steps when neither is there. A config-only trigger adds a warning, because `generate_narration` does not read `narration.engine` or `narration.voice` from the config and needs `engine: "omnivoice"` passed to it. NARRATION.md has the requirements and a measured CPU run.
 - **Per-language pace bands, measured from real audio (#181).** Hindi 1.8-2.3, Spanish 2.2-2.7 and German 1.8-2.3 words/sec, each on one voice, against English's unchanged 2.3-2.9. `plan_beats`, `validate_beats`, `fit_beats` and `generate_script` take a `language` (`beats.json` carries it as a top-level `language`), and any other language gets the English band with a warning. Spaceless scripts (`zh`, `ja`, `th` and the rest) are refused rather than guessed. `fit_beats` reports the `language`, `paceBand` and `notes` it used.
+- **`capture_screenshot` takes `viewports` (#210).** Preset names (`desktop`, `laptop`, `tablet`, `phone`) or `{ name?, width, height, deviceScaleFactor? }`, one browser context and one file per viewport (`hook-phone.png`). Returns `{ captures: [...] }`. Duplicate names and bad sizes fail before anything is captured.
+- **Scenario files for capture (#211).** `scenarioPath` on `capture_screenshot` and `capture_screen_recording` reads the click path from a JSON or YAML file and compiles it to the same `interactions` array. See CAPTURE.md, "Scenario files".
+- **`AnimatedBeams`, a frame-driven beam between anchor points (#203).** A core primitive for architecture and flow beats, with a still in API.md.
+- **`validate_scenes` takes `intent: true` (#214).** Reopens each browser-captured beat's page and checks the capture's url, every selector in the click path, and every selector in `visual.shows`. A changed page fails that beat with the selector named; an unreachable page is skipped, not drift.
 
 ### Changed
+
+- **Capture checks the page's zoom against its pixel ratio before it records (#212).** `innerWidth` and `devicePixelRatio` have to agree about the zoom; a desync that resizing cannot fix now fails with a `ViewportDesyncError` that lists what was measured, instead of producing a clip at the wrong size.
+- **CI has a timeout on every job, a recording job on all three OSes, and runs the new capture tests (#184, #213).**
+- **`.gitignore` ignores Python wheels (#186).**
 
 - **The `generate_narration` and `stitch_composition` descriptions say captions stay in the base language (#182).** A caption is baked from the base-language `vo`, so every language cut shows the base-language caption and only the audio changes. NARRATION.md has said so since the render checks.
 
